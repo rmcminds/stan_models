@@ -1,13 +1,10 @@
 data {
-    int NSamples;
+    int NEstSamples;
 	int NObs;
 	int NEstTaxNodes;
 	int NEnvs;
 	int NFactors;
-	int NFactsPerTax[NEstTaxNodes];
-	int fiidx[NEstTaxNodes];
-	int factIndices[sum(NFactsPerTax)];
-	int envs[NSamples];
+	int envs[NEstSamples];
 	matrix[NEstSamples, NFactors] modelMat;
 	int sampledcounts[NObs];
 	int datacounts[NObs];
@@ -15,52 +12,49 @@ data {
 	int nodenames[NObs];
 }
 transformed data {
-	int NEnvSamps = NEnvs * NSamples;
+	int NEnvSamps = NEnvs * NEstSamples;
 	int NEnvTax = NEnvs * NEstTaxNodes;
-	int NFactTax = sum(NFactsPerTax);
-	matrix[NFactors, NEstTaxNodes] tax_normFactsZeros = rep_matrix(0, NFactors, NEstTaxNodes);
+	int NFactTax = NFactors * NEstTaxNodes;
 }
 parameters {
-	vector<lower=0, upper=pi()/2>[3 + NEnvs + NEstTaxNodes + NFactors] scalesUnif;
+	vector<lower=0>[3 + NEnvs + NFactors + NEstTaxNodes] scales;
 	matrix<upper=0>[NEnvs,NEnvs] env_prop_normal_raw;
-	vector[NEnvs * (1 + NSamples + NEstTaxNodes) + NObs + NFactTax] normals;
+	vector[NEnvs + NEnvSamps + NEnvTax + NFactTax + NObs] normals;
 }
 transformed parameters {
-	vector<lower=0>[3 + NEnvs + NEstTaxNodes + NFactors] scales = 2.5 * tan(scalesUnif);
 	matrix[NEnvs,NEnvs] env_prop_normal;
-	vector[NEnvs] log_samp_props[NSamples];
-	matrix[NEnvs, NEstTaxNodes] log_tax_props_perEnv;
-	matrix[NFactors, NEstTaxNodes] tax_normFactsRaw = tax_normFactsZeros;
+	vector[NEnvs] log_samp_props[NEstSamples];
+	matrix[NEnvs, NEstTaxNodes] tax_normEnvs;
 	matrix[NFactors, NEstTaxNodes] tax_normFacts;
 	for (i in 1:NEnvs) {
 		vector[NEnvs] env_prop_normal_diffs = env_prop_normal_raw[,i];
 		env_prop_normal_diffs[i] = -env_prop_normal_raw[i,i];
 		env_prop_normal[,i] = scales[1] * env_prop_normal_diffs + scales[2] * normals[i];
 	}
-	for (k in 1:NSamples)
+	for (k in 1:NEstSamples)
 		log_samp_props[k] = log_softmax(env_prop_normal[envs[k],]' + segment(normals, k * NEnvs + 1, NEnvs) * scales[2 + envs[k]]);
-	log_tax_props_perEnv = to_matrix(log_inv_logit(segment(normals, NEnvs + NEnvSamps + 1, NEnvTax) * scales[3 + NEnvs]), NEnvs, NEstTaxNodes);
-	for (o in 1:NEstTaxNodes)
-		tax_normFactsRaw[segment(factIndices, fiidx[o], NFactsPerTax[o]), o] = segment(normals, NEnvs + NEnvSamps + NEnvTax + fiidx[o], NFactsPerTax[o]);
-	tax_normFacts = diag_pre_multiply(segment(scales, 3 + NEnvs + NEstTaxNodes + 1, NFactors), tax_normFactsRaw);
+	tax_normEnvs = scales[2 + NEnvs + 1] * to_matrix(segment(normals, NEnvs + NEnvSamps + 1, NEnvTax), NEnvs, NEstTaxNodes);
+	tax_normFacts = diag_pre_multiply(segment(scales, 3 + NEnvs + 1, NFactors), to_matrix(segment(normals, NEnvs + NEnvSamps + NEnvTax + 1, NFactTax), NFactors, NEstTaxNodes));
 }
 model {
 	matrix[NEstSamples, NEstTaxNodes] sampleTaxEffects;
 	vector[NObs] logit_ratios;
+	scales ~ student_t(5,0,2.5);
     to_vector(env_prop_normal_raw) ~ normal(0,1);
 	normals ~ normal(0,1);
 	sampleTaxEffects = modelMat * tax_normFacts;
 	for (n in 1:NObs) {
-		real log_compInt = log_sum_exp(log_tax_props_perEnv[,nodenames[n]] + log_samp_props[samplenames[n]]);
-		logit_ratios[n] = log_compInt - log1m_exp(log_compInt) + sampleTaxEffects[samplenames[n],nodenames[n]] + normals[NEnvs + NEnvSamps + NEnvTax + n] * scales[3 + NEnvs + nodenames[n]];
+		vector[NEnvs] sampleTaxEnvErr = log_inv_logit(tax_normEnvs[,nodenames[n]] + sampleTaxEffects[samplenames[n], nodenames[n]] + normals[NEnvs + NEnvSamps + NEnvTax + NFactTax + n] * scales[3 + NEnvs + NFactors + nodenames[n]]);
+		real log_ratios = log_sum_exp(sampleTaxEnvErr + log_samp_props[samplenames[n]]);
+		logit_ratios[n] = log_ratios - log1m_exp(log_ratios);
 	}
 	datacounts ~ binomial_logit(sampledcounts, logit_ratios);
 }
 generated quantities {
 	simplex[NEnvs] env_props[NEnvs];
-	simplex[NEnvs] samp_props[NSamples];
+	simplex[NEnvs] samp_props[NEstSamples];
 	for (j in 1:NEnvs)
 		env_props[j] = softmax(env_prop_normal[j,]');
-	for (k in 1:NSamples)
+	for (k in 1:NEstSamples)
 		samp_props[k] = exp(log_samp_props[k]);
 }
