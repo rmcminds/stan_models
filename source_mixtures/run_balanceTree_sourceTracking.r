@@ -9,13 +9,14 @@ library(reshape2)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
-outdir <- '/raid1/home/micro/mcmindsr/ryan/20180216_stan_CA/'
+indir <-  commandArgs(trailingOnly=TRUE)[[1]]
+outdir <-  commandArgs(trailingOnly=TRUE)[[2]]
 
-modelfile <- paste0(outdir,'/balanceTree_sourceTracking3.stan')
-fulltable <- t(read.table(paste0(outdir,'/otu_table_n500.txt'), header=T, sep='\t', comment.char='', skip=1, row.names=1)) # OTU-table
-bacttree <- read.tree(paste0(outdir,'/gg_constrained_fastttree.tre'))
-tax_assignments <- paste0(outdir,'/rep_set_tax_assignments.txt')
-map <- read.table(paste0(outdir,'/map_full_20171115.txt'),header=T,sep='\t',comment.char='',check.names=F)
+modelfile <- paste0(getwd(),'/balanceTree_sourceTracking.stan')
+fulltable <- t(read.table(paste0(indir,'/otu_table_n500.txt'), header=T, sep='\t', comment.char='', skip=1, row.names=1)) # OTU-table
+bacttree <- read.tree(paste0(indir,'/gg_constrained_fastttree.tre'))
+tax_assignments <- paste0(indir,'/rep_set_tax_assignments.txt')
+map <- read.table(paste0(indir,'/map_full_20171115.txt'),header=T,sep='\t',comment.char='',check.names=F)
 rownames(map) <- map[,'#SampleID']
 
 
@@ -166,8 +167,8 @@ nchains=4
 
 init <- lapply(1:nchains, function(...) list(env_prop_normal_raw=matrix(-5.0,nrow=(NEnvs),ncol=NEnvs)))
 
-fit <- stan(file='/raid1/home/micro/mcmindsr/ryan/20180216_stan_CA/balanceTree_sourceTracking3.stan', data=list(NObs=NObs, NEstSamples=NEstSamples, sampledcounts=sampledcounts, datacounts=datacounts, samplenames=samplenames, nodenames=nodenames, NEstTaxNodes=NEstTaxNodes, NEnvs=NEnvs, envs=as.numeric(envs), NFactors=NFactors, modelMat=modelMat ), control=list(adapt_delta=0.8, max_treedepth=15), iter=1000, chains=nchains, thin=1, init_r=0.2, init=init )
+fit <- stan(file=modelfile, data=list(NObs=NObs, NEstSamples=NEstSamples, sampledcounts=sampledcounts, datacounts=datacounts, samplenames=samplenames, nodenames=nodenames, NEstTaxNodes=NEstTaxNodes, NEnvs=NEnvs, envs=as.numeric(envs), NFactors=NFactors, modelMat=modelMat ), control=list(adapt_delta=0.8, max_treedepth=15), iter=1000, chains=nchains, thin=1, init_r=0.2, init=init )
 
-save.image(file='/raid1/home/micro/mcmindsr/ryan/20180216_stan_CA/st3_out.RData')
+save.image(file=paste0(outdir,'/st_out.RData'))
 
 
