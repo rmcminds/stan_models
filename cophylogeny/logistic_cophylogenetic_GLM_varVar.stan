@@ -23,28 +23,27 @@ data {
 }
 parameters {
     real<lower=0> aveStD;
-    simplex[2 * NFactors + 2] stDProps;
+    simplex[2 * NFactors + 3] stDProps;
     simplex[NTimeBins] timeBinProps;
     row_vector[NEstTaxNodes - NEstTips] phyloLogVarMultPrev;
     vector[NHostNodes - NHostTips] phyloLogVarMultADiv;
     matrix[NHostNodes - NHostTips, NEstTaxNodes - NEstTips] phyloLogVarMultRaw;
     real globalIntercept;
     vector[NEffects + NHostNodes] rawAlphaDivEffects;
-    vector[NEstTaxNodes] rawPrevalenceEffects;
-    matrix[NEffects + NHostNodes, NEstTaxNodes] rawTaxNodeEffects;
+    matrix[NEffects + NHostNodes + 1, NEstTaxNodes] rawTaxNodeEffects;
 }
 transformed parameters {
-    vector<lower=0>[2 * NFactors + 2] scales;
+    vector<lower=0>[2 * NFactors + 3] scales;
     row_vector<lower=0>[NEstTaxNodes] taxVarRaw;
     row_vector<lower=0>[NEstTaxNodes] taxScales;
     vector<lower=0>[NHostNodes] hostVarRaw;
     vector<lower=0>[NHostNodes] hostScales;
     matrix<lower=0>[NHostNodes, NEstTaxNodes] phyloScales;
-    vector[NEffects + NHostNodes] scaledAlphaDivEffects;
-    matrix[NEffects + NHostNodes, NEstTaxNodes] scaledTaxNodeEffects;
-    matrix[NEffects + NHostNodes, NEstTips] scaledTipEffects;
+    vector[NEffects + NHostNodes + 1] scaledAlphaDivEffects;
+    matrix[NEffects + NHostNodes + 1, NEstTaxNodes] scaledTaxNodeEffects;
+    matrix[NEffects + NHostNodes + 1, NEstTips] scaledTipEffects;
     scales
-        = sqrt((2 * NFactors + 2) * stDProps)
+        = sqrt((2 * NFactors + 3) * stDProps)
           * aveStD;
     taxVarRaw
         = exp(phyloLogVarMultPrev
@@ -78,8 +77,12 @@ transformed parameters {
                 hostScales)
           .* rawAlphaDivEffects);
     scaledTaxNodeEffects
-        = append_row(factLevelMat * segment(scales, NFactors + 1, NFactors) * taxScales,
-                phyloScales)
+        = append_row(
+            append_row(
+                scales[2 * NFactors + 3],
+                factLevelMat * segment(scales, NFactors + 1, NFactors))
+            * taxScales,
+            phyloScales)
           .* rawTaxNodeEffects;
     scaledTipEffects
         = scaledTaxNodeEffects * ancestors[, 1:NEstTips];
@@ -88,7 +91,7 @@ model {
     matrix[NEstSamples, NEstTips] sampleTipEffects;
     vector[NObs] logit_ratios;
     aveStD ~ exponential(1.0 / taxAveStDPriorExpect);
-    stDProps ~ dirichlet(rep_vector(1, 2 * NFactors + 2));
+    stDProps ~ dirichlet(rep_vector(1, 2 * NFactors + 3));
     timeBinProps ~ dirichlet(NTimeBins * timeBinSizes);
     phyloLogVarMultPrev ~ normal(0,1);
     phyloLogVarMultADiv ~ normal(0,1);
@@ -97,7 +100,9 @@ model {
     rawAlphaDivEffects ~ normal(0,1);
     to_vector(rawTaxNodeEffects) ~ normal(0,1);
     sampleTipEffects
-        = append_col(modelMat, hostAncestorsExpanded)
+        = append_col(rep_vector(1, NEstSamples),
+            append_col(modelMat,
+                hostAncestorsExpanded))
           * (rep_matrix(scaledAlphaDivEffects, NEstTips) + scaledTipEffects);
     for (n in 1:NObs)
         logit_ratios[n] = sampleTipEffects[samplenames[n], tipnames[n]];

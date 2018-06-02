@@ -13,12 +13,12 @@ rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
 
-spectree <- 'species_rooted_mapped_labels.tree'
-mapfile <- 'GCMP_symbiodinium_map2.txt'
-outdir <- 'logistic_GLM_out_test/'
-fulltable <- t(read.table('species_table.txt', header=T, sep='\t', comment.char='', row.names=1, check.names=F))
-modelfile <- 'logistic_cophylogenetic_GLM_varVar.stan'
-hosttreef <- 'combined_trees.newick'
+spectree <- '/raid1/home/micro/mcmindsr/ryan/20180131_stansymbio/species_rooted_mapped_labels.tree'
+mapfile <- '/raid1/home/micro/mcmindsr/ryan/20180131_stansymbio/GCMP_symbiodinium_map2.txt'
+outdir <- '/raid1/home/micro/mcmindsr/ryan/20180531_cophylogeny/logistic_GLM_out_test/'
+fulltable <- t(read.table('/raid1/home/micro/mcmindsr/ryan/20180131_stansymbio/species_table.txt', header=T, sep='\t', comment.char='', row.names=1, check.names=F))
+modelfile <- '/raid1/home/micro/mcmindsr/ryan/20180531_cophylogeny/logistic_cophylogenetic_GLM_varVar.stan'
+hosttreef <- '/raid1/home/micro/mcmindsr/ryan/20180131_stansymbio/combined_trees.newick'
 minsampsbalance <- 1
 mincountsamp <- 5
 
