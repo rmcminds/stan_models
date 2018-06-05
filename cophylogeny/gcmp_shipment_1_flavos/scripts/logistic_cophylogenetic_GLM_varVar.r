@@ -21,7 +21,7 @@ taxAssignmentPath <- 'raw_data/reference-hit.seqs_tax_assignments.txt' #greegene
 modelPath <- 'scripts/logistic_cophylogenetic_GLM_varVar.stan' #stan model
 
 
-outdir <- file.path('output',gsub(' ', '_', Sys.time()))
+outdir <- file.path('output',gsub(':', '-', gsub(' ', '_', Sys.time())))
 
 ## filtration options
 minCountSamp <- 5 # minimum sequencing depth for a sample to be included
