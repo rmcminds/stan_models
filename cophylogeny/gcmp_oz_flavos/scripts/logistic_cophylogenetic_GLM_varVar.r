@@ -35,7 +35,7 @@ NChains <- 1 ## this is per tree; since I'm doing a large number of trees in par
 NIterations <- 500 ## will probably need >10,000? maybe start with 2, check convergence, double it, check, double, check, double, etc.?
 max_treedepth <- 15 ## a warning will tell you if this needs to be increased
 adapt_delta <- 0.9 ## increase this if you get 'divergences' - even one means your model fit sucks!
-taxAveStDPriorExpect <- 1.0
+aveStDPriorExpect <- 1.0
 NTrees <- 1 ## number of random trees to sample and to fit the model to
 NSplits <- 25 ## desired number of nodes per host timeBin
 ##
@@ -119,43 +119,43 @@ y.binary.filtered.flavos <- y.binary.filtered[,colnames(y.binary.filtered) %in% 
 
 
 
-bacttree <- read.tree(microbeTreePath)
+microbeTree <- read.tree(microbeTreePath)
 
-bacttree.Y <- drop.tip(bacttree,bacttree$tip.label[!bacttree$tip.label %in% colnames(y.binary.filtered.flavos)])
+microbeTree.Y <- drop.tip(microbeTree, microbeTree$tip.label[!microbeTree$tip.label %in% colnames(y.binary.filtered.flavos)])
 
 
 
 
 ## root the tree if it's unrooted
-if(is.rooted(bacttree.Y)) {
-    bacttree.Y.root <- reorder(bacttree.Y, order='pruningwise')
+if(is.rooted(microbeTree.Y)) {
+    microbeTree.Y.root <- reorder(microbeTree.Y, order='pruningwise')
 } else {
-    bacttree.Y.root <- reorder(midpoint.root(bacttree.Y), order='pruningwise')
+    microbeTree.Y.root <- reorder(midpoint.root(microbeTree.Y), order='pruningwise')
 }
 ##
 
-if(is.null(bacttree.Y.root$edge.length)) {
-    bacttree.Y.root$edge.length <- rep(1,length(bacttree.Y.root$edge))
+if(is.null(microbeTree.Y.root$edge.length)) {
+    microbeTree.Y.root$edge.length <- rep(1,length(microbeTree.Y.root$edge))
 }
 
 
 ## summarize the putative taxa to be estimated
-taxa <- factor(colnames(y.binary.filtered.flavos),levels=bacttree.Y.root$tip.label)
-taxnames <- levels(taxa)
-NTaxa <- length(taxnames)
+microbes <- factor(colnames(y.binary.filtered.flavos),levels=microbeTree.Y.root$tip.label)
+microbeNames <- levels(microbes)
+NMicrobeTips <- length(microbeNames)
 ##
 
 ## sort the OTU table so its entries match the tree's tip labels
-y <- y.binary.filtered.flavos[,taxnames]
+y <- y.binary.filtered.flavos[,microbeNames]
 ##
 
-esttips <- colnames(y)
-NEstTips <- length(esttips)
+estMicrobeTips <- colnames(y)
+NEstMicrobeTips <- length(estMicrobeTips)
 
 
 senddat <- melt(y, varnames=c('sample','tip'), value.name='present')
 samplenames <- as.numeric(factor(senddat[,1]))
-tipnames <- as.numeric(factor(senddat[,2], levels=esttips))
+tipnames <- as.numeric(factor(senddat[,2], levels=estMicrobeTips))
 present <- senddat[,3]
 NObs <- nrow(senddat)
 NEstSamples <- length(unique(samplenames))
@@ -163,25 +163,25 @@ NEstSamples <- length(unique(samplenames))
 newermap <- newermap[levels(factor(senddat[,1])),]
 
 
-NEstIntTaxNodes <- bacttree.Y.root$Nnode
-NEstTaxNodes <- NEstTips + NEstIntTaxNodes - 1
+NEstIntMicrobeNodes <- microbeTree.Y.root$Nnode
+NEstMicrobeNodes <- NEstMicrobeTips + NEstIntMicrobeNodes - 1
 
-taxEdges <- bacttree.Y.root$edge.length
+microbeEdges <- microbeTree.Y.root$edge.length
 
-allnodes <- unique(bacttree.Y.root$edge[,1])
+allnodes <- unique(microbeTree.Y.root$edge[,1])
 NSamplesRaw <- nrow(y)
-ancestors <- matrix(0, NEstTaxNodes + 1, NEstTaxNodes + 1)
-for(node in 1:(NEstTaxNodes + 1)) {
-    ancestors[, node] <- as.numeric(1:(NEstTaxNodes + 1) %in% c(Ancestors(bacttree.Y.root, node), node))
+microbeAncestors <- matrix(0, NEstMicrobeNodes + 1, NEstMicrobeNodes + 1)
+for(node in 1:(NEstMicrobeNodes + 1)) {
+    microbeAncestors[, node] <- as.numeric(1:(NEstMicrobeNodes + 1) %in% c(Ancestors(microbeTree.Y.root, node), node))
 }
 ##
 
-colnames(ancestors) <- rownames(ancestors) <- paste0('i',1:(NEstTaxNodes + 1))
-colnames(ancestors)[1:NEstTips] <- rownames(ancestors)[1:NEstTips] <- paste0('t',colnames(y))
+colnames(microbeAncestors) <- rownames(microbeAncestors) <- paste0('i',1:(NEstMicrobeNodes + 1))
+colnames(microbeAncestors)[1:NEstMicrobeTips] <- rownames(microbeAncestors)[1:NEstMicrobeTips] <- paste0('t',colnames(y))
 
-ancestors <- ancestors[-(NEstTips + 1), -(NEstTips + 1)]
+microbeAncestors <- microbeAncestors[-(NEstMicrobeTips + 1), -(NEstMicrobeTips + 1)]
 
-newermap$sequencing_depth <- rowSums(y[,esttips])
+newermap$sequencing_depth <- rowSums(y[,estMicrobeTips])
 newermap$log_sequencing_depth <- log(newermap$sequencing_depth)
 newermap$log_sequencing_depth_scaled <- scale(newermap$log_sequencing_depth)
 
@@ -330,12 +330,12 @@ for (i in 1:NTrees) {
 
 standat <- list()
 for (i in 1:NTrees) {
-    standat[[i]] <- list(NEstSamples=NEstSamples, NObs=NObs, NEstTaxNodes=NEstTaxNodes, NEstTips=NEstTips, NFactors=NFactors, NEffects=NEffects, present=present, samplenames=samplenames, tipnames=tipnames, factLevelMat=factLevelMat, ancestors=ancestors, modelMat=modelMat, hostAncestors=hostAncestors[[i]], hostAncestorsExpanded=hostAncestorsExpanded[[i]], edgetobin=edgetobin[[i]], NHostNodes=NHostNodes, NTimeBins=NTimeBins, taxAveStDPriorExpect=taxAveStDPriorExpect, timeBinSizes=relativeTimeBinSizes[[i]], taxEdges=taxEdges)
+    standat[[i]] <- list(NEstSamples=NEstSamples, NObs=NObs, NEstMicrobeNodes=NEstMicrobeNodes, NEstMicrobeTips=NEstMicrobeTips, NFactors=NFactors, NEffects=NEffects, present=present, samplenames=samplenames, tipnames=tipnames, factLevelMat=factLevelMat, microbeAncestors=microbeAncestors, modelMat=modelMat, hostAncestors=hostAncestors[[i]], hostAncestorsExpanded=hostAncestorsExpanded[[i]], edgetobin=edgetobin[[i]], NHostNodes=NHostNodes, NTimeBins=NTimeBins, aveStDPriorExpect=aveStDPriorExpect, timeBinSizes=relativeTimeBinSizes[[i]], microbeEdges=microbeEdges)
 }
 dir.create(outdir, recursive=T)
 
 save.image(file.path(outdir,'setup.RData'))
-save(ancestors,file=file.path(outdir,'ancestors.RData'))
+save(microbeAncestors,file=file.path(outdir,'microbeAncestors.RData'))
 save(meanBoundaries,file=file.path(outdir,'meanBoundaries.RData'))
 save(hostAncestors,file=file.path(outdir,'hostAncestors.RData'))
 save(hostAncestorsExpanded,file=file.path(outdir,'hostAncestorsExpanded.RData'))
@@ -370,7 +370,7 @@ for(i in 1:NTrees) {
 
 
     vars1 <- extract(fit[[i]], pars='stDProps')[[1]]
-    colnames(vars1) <- c(paste0('ADiv.',colnames(factLevelMat)), paste0('Specificity.',colnames(factLevelMat)), 'ADiv.host', 'host.specificity', 'taxa.prevalence')
+    colnames(vars1) <- c(paste0('ADiv.',colnames(factLevelMat)), paste0('Specificity.',colnames(factLevelMat)), 'ADiv.host', 'host.specificity', 'microbe.prevalence')
 
     pdf(file=file.path(currplotdir,'scalesboxes.pdf'), width=25, height=15)
     boxplot(vars1, cex.axis=0.5, las=2)
@@ -417,11 +417,11 @@ for(i in 1:NTrees) {
 
     sums <- summary(fit[[i]], pars='phyloLogVarMultRaw', probs=c(0.05,0.95), use_cache = F)
 
-    sums3d <- array(NA, dim=c(NHostNodes - NHostTips, NEstTaxNodes - NEstTips, ncol(sums$summary)))
+    sums3d <- array(NA, dim=c(NHostNodes - NHostTips, NEstMicrobeNodes - NEstMicrobeTips, ncol(sums$summary)))
     for(effect in 1:(NHostNodes - NHostTips)) {
-        sums3d[effect,,] <- sums$summary[(effect-1) * (NEstTaxNodes - NEstTips) + (1:(NEstTaxNodes - NEstTips)),]
+        sums3d[effect,,] <- sums$summary[(effect-1) * (NEstMicrobeNodes - NEstMicrobeTips) + (1:(NEstMicrobeNodes - NEstMicrobeTips)),]
     }
-    dimnames(sums3d) <- list(colnames(hostAncestors[[i]])[(NHostTips + 1):NHostNodes], rownames(ancestors)[(NEstTips + 1):NEstTaxNodes], colnames(sums$summary))
+    dimnames(sums3d) <- list(colnames(hostAncestors[[i]])[(NHostTips + 1):NHostNodes], rownames(microbeAncestors)[(NEstMicrobeTips + 1):NEstMicrobeNodes], colnames(sums$summary))
     factorfilenames <- colnames(hostAncestors[[i]])[(NHostTips + 1):NHostNodes]
 
     for(effect in 1:(NHostNodes - NHostTips)) {
