@@ -18,7 +18,7 @@ hosttreePath <- 'raw_data/combined_trees.newick' #set of Bayesian draws of host 
 mapfilePath <- 'raw_data/GCMP_EMP_map_r28.txt' #mapping file
 fulltablePath <- 'raw_data/reference-hit.txt' #250 bp deblur otu table output
 taxAssignmentPath <- 'raw_data/reference-hit.seqs_tax_assignments.txt' #greegenes taxonomy
-modelPath <- 'raw_data/logistic_cophylogenetic_GLM_varVar.stan' #stan model
+modelPath <- 'scripts/logistic_cophylogenetic_GLM_varVar.stan' #stan model
 
 
 outdir <- file.path('output',gsub(' ', '_', Sys.time()))
@@ -218,9 +218,6 @@ for(fact in names(sort(allfactorder,decreasing=T))) {
     factLevelMat[,fact] <- as.numeric(colnames(modelMat) %in% matches)
     remainder <- remainder[!remainder %in% matches]
 }
-
-dir.create(outdir, recursive=T)
-save.image(file.path(outdir,'checkpoint.RData'))
 
 NTimeBins <- ceiling(length(levels(newermap[,sampleTipKey])) / NSplits)
 

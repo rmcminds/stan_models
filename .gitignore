@@ -2,3 +2,4 @@ raw_data/
 output/
 *.rds
 private_readme.txt
+sge_logs*
