@@ -39,6 +39,8 @@ warmup <- nsamples / 2
 
 
 for(i in 1:nparalleltrees) {
+    
+    check_hmc_diagnostics(fit[[i]])
 
     currdatadir <- paste0(outdir,'tree_',i,'/data/')
     currtabledir <- paste0(outdir,'tree_',i,'/tables/')
