@@ -31,7 +31,7 @@ minSamps <- 1 # minimum number of samples that a sequence variant is present in 
 aveStDPriorExpect <- 1.0
 NTrees <- 10 ## number of random trees to sample and to fit the model to
 NSplits <- 15 ## desired number of nodes per host timeBin
-ultrametricizeMicrobeTree <- FALSE
+ultrametricizeMicrobeTree <- TRUE
 ##
 
 ## Stan options
@@ -420,6 +420,14 @@ for(i in 1:NTrees) {
         write.table(sums3d[effect,,], file=file.path(currtabledir, paste0(factorfilenames[[effect]],'.txt')), sep='\t', quote=F,append=T)
     }
     ##
+    
+    ## summarize the mean branch lengths of the hosts
+    sums <- summary(fit, pars='hostScales', probs=c(0.05,0.95), use_cache = F)
+    hostTreesSampled[[1]]$edge.length <- sums$mean^2
+    pdf(file=file.path(currplotdir,'hostTreeWEstimatedEdgeLengths.pdf'), width=25, height=15)
+    plot(hostTreesSampled[[1]], cex=0.5)
+    graphics.off()
+    ##
 }
 ##
 
@@ -474,4 +482,13 @@ graphics.off()
 pdf(file=file.path(currplotdir,'logEvolRatesADivRelToWeightedMeanMerged45.pdf'), width=25, height=15)
 boxplot(log(relativeEvolRatesMerged45), xlab='Time Period', ylab='Log Rate of Evolution Relative to Weighted Mean')
 graphics.off()
+
+## summarize the mean branch lengths of the microbes
+sums <- summary(fit, pars='microbeScales', probs=c(0.05,0.95), use_cache = F)
+microbeTree.root.Y$edge.length <- sums$mean^2
+pdf(file=file.path(currplotdir,'microbeTreeWEstimatedEdgeLengths.pdf'), width=25, height=15)
+plot(microbeTree.root.Y, cex=0.5)
+graphics.off()
+##
+
 ## fin
