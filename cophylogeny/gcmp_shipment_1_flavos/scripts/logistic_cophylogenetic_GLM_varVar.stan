@@ -9,14 +9,14 @@ data {
     int NHostTips;
     int NTimeBins;
     int present[NObs];
-    int samplenames[NObs];
+    int sampleNames[NObs];
     int microbeTipNames[NObs];
     real<lower=0> aveStDPriorExpect;
     vector[NTimeBins] timeBinSizes;
     matrix[NMicrobeNodes, NMicrobeNodes] microbeAncestors;
     matrix[NEffects, NFactors] factLevelMat;
     matrix[NSamples, NEffects] modelMat;
-    matrix[NHostNodes, NTimeBins] edgetobin;
+    matrix[NHostNodes, NTimeBins] edgeToBin;
     matrix[NHostNodes, NHostNodes] hostAncestors;
     matrix[NSamples, NHostNodes] hostAncestorsExpanded;
     row_vector[NMicrobeNodes] microbeEdges;
@@ -54,7 +54,7 @@ transformed parameters {
     hostVarRaw
         = exp(hostAncestors[, (NHostTips + 1):]
               * phyloLogVarMultADiv)
-          .* (edgetobin * timeBinProps);
+          .* (edgeToBin * timeBinProps);
     hostScales
         = scales[2 * NFactors + 1]
           * sqrt(hostVarRaw
@@ -103,7 +103,7 @@ model {
           * (rep_matrix(scaledAlphaDivEffects, NMicrobeTips)
              + scaledMicrobeNodeEffects * microbeAncestors[, 1:NMicrobeTips]);
     for (n in 1:NObs)
-        logit_ratios[n] = sampleTipEffects[samplenames[n], microbeTipNames[n]];
+        logit_ratios[n] = sampleTipEffects[sampleNames[n], microbeTipNames[n]];
     present ~ bernoulli_logit(logit_ratios);
 }
 generated quantities {

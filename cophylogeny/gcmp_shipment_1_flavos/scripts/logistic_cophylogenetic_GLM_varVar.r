@@ -14,12 +14,11 @@ options(mc.cores = parallel::detectCores())
 
 
 microbeTreePath <- 'raw_data/gg_constrained_fastttree.tre' #ML microbial phylogeny
-hosttreePath <- 'raw_data/combined_trees.newick' #set of Bayesian draws of host species phylogeny
+hostTreePath <- 'raw_data/combined_trees.newick' #set of Bayesian draws of host species phylogeny
 mapfilePath <- 'raw_data/GCMP_EMP_map_r28.txt' #mapping file
 fulltablePath <- 'raw_data/reference-hit.txt' #250 bp deblur otu table output
 taxAssignmentPath <- 'raw_data/reference-hit.seqs_tax_assignments.txt' #greegenes taxonomy
 modelPath <- 'scripts/logistic_cophylogenetic_GLM_varVar.stan' #stan model
-
 
 outdir <- file.path('output',gsub(':', '-', gsub(' ', '_', Sys.time())))
 
@@ -29,15 +28,17 @@ minPercent <- 0 # minimum percent of a sample composed of a sequence variant for
 minSamps <- 1 # minimum number of samples that a sequence variant is present in at the above threshold for it to be included
 ##
 
+## model options
+aveStDPriorExpect <- 1.0
+NTrees <- 1 ## number of random trees to sample and to fit the model to
+NSplits <- 25 ## desired number of nodes per host timeBin
+##
 
 ## Stan options
 NChains <- 1 ## this is per tree; since I'm doing a large number of trees in parallel i'll just do one chain for each
 NIterations <- 500 ## will probably need >10,000? maybe start with 2, check convergence, double it, check, double, check, double, etc.?
 max_treedepth <- 15 ## a warning will tell you if this needs to be increased
 adapt_delta <- 0.9 ## increase this if you get 'divergences' - even one means your model fit sucks!
-aveStDPriorExpect <- 1.0
-NTrees <- 1 ## number of random trees to sample and to fit the model to
-NSplits <- 25 ## desired number of nodes per host timeBin
 ##
 
 possibleFungidGenera <- c('Fungia_','Danafungia_','Cycloseris_','Pleuractis_')
@@ -66,15 +67,14 @@ filterfunction <- function(dfin) {
     return(df2)
 }
 
-hosttree <- read.tree(hosttreePath)
-hosttree <- .compressTipLabel(hosttree)
-
+## import host phylogenies
+hostTree <- read.tree(hostTreePath)
+hostTree <- .compressTipLabel(hostTree)
+##
 
 
 map <- read.table(mapfilePath,header=T,sep='\t',comment.char='',check.names=F)
 rownames(map) <- map[,'#SampleID']
-
-
 newmap <- filterfunction(map)
 
 fulltable <- t(read.table(fulltablePath, header=T, sep='\t', skip=1, comment.char='', row.names=1, check.names=F))
@@ -90,7 +90,7 @@ study.species <- gsub(' ', '_', levels(newermap[,sampleTipKey]))
 
 ## identify the Scleractinian species in the data that do not exist in the template tree
 
-study.species.missing <- study.species[!study.species %in% grep(paste(c(attr(hosttree, "TipLabel"),'Fungid','not_applicable'),collapse='|'), study.species, ignore.case=T, value=T)]
+study.species.missing <- study.species[!study.species %in% grep(paste(c(attr(hostTree, "TipLabel"),'Fungid','not_applicable'),collapse='|'), study.species, ignore.case=T, value=T)]
 generaOfUnknowns <- sapply(study.species.missing, function(x) strsplit(x, '_')[[1]][[1]])
 
 
@@ -118,11 +118,10 @@ y.binary.filtered.flavos <- y.binary.filtered[,colnames(y.binary.filtered) %in% 
 
 
 
-
+## import microbe tree
 microbeTree <- read.tree(microbeTreePath)
-
 microbeTree.Y <- drop.tip(microbeTree, microbeTree$tip.label[!microbeTree$tip.label %in% colnames(y.binary.filtered.flavos)])
-
+##
 
 
 
@@ -149,39 +148,39 @@ NMicrobeTips <- length(microbeNames)
 y <- y.binary.filtered.flavos[,microbeNames]
 ##
 
-estMicrobeTips <- colnames(y)
-NEstMicrobeTips <- length(estMicrobeTips)
+microbeTips <- colnames(y)
+NMicrobeTips <- length(microbeTips)
 
 
 senddat <- melt(y, varnames=c('sample','tip'), value.name='present')
-samplenames <- as.numeric(factor(senddat[,1]))
-tipnames <- as.numeric(factor(senddat[,2], levels=estMicrobeTips))
+sampleNames <- as.numeric(factor(senddat[,1]))
+microbeTipNames <- as.numeric(factor(senddat[,2], levels=microbeTips))
 present <- senddat[,3]
 NObs <- nrow(senddat)
-NEstSamples <- length(unique(samplenames))
+NSamples <- length(unique(sampleNames))
 
 newermap <- newermap[levels(factor(senddat[,1])),]
 
 
-NEstIntMicrobeNodes <- microbeTree.Y.root$Nnode
-NEstMicrobeNodes <- NEstMicrobeTips + NEstIntMicrobeNodes - 1
+NIntMicrobeNodes <- microbeTree.Y.root$Nnode
+NMicrobeNodes <- NMicrobeTips + NIntMicrobeNodes - 1
 
 microbeEdges <- microbeTree.Y.root$edge.length
 
 allnodes <- unique(microbeTree.Y.root$edge[,1])
 NSamplesRaw <- nrow(y)
-microbeAncestors <- matrix(0, NEstMicrobeNodes + 1, NEstMicrobeNodes + 1)
-for(node in 1:(NEstMicrobeNodes + 1)) {
-    microbeAncestors[, node] <- as.numeric(1:(NEstMicrobeNodes + 1) %in% c(Ancestors(microbeTree.Y.root, node), node))
+microbeAncestors <- matrix(0, NMicrobeNodes + 1, NMicrobeNodes + 1)
+for(node in 1:(NMicrobeNodes + 1)) {
+    microbeAncestors[, node] <- as.numeric(1:(NMicrobeNodes + 1) %in% c(Ancestors(microbeTree.Y.root, node), node))
 }
 ##
 
-colnames(microbeAncestors) <- rownames(microbeAncestors) <- paste0('i',1:(NEstMicrobeNodes + 1))
-colnames(microbeAncestors)[1:NEstMicrobeTips] <- rownames(microbeAncestors)[1:NEstMicrobeTips] <- paste0('t',colnames(y))
+colnames(microbeAncestors) <- rownames(microbeAncestors) <- paste0('i',1:(NMicrobeNodes + 1))
+colnames(microbeAncestors)[1:NMicrobeTips] <- rownames(microbeAncestors)[1:NMicrobeTips] <- paste0('t',colnames(y))
 
-microbeAncestors <- microbeAncestors[-(NEstMicrobeTips + 1), -(NEstMicrobeTips + 1)]
+microbeAncestors <- microbeAncestors[-(NMicrobeTips + 1), -(NMicrobeTips + 1)]
 
-newermap$sequencing_depth <- rowSums(y[,estMicrobeTips])
+newermap$sequencing_depth <- rowSums(y[,microbeTips])
 newermap$log_sequencing_depth <- log(newermap$sequencing_depth)
 newermap$log_sequencing_depth_scaled <- scale(newermap$log_sequencing_depth)
 
@@ -223,27 +222,27 @@ NTimeBins <- ceiling(length(levels(newermap[,sampleTipKey])) / NSplits)
 
 ### starting here, generate multiple random samples of the map and trees (later to be summarized to define the time Bins and also to be separately used for replicate runs of the model)
 sampleMap <- list()
-hosttreesSampled <- list()
+hostTreesSampled <- list()
 splittimes <- list()
 boundaries <- matrix(NA,nrow=NTrees, ncol=NTimeBins-1)
 for(i in 1:NTrees) {
     sampleMap[[i]] <- newermap
     fungidSps <- grep('Fungid',levels(sampleMap[[i]][,sampleTipKey]))
-    levels(sampleMap[[i]][,sampleTipKey])[fungidSps] <- sample(grep(paste0(paste(possibleFungidGenera,collapse='|'),'_'), attr(hosttree, "TipLabel"), value=T), length(fungidSps)) ##assign unidentified Fungids to a random member of the group independently for each tree
+    levels(sampleMap[[i]][,sampleTipKey])[fungidSps] <- sample(grep(paste0(paste(possibleFungidGenera,collapse='|'),'_'), attr(hostTree, "TipLabel"), value=T), length(fungidSps)) ##assign unidentified Fungids to a random member of the group independently for each tree
     for (j in unique(generaOfUnknowns)) {
-        possibleGenera <- attr(hosttree, "TipLabel")[!attr(hosttree, "TipLabel") %in% levels(sampleMap[[i]][,sampleTipKey])]
+        possibleGenera <- attr(hostTree, "TipLabel")[!attr(hostTree, "TipLabel") %in% levels(sampleMap[[i]][,sampleTipKey])]
         if(!any(grepl(j,possibleGenera))) {
-            possibleGenera <- attr(hosttree, "TipLabel")
+            possibleGenera <- attr(hostTree, "TipLabel")
         }
         levels(sampleMap[[i]][,sampleTipKey])[levels(sampleMap[[i]][,sampleTipKey]) %in% grep(paste0(j,'_'),study.species.missing,value=T)] <- sample(grep(paste0(j,'_'), possibleGenera, value=T), sum(generaOfUnknowns == j)) ## assign unidentified species to a random member of their genus independently for each tree
     }
 
 	#filter the tree only contain the sampled (or assigned) species
-	hosttreesSampled[[i]] <- ladderize(drop.tip(hosttree[[i]],hosttree[[i]]$tip.label[!hosttree[[i]]$tip.label %in% levels(sampleMap[[i]][,sampleTipKey])]))
+	hostTreesSampled[[i]] <- ladderize(drop.tip(hostTree[[i]],hostTree[[i]]$tip.label[!hostTree[[i]]$tip.label %in% levels(sampleMap[[i]][,sampleTipKey])]))
 
 	#divide total evolutionary time into chunks that contain approximately equal numbers of splits
-	lttHosttreesSampled <- ltt(hosttreesSampled[[i]],log.lineages=F,plot=F)
-	temp <- max(nodeHeights(hosttreesSampled[[i]])) - lttHosttreesSampled$times[-length(lttHosttreesSampled$times)]
+	lttHostTreesSampled <- ltt(hostTreesSampled[[i]],log.lineages=F,plot=F)
+	temp <- max(nodeHeights(hostTreesSampled[[i]])) - lttHostTreesSampled$times[-length(lttHostTreesSampled$times)]
 	splittimes[[i]] <- split(temp, ceiling(seq_along(temp)/NSplits))
     if(length(splittimes[[i]][[NTimeBins]]) < NSplits/2) {
         splittimes[[i]][[NTimeBins - 1]] <- c(splittimes[[i]][[NTimeBins - 1]], splittimes[[i]][[NTimeBins]])
@@ -262,49 +261,49 @@ for(i in 1:NTrees) {
 meanBoundaries <- apply(boundaries,2,mean)
 
 
-NHostTips <- length(hosttreesSampled[[1]]$tip.label)
-NIntHostNodes <- hosttreesSampled[[1]]$Nnode
+NHostTips <- length(hostTreesSampled[[1]]$tip.label)
+NIntHostNodes <- hostTreesSampled[[1]]$Nnode
 NHostNodes <- NIntHostNodes + NHostTips - 1
 
 
 timeBinSizes <- list()
 relativeTimeBinSizes <- list()
-edgetobin <- list()
+edgeToBin <- list()
 for(i in 1:NTrees) {
-    nh <- nodeHeights(hosttreesSampled[[i]])
+    nh <- nodeHeights(hostTreesSampled[[i]])
     maxNH <- max(nh)
     timeBinSizes[[i]] <- sapply(2:(length(meanBoundaries)+2),function(x) c(maxNH,meanBoundaries,0)[x-1] - c(maxNH,meanBoundaries,0)[x]) #size in millions of years of each bin (consistent across replicates /except/ for the oldest bin
     relativeTimeBinSizes[[i]] <- timeBinSizes[[i]] / sum(timeBinSizes[[i]]) #proportion of total tree height belonging to each bin (differs for each replicate due to the varying sizes of the oldest bin)
     nd <- maxNH - nh
-    edgetobin[[i]] <- matrix(NA,ncol=NTimeBins,nrow=nrow(hosttreesSampled[[i]]$edge)) #create a matrix for each replicate that describes the proportion of each time bin that each branch exists for
+    edgeToBin[[i]] <- matrix(NA,ncol=NTimeBins,nrow=nrow(hostTreesSampled[[i]]$edge)) #create a matrix for each replicate that describes the proportion of each time bin that each branch exists for
     for(j in 1:NTimeBins) {
         if(j == 1) {
             allin <- which(nd[,2] >= meanBoundaries[j])
 			allout <- which(nd[,1] <= meanBoundaries[j])
             cedge <- which((nd[,1] > meanBoundaries[j]) & (nd[,2] < meanBoundaries[j]))
-            edgetobin[[i]][cedge,j] <- nd[cedge,1] - meanBoundaries[j]
+            edgeToBin[[i]][cedge,j] <- nd[cedge,1] - meanBoundaries[j]
         } else if(j == NTimeBins) {
             allin <- which(nd[,1] <= meanBoundaries[j-1])
             allout <- which(nd[,2] >= meanBoundaries[j-1])
             cedge <- which((nd[,1] > meanBoundaries[j-1]) & (nd[,2] < meanBoundaries[j-1]))
-            edgetobin[[i]][cedge,j] <- meanBoundaries[j-1] - nd[cedge,2]
+            edgeToBin[[i]][cedge,j] <- meanBoundaries[j-1] - nd[cedge,2]
         } else {
             allin <- which((nd[,1] <= meanBoundaries[j-1]) & (nd[,2] >= meanBoundaries[j]))
             allout <- which((nd[,1] <= meanBoundaries[j]) | (nd[,2] >= meanBoundaries[j-1]))
             cedge1 <- which((nd[,1] < meanBoundaries[j-1]) & (nd[,1] > meanBoundaries[j]) & (nd[,2] < meanBoundaries[j]))
-            edgetobin[[i]][cedge1,j] <- nd[cedge1,1] - meanBoundaries[j]
+            edgeToBin[[i]][cedge1,j] <- nd[cedge1,1] - meanBoundaries[j]
             cedge2 <- which((nd[,1] > meanBoundaries[j-1]) & (nd[,2] < meanBoundaries[j-1]) & (nd[,2] > meanBoundaries[j]))
-            edgetobin[[i]][cedge2,j] <- meanBoundaries[j-1] - nd[cedge2,2]
+            edgeToBin[[i]][cedge2,j] <- meanBoundaries[j-1] - nd[cedge2,2]
             cedge3 <- which((nd[,1] > meanBoundaries[j-1]) & (nd[,2] < meanBoundaries[j]))
-            edgetobin[[i]][cedge3,j] <- meanBoundaries[j-1] - meanBoundaries[j]
+            edgeToBin[[i]][cedge3,j] <- meanBoundaries[j-1] - meanBoundaries[j]
         }
-        edgetobin[[i]][allin,j] <- hosttreesSampled[[i]]$edge.length[allin]
-        edgetobin[[i]][allout,j] <- 0
+        edgeToBin[[i]][allin,j] <- hostTreesSampled[[i]]$edge.length[allin]
+        edgeToBin[[i]][allout,j] <- 0
 
-		edgetobin[[i]][,j] <- edgetobin[[i]][,j] / timeBinSizes[[i]][j]
+		edgeToBin[[i]][,j] <- edgeToBin[[i]][,j] / timeBinSizes[[i]][j]
     }
-    rownames(edgetobin[[i]]) <- hosttreesSampled[[i]]$edge[,2]
-    edgetobin[[i]] <- edgetobin[[i]][order(as.numeric(rownames(edgetobin[[i]]))),]
+    rownames(edgeToBin[[i]]) <- hostTreesSampled[[i]]$edge[,2]
+    edgeToBin[[i]] <- edgeToBin[[i]][order(as.numeric(rownames(edgeToBin[[i]]))),]
 }
 
 
@@ -317,10 +316,10 @@ hostAncestorsExpanded <- list()
 for (i in 1:NTrees) {
 	hostAncestors[[i]] <- matrix(NA, NHostNodes+1, NHostNodes+1)
 	for(node in 1:(NHostNodes+1)) {
-	    hostAncestors[[i]][node, ] <- as.numeric(1:(NHostNodes+1) %in% c(Ancestors(hosttreesSampled[[i]], node), node))
+	    hostAncestors[[i]][node, ] <- as.numeric(1:(NHostNodes+1) %in% c(Ancestors(hostTreesSampled[[i]], node), node))
 	}
     colnames(hostAncestors[[i]]) <- rownames(hostAncestors[[i]]) <- paste0('i',1:(NHostNodes+1))
-    colnames(hostAncestors[[i]])[1:NHostTips] <- rownames(hostAncestors[[i]])[1:NHostTips] <- hosttreesSampled[[i]]$tip.label
+    colnames(hostAncestors[[i]])[1:NHostTips] <- rownames(hostAncestors[[i]])[1:NHostTips] <- hostTreesSampled[[i]]$tip.label
     hostAncestors[[i]] <- hostAncestors[[i]][-(NHostTips + 1), -(NHostTips + 1)]
     hostAncestorsExpanded[[i]] <- hostAncestors[[i]][as.character(sampleMap[[i]][,sampleTipKey]),]
     rownames(hostAncestorsExpanded[[i]]) <- rownames(sampleMap[[i]])
@@ -330,7 +329,7 @@ for (i in 1:NTrees) {
 
 standat <- list()
 for (i in 1:NTrees) {
-    standat[[i]] <- list(NEstSamples=NEstSamples, NObs=NObs, NEstMicrobeNodes=NEstMicrobeNodes, NEstMicrobeTips=NEstMicrobeTips, NFactors=NFactors, NEffects=NEffects, present=present, samplenames=samplenames, tipnames=tipnames, factLevelMat=factLevelMat, microbeAncestors=microbeAncestors, modelMat=modelMat, hostAncestors=hostAncestors[[i]], hostAncestorsExpanded=hostAncestorsExpanded[[i]], edgetobin=edgetobin[[i]], NHostNodes=NHostNodes, NTimeBins=NTimeBins, aveStDPriorExpect=aveStDPriorExpect, timeBinSizes=relativeTimeBinSizes[[i]], microbeEdges=microbeEdges)
+    standat[[i]] <- list(NSamples=NSamples, NObs=NObs, NMicrobeNodes=NMicrobeNodes, NMicrobeTips=NMicrobeTips, NFactors=NFactors, NEffects=NEffects, present=present, sampleNames=sampleNames, microbeTipNames=microbeTipNames, factLevelMat=factLevelMat, microbeAncestors=microbeAncestors, modelMat=modelMat, hostAncestors=hostAncestors[[i]], hostAncestorsExpanded=hostAncestorsExpanded[[i]], edgeToBin=edgeToBin[[i]], NHostNodes=NHostNodes, NTimeBins=NTimeBins, aveStDPriorExpect=aveStDPriorExpect, timeBinSizes=relativeTimeBinSizes[[i]], microbeEdges=microbeEdges)
 }
 dir.create(outdir, recursive=T)
 
@@ -339,7 +338,7 @@ save(microbeAncestors,file=file.path(outdir,'microbeAncestors.RData'))
 save(meanBoundaries,file=file.path(outdir,'meanBoundaries.RData'))
 save(hostAncestors,file=file.path(outdir,'hostAncestors.RData'))
 save(hostAncestorsExpanded,file=file.path(outdir,'hostAncestorsExpanded.RData'))
-save(hosttreesSampled,file=file.path(outdir,'sampledHostTrees.RData'))
+save(hostTreesSampled,file=file.path(outdir,'hostTreesSampled.RData'))
 save(timeBinSizes,file=file.path(outdir,'timeBinSizes.RData'))
 
 
@@ -362,9 +361,9 @@ for(i in 1:NTrees) {
 
 
     pdf(file=file.path(currplotdir,'sampledTree.pdf'), width=25, height=15)
-    plot(hosttreesSampled[[i]],cex=0.75)
-    for(age in max(nodeHeights(hosttreesSampled[[i]]))-meanBoundaries) {
-        lines(x=c(age,age),y=c(1,length(hosttreesSampled[[i]]$tip.label)),lwd=1)
+    plot(hostTreesSampled[[i]],cex=0.75)
+    for(age in max(nodeHeights(hostTreesSampled[[i]]))-meanBoundaries) {
+        lines(x=c(age,age),y=c(1,length(hostTreesSampled[[i]]$tip.label)),lwd=1)
     }
     graphics.off()
 
@@ -417,11 +416,11 @@ for(i in 1:NTrees) {
 
     sums <- summary(fit[[i]], pars='phyloLogVarMultRaw', probs=c(0.05,0.95), use_cache = F)
 
-    sums3d <- array(NA, dim=c(NHostNodes - NHostTips, NEstMicrobeNodes - NEstMicrobeTips, ncol(sums$summary)))
+    sums3d <- array(NA, dim=c(NHostNodes - NHostTips, NMicrobeNodes - NMicrobeTips, ncol(sums$summary)))
     for(effect in 1:(NHostNodes - NHostTips)) {
-        sums3d[effect,,] <- sums$summary[(effect-1) * (NEstMicrobeNodes - NEstMicrobeTips) + (1:(NEstMicrobeNodes - NEstMicrobeTips)),]
+        sums3d[effect,,] <- sums$summary[(effect-1) * (NMicrobeNodes - NMicrobeTips) + (1:(NMicrobeNodes - NMicrobeTips)),]
     }
-    dimnames(sums3d) <- list(colnames(hostAncestors[[i]])[(NHostTips + 1):NHostNodes], rownames(microbeAncestors)[(NEstMicrobeTips + 1):NEstMicrobeNodes], colnames(sums$summary))
+    dimnames(sums3d) <- list(colnames(hostAncestors[[i]])[(NHostTips + 1):NHostNodes], rownames(microbeAncestors)[(NMicrobeTips + 1):NMicrobeNodes], colnames(sums$summary))
     factorfilenames <- colnames(hostAncestors[[i]])[(NHostTips + 1):NHostNodes]
 
     for(effect in 1:(NHostNodes - NHostTips)) {
