@@ -19,29 +19,32 @@ mapfilePath <- 'raw_data/GCMP_symbiodinium_map2.txt' #mapping file
 fulltablePath <- 'raw_data/species_table.txt' #250 bp deblur otu table output
 modelPath <- 'scripts/logistic_cophylogenetic_GLM_varVar.stan' #stan model
 
-
 outdir <- file.path('output',gsub(':','-',gsub(' ', '_', Sys.time())))
 
 
 ## filtration options
 minCountSamp <- 5 # minimum sequencing depth for a sample to be included
 minSamps <- 1 # minimum number of samples that a sequence variant is present in at the above threshold for it to be included
-#
+##
 
+## model options
+aveStDPriorExpect <- 1.0
+NTrees <- 10 ## number of random trees to sample and to fit the model to
+NSplits <- 15 ## desired number of nodes per host timeBin
+ultrametricizeMicrobeTree <- FALSE
+##
 
 ## Stan options
 NChains <- 1 ## this is per tree; since I'm doing a large number of trees in parallel i'll just do one chain for each
 NIterations <- 5000 ## will probably need >10,000? maybe start with 2, check convergence, double it, check, double, check, double, etc.?
 max_treedepth <- 15 ## a warning will tell you if this needs to be increased
 adapt_delta <- 0.9 ## increase this if you get 'divergences' - even one means your model fit sucks!
-aveStDPriorExpect <- 1.0
-NTrees <- 10 ## number of random trees to sample and to fit the model to
-NSplits <- 15 ## desired number of nodes per host timeBin
+minMCSamples <- 2000 ## approximate number of Monte Carlo samples to save from the fit
 ##
 
+## define the set of genera that we think our unidentified fungid samples could belong to
 possibleFungidGenera <- c('Fungia_','Danafungia_','Cycloseris_','Pleuractis_')
 ## would be good here and for samples ID'd to genus to have some kind of weights for each possible species. i.e. it's really not possible that the acropora samples are A. cervicornis or palmata because their range is wrong, so even though I don't know which Acropora species exactly, I do have some info about the relative probabilities for many of them. similarly, some species might just be super rare in general and should likely be downweighted
-
 
 sampleTipKey <- 'host_scientific_name'
 
@@ -66,12 +69,11 @@ filterfunction <- function(dfin) {
     return(df2)
 }
 
+## import phylogenies
 hostTree <- read.tree(hostTreePath)
 hostTree <- .compressTipLabel(hostTree)
-
-
 microbeTree <- read.tree(microbeTreePath)
-
+##
 
 ## root the tree if it's unrooted
 if(is.rooted(microbeTree)) {
@@ -81,108 +83,115 @@ if(is.rooted(microbeTree)) {
 }
 ##
 
+## add edge lengths to microbial tree if they're missing, and make tips contemporary if indicated
 if(is.null(microbeTree.root$edge.length)) {
-    microbeTree.root.chronos <- microbeTree.root
-    microbeTree.root.chronos$edge.length <- rep(1,length(microbeTree.root.chronos$edge))
-    microbeTree.root.chronos <- chronos(microbeTree.root.chronos, model = "discrete", control = chronos.control(nb.rate.cat = 1))
+    microbeTree.root$edge.length <- rep(1,length(microbeTree.root$edge))
+    if(ultrametricizeMicrobeTree) {
+        microbeTree.root <- chronos(microbeTree.root, model = "discrete", control = chronos.control(nb.rate.cat = 1))
+        class(microbeTree.root) <- 'phylo'
+    }
 } else {
-    microbeTree.root.chronos <- chronos(microbeTree.root)
+    if(ultrametricizeMicrobeTree) {
+        microbeTree.root <- chronos(microbeTree.root)
+        class(microbeTree.root) <- 'phylo'
+    }
 }
+##
 
-class(microbeTree.root.chronos) <- 'phylo'
-
-fulltable <- t(read.table(fulltablePath, header=T, sep='\t', skip=1, comment.char='', row.names=1, check.names=F))
-
-newtable <- fulltable[-nrow(fulltable),]
+##import data
+fulltable <- t(read.table(fulltablePath, header=T, sep='\t', comment.char='', row.names=1, check.names=F))
+newtable <- fulltable[-nrow(fulltable),] # last line in symportal file is not part of the table
 mode(newtable) <- 'numeric'
+##
 
-
+## import mapping file
 map <- read.table(mapfilePath,header=T,sep='\t',comment.char='',check.names=F)
 rownames(map) <- map[,'#SampleID']
-
-
 newmap <- filterfunction(map)
+##
+
+## merge data and mapping file
 idx <- rownames(newtable)[rownames(newtable) %in% rownames(newmap) & rowSums(newtable) >= minCountSamp]
-y.old <- newtable[idx,colnames(newtable) %in% microbeTree.root.chronos$tip.label]
+y.old <- newtable[idx,colnames(newtable) %in% microbeTree.root$tip.label]
 newermap <- newmap[idx,]
-microbeTree.root.chronos.Y <- drop.tip(microbeTree.root.chronos,microbeTree.root.chronos$tip.label[!microbeTree.root.chronos$tip.label %in% colnames(y.old)])
-
-
-
-## summarize the putative microbes to be estimated
-microbes <- factor(colnames(y.old),levels=microbeTree.root.chronos.Y$tip.label)
-microbeNames <- levels(microbes)
-NMicrobeTips <- length(microbeNames)
 ##
 
-## sort the OTU table so its entries match the tree's tip labels
-y <- y.old[,microbeNames]
-##
-ybinary <- apply(y,2,function(x) x > 0)
+## convert data to presence/absence
+ybinary <- apply(y.old, 2, function(x) x > 0)
 mode(ybinary) <- 'numeric'
+##
 
-yb <- ybinary[,colSums(ybinary) >= minSamps]
-estMicrobeTips <- colnames(yb)
-NEstMicrobeTips <- length(estMicrobeTips)
+## filter microbes that aren't in the minimum number of samples
+yb <- ybinary[, colSums(ybinary) >= minSamps]
+microbeTree.root.Y <- drop.tip(microbeTree.root, microbeTree.root$tip.label[!microbeTree.root$tip.label %in% colnames(yb)])
+yb <- yb[, microbeTree.root.Y$tip.label]
+##
 
+## generate some summary numbers regarding microbes
+microbeTips <- colnames(yb)
+NMicrobeTips <- length(microbeTips)
+NIntMicrobeNodes <- microbeTree.root.Y$Nnode
+NMicrobeNodes <- NMicrobeTips + NIntMicrobeNodes - 1
+microbeEdges <- microbeTree.root.Y$edge.length
+##
 
+## melt the data into long format to feed to model, and generate summary numbers about samples
 senddat <- melt(yb, varnames=c('sample','tip'), value.name='present')
-samplenames <- as.numeric(factor(senddat[,1]))
-tipnames <- as.numeric(factor(senddat[,2], levels=estMicrobeTips))
+sampleNames <- as.numeric(factor(senddat[,1]))
+microbeTipNames <- as.numeric(factor(senddat[,2], levels=microbeTips))
 present <- senddat[,3]
 NObs <- nrow(senddat)
-NEstSamples <- length(unique(samplenames))
-
-newermap <- newermap[levels(factor(senddat[,1])),]
-
-microbeTree.root.chronos.Y.filtered <- drop.tip(microbeTree.root.chronos.Y, microbeTree.root.chronos.Y$tip.label[!microbeTree.root.chronos.Y$tip.label %in% estMicrobeTips])
-
-NEstIntMicrobeNodes <- microbeTree.root.chronos.Y.filtered$Nnode
-NEstMicrobeNodes <- NEstMicrobeTips + NEstIntMicrobeNodes - 1
-
-microbeEdges <- microbeTree.root.chronos.Y.filtered$edge.length
-
-allnodes <- unique(microbeTree.root.chronos.Y.filtered$edge[,1])
-NSamplesRaw <- nrow(yb)
-microbeAncestors <- matrix(0, NEstMicrobeNodes + 1, NEstMicrobeNodes + 1)
-for(node in 1:(NEstMicrobeNodes + 1)) {
-    microbeAncestors[, node] <- as.numeric(1:(NEstMicrobeNodes + 1) %in% c(Ancestors(microbeTree.root.chronos.Y.filtered, node), node))
-}
+NSamples <- length(unique(sampleNames))
 ##
 
-colnames(microbeAncestors) <- rownames(microbeAncestors) <- paste0('i',1:(NEstMicrobeNodes + 1))
-colnames(microbeAncestors)[1:NEstMicrobeTips] <- rownames(microbeAncestors)[1:NEstMicrobeTips] <- paste0('t',colnames(yb))
+## make the mapping file match the set and order of samples in the data
+newermap <- newermap[levels(factor(senddat[,1])),]
+##
 
-microbeAncestors <- microbeAncestors[-(NEstMicrobeTips + 1), -(NEstMicrobeTips + 1)]
-
-newermap$sequencing_depth <- rowSums(y[,estMicrobeTips])
+## prepare sequencing depth input
+newermap$sequencing_depth <- rowSums(y.old[,microbeTips])
 newermap$log_sequencing_depth <- log(newermap$sequencing_depth)
 newermap$log_sequencing_depth_scaled <- scale(newermap$log_sequencing_depth)
+##
 
+## create ancestry matrix for microbes
+microbeAncestors <- matrix(0, NMicrobeNodes + 1, NMicrobeNodes + 1)
+for(node in 1:(NMicrobeNodes + 1)) {
+    microbeAncestors[, node] <- as.numeric(1:(NMicrobeNodes + 1) %in% c(Ancestors(microbeTree.root.Y, node), node))
+}
+colnames(microbeAncestors) <- rownames(microbeAncestors) <- paste0('i',1:(NMicrobeNodes + 1))
+colnames(microbeAncestors)[1:NMicrobeTips] <- rownames(microbeAncestors)[1:NMicrobeTips] <- paste0('t',colnames(yb))
+microbeAncestors <- microbeAncestors[-(NMicrobeTips + 1), -(NMicrobeTips + 1)]
+##
 
-
-
-
+## prepare data for the model matrix
 modelform <- ~ ocean + reef_name + colony_name + tissue_compartment + log_sequencing_depth_scaled
 allfactors <- attr(terms.formula(modelform), "term.labels")
 NFactors <- length(allfactors)
 allfactorder <- sapply(allfactors, function(x) sum(gregexpr(':', x, fixed=TRUE)[[1]] > 0))
-
 modelMat <- model.matrix(modelform, model.frame(newermap,na.action=NULL))
 modelMat[is.na(modelMat)] <- 0
+##
+
+## rename factors that have 'sum contrasts' because by default they get arbitrary names
 sumconts <- names(attr(modelMat, "contrasts")[attr(modelMat, "contrasts")=='contr.sum'])
 for(j in sumconts) {
-    colnames(modelMat)[grep(j,colnames(modelMat))] <- paste0(j,levels(newermap[,j])[-nlevels(newermap[,j])]) ##this will not work when there are interaction effects!!!
+    colnames(modelMat)[grep(j,colnames(modelMat))] <- paste0(j,levels(newermap[,j])[-nlevels(newermap[,j])]) ##this will not work if there are 'interaction effects' specified in the model formula!!!
 }
+##
+
+## ditch the intercept in this matrix because the 'global' intercept and 'main effects' of host and microbe are all estimated separately.
 modelMat <- modelMat[,-1]
+##
+
+##
 NEffects <- ncol(modelMat)
+##
 
-
+## create matrix relating each 'effect' (categorical and numeric) to the 'factor' that it belongs to
 factLevelMat <- matrix(NA, NEffects, NFactors)
 colnames(factLevelMat) <- c(allfactors)
 rownames(factLevelMat) <- colnames(modelMat)
-
-
 remainder <- colnames(modelMat)
 for(fact in names(sort(allfactorder,decreasing=T))) {
     matches <- remainder
@@ -192,22 +201,19 @@ for(fact in names(sort(allfactorder,decreasing=T))) {
     factLevelMat[,fact] <- as.numeric(colnames(modelMat) %in% matches)
     remainder <- remainder[!remainder %in% matches]
 }
+##
 
-
-
-## identify unique Scleractinian species in the data, and replace spaces with underscores
-
+## identify unique host species in the data, and replace spaces with underscores
 study.species <- gsub(' ', '_', levels(newermap[,sampleTipKey]))
+##
 
-## identify the Scleractinian species in the data that do not exist in the template tree
-
+## identify the host species in the data that do not exist in the template tree
 study.species.missing <- study.species[!study.species %in% c(attr(hostTree, "TipLabel"),'Fungid_sp','not_applicable')]
 generaOfUnknowns <- sapply(study.species.missing, function(x) strsplit(x, '_')[[1]][[1]])
-
-
-NTimeBins <- ceiling(length(levels(newermap[,sampleTipKey])) / NSplits)
+##
 
 ### starting here, generate multiple random samples of the map and trees (later to be summarized to define the time Bins and also to be separately used for replicate runs of the model)
+NTimeBins <- ceiling(length(levels(newermap[,sampleTipKey])) / NSplits)
 sampleMap <- list()
 hostTreesSampled <- list()
 splittimes <- list()
@@ -236,62 +242,58 @@ for(i in 1:NTrees) {
     boundaries[i,] <- sapply(2:NTimeBins, function(x) max(splittimes[[i]][[x]]))
 
 }
+##
 
-
-#average cut points among all the trees so the bins of time are consistent across replicates
+## average cut points among all the trees so the bins of time are consistent across replicates
 meanBoundaries <- apply(boundaries,2,mean)
+##
 
-
-NHostTips <- length(hostTreesSampled[[1]]$tip.label)
-NIntHostNodes <- hostTreesSampled[[1]]$Nnode
-NHostNodes <- NIntHostNodes + NHostTips - 1
-
-
+## create matrices that relate the portion of each host branch that belongs to each time bin
 timeBinSizes <- list()
 relativeTimeBinSizes <- list()
-edgetobin <- list()
+edgeToBin <- list()
 for(i in 1:NTrees) {
     nh <- nodeHeights(hostTreesSampled[[i]])
     maxNH <- max(nh)
     timeBinSizes[[i]] <- sapply(2:(length(meanBoundaries)+2),function(x) c(maxNH,meanBoundaries,0)[x-1] - c(maxNH,meanBoundaries,0)[x]) #size in millions of years of each bin (consistent across replicates /except/ for the oldest bin
     relativeTimeBinSizes[[i]] <- timeBinSizes[[i]] / sum(timeBinSizes[[i]]) #proportion of total tree height belonging to each bin (differs for each replicate due to the varying sizes of the oldest bin)
     nd <- maxNH - nh
-    edgetobin[[i]] <- matrix(NA,ncol=NTimeBins,nrow=nrow(hostTreesSampled[[i]]$edge)) #create a matrix for each replicate that describes the proportion of each time bin that each branch exists for
+    edgeToBin[[i]] <- matrix(NA,ncol=NTimeBins,nrow=nrow(hostTreesSampled[[i]]$edge)) #create a matrix for each replicate that describes the proportion of each time bin that each branch exists for
     for(j in 1:NTimeBins) {
         if(j == 1) {
             allin <- which(nd[,2] >= meanBoundaries[j])
 			allout <- which(nd[,1] <= meanBoundaries[j])
             cedge <- which((nd[,1] > meanBoundaries[j]) & (nd[,2] < meanBoundaries[j]))
-            edgetobin[[i]][cedge,j] <- nd[cedge,1] - meanBoundaries[j]
+            edgeToBin[[i]][cedge,j] <- nd[cedge,1] - meanBoundaries[j]
         } else if(j == NTimeBins) {
             allin <- which(nd[,1] <= meanBoundaries[j-1])
             allout <- which(nd[,2] >= meanBoundaries[j-1])
             cedge <- which((nd[,1] > meanBoundaries[j-1]) & (nd[,2] < meanBoundaries[j-1]))
-            edgetobin[[i]][cedge,j] <- meanBoundaries[j-1] - nd[cedge,2]
+            edgeToBin[[i]][cedge,j] <- meanBoundaries[j-1] - nd[cedge,2]
         } else {
             allin <- which((nd[,1] <= meanBoundaries[j-1]) & (nd[,2] >= meanBoundaries[j]))
             allout <- which((nd[,1] <= meanBoundaries[j]) | (nd[,2] >= meanBoundaries[j-1]))
             cedge1 <- which((nd[,1] < meanBoundaries[j-1]) & (nd[,1] > meanBoundaries[j]) & (nd[,2] < meanBoundaries[j]))
-            edgetobin[[i]][cedge1,j] <- nd[cedge1,1] - meanBoundaries[j]
+            edgeToBin[[i]][cedge1,j] <- nd[cedge1,1] - meanBoundaries[j]
             cedge2 <- which((nd[,1] > meanBoundaries[j-1]) & (nd[,2] < meanBoundaries[j-1]) & (nd[,2] > meanBoundaries[j]))
-            edgetobin[[i]][cedge2,j] <- meanBoundaries[j-1] - nd[cedge2,2]
+            edgeToBin[[i]][cedge2,j] <- meanBoundaries[j-1] - nd[cedge2,2]
             cedge3 <- which((nd[,1] > meanBoundaries[j-1]) & (nd[,2] < meanBoundaries[j]))
-            edgetobin[[i]][cedge3,j] <- meanBoundaries[j-1] - meanBoundaries[j]
+            edgeToBin[[i]][cedge3,j] <- meanBoundaries[j-1] - meanBoundaries[j]
         }
-        edgetobin[[i]][allin,j] <- hostTreesSampled[[i]]$edge.length[allin]
-        edgetobin[[i]][allout,j] <- 0
+        edgeToBin[[i]][allin,j] <- hostTreesSampled[[i]]$edge.length[allin]
+        edgeToBin[[i]][allout,j] <- 0
 
-		edgetobin[[i]][,j] <- edgetobin[[i]][,j] / timeBinSizes[[i]][j]
+		edgeToBin[[i]][,j] <- edgeToBin[[i]][,j] / timeBinSizes[[i]][j]
     }
-    rownames(edgetobin[[i]]) <- hostTreesSampled[[i]]$edge[,2]
-    edgetobin[[i]] <- edgetobin[[i]][order(as.numeric(rownames(edgetobin[[i]]))),]
+    rownames(edgeToBin[[i]]) <- hostTreesSampled[[i]]$edge[,2]
+    edgeToBin[[i]] <- edgeToBin[[i]][order(as.numeric(rownames(edgeToBin[[i]]))),]
 }
+##
 
-
-
-
-
-### expand this so it's unique for each tree
+## create ancestry matrices for each host tree
+NHostTips <- length(hostTreesSampled[[1]]$tip.label)
+NIntHostNodes <- hostTreesSampled[[1]]$Nnode
+NHostNodes <- NIntHostNodes + NHostTips - 1
 hostAncestors <- list()
 hostAncestorsExpanded <- list()
 for (i in 1:NTrees) {
@@ -307,164 +309,169 @@ for (i in 1:NTrees) {
 }
 ##
 
-
+## collect data to feed to stan
 standat <- list()
 for (i in 1:NTrees) {
-    standat[[i]] <- list(NEstSamples=NEstSamples, NObs=NObs, NEstMicrobeNodes=NEstMicrobeNodes, NEstMicrobeTips=NEstMicrobeTips, NFactors=NFactors, NEffects=NEffects, present=present, samplenames=samplenames, tipnames=tipnames, factLevelMat=factLevelMat, microbeAncestors=microbeAncestors, modelMat=modelMat, hostAncestors=hostAncestors[[i]], hostAncestorsExpanded=hostAncestorsExpanded[[i]], edgetobin=edgetobin[[i]], NHostNodes=NHostNodes, NTimeBins=NTimeBins, aveStDPriorExpect=aveStDPriorExpect, timeBinSizes=relativeTimeBinSizes[[i]], microbeEdges=microbeEdges)
+    standat[[i]] <- list(NSamples=NSamples, NObs=NObs, NMicrobeNodes=NMicrobeNodes, NMicrobeTips=NMicrobeTips, NFactors=NFactors, NEffects=NEffects, present=present, sampleNames=sampleNames, microbeTipNames=microbeTipNames, factLevelMat=factLevelMat, microbeAncestors=microbeAncestors, modelMat=modelMat, hostAncestors=hostAncestors[[i]], hostAncestorsExpanded=hostAncestorsExpanded[[i]], edgeToBin=edgeToBin[[i]], NHostNodes=NHostNodes, NTimeBins=NTimeBins, aveStDPriorExpect=aveStDPriorExpect, timeBinSizes=relativeTimeBinSizes[[i]], microbeEdges=microbeEdges)
 }
-dir.create(outdir, recursive=T)
 
-save.image(paste0(outdir,'setup.RData'))
-save(microbeAncestors,file=paste0(outdir,'microbeAncestors.RData'))
-save(meanBoundaries,file=paste0(outdir,'meanBoundaries.RData'))
-save(hostAncestors,file=paste0(outdir,'hostAncestors.RData'))
-save(hostAncestorsExpanded,file=paste0(outdir,'hostAncestorsExpanded.RData'))
-save(hostTreesSampled,file=paste0(outdir,'hostTreesSampled.RData'))
-save(timeBinSizes,file=paste0(outdir,'timeBinSizes.RData'))
-
-
-## logistic regression
+thin = max(1, floor(NIterations/minMCSamples))
+NMCSamples <- NIterations / thin
+warmup <- NMCSamples / 2
 ##
-fit <- mclapply(1:NTrees, function(i) stan(file=modelPath, data=standat[[i]], control=list(adapt_delta=adapt_delta, max_treedepth=max_treedepth), iter=NIterations, thin=max(c(floor(NIterations/2000),1)), chains=NChains ))
 
-save(fit, file=paste0(outdir,'fit.RData'))
+## save the inputs
+dir.create(outdir, recursive=T)
+save.image(file.path(outdir,'setup.RData'))
+save(microbeAncestors,file=file.path(outdir,'microbeAncestors.RData'))
+save(meanBoundaries,file=file.path(outdir,'meanBoundaries.RData'))
+save(hostAncestors,file=file.path(outdir,'hostAncestors.RData'))
+save(hostAncestorsExpanded,file=file.path(outdir,'hostAncestorsExpanded.RData'))
+save(hostTreesSampled,file=file.path(outdir,'hostTreesSampled.RData'))
+save(timeBinSizes,file=file.path(outdir,'timeBinSizes.RData'))
+##
 
+## run the model!
+fit <- mclapply(1:NTrees, function(i) stan(file=modelPath, data=standat[[i]], control=list(adapt_delta=adapt_delta, max_treedepth=max_treedepth), iter=NIterations, thin=thin, chains=NChains ))
+
+save(fit, file=file.path(outdir,'fit.RData'))
+##
+
+## summarize the results separately for each sampled host tree
 for(i in 1:NTrees) {
     
-    currplotdir <- paste0(outdir,'tree_',i,'/plots/')
-    currtabledir <- paste0(outdir,'tree_',i,'/tables/nodes/')
-    currdatadir <- paste0(outdir,'tree_',i,'/data/')
-
+    currplotdir <- file.path(outdir,paste0('tree_',i),'plots')
+    currtabledir <- file.path(outdir,paste0('tree_',i),'tables','nodes')
+    currdatadir <- file.path(outdir,paste0('tree_',i),'data')
 
     dir.create(currplotdir, recursive=T)
     dir.create(currtabledir, recursive=T)
     dir.create(currdatadir, recursive=T)
 
-
-    pdf(file=paste0(currplotdir,'sampledTree.pdf'), width=25, height=15)
+    ## plot the sampled tree with the time bins marked
+    pdf(file=file.path(currplotdir,'sampledTree.pdf'), width=25, height=15)
     plot(hostTreesSampled[[i]],cex=0.75)
-    for(age in max(nodeHeights(hostTreesSampled[[i]]))-meanBoundaries) {
-        lines(x=c(age,age),y=c(1,length(hostTreesSampled[[i]]$tip.label)),lwd=1)
+    for(age in max(nodeHeights(hostTreesSampled[[i]])) - meanBoundaries) {
+        lines(x = c(age, age), y = c(1, length(hostTreesSampled[[i]]$tip.label)), lwd=1)
     }
     graphics.off()
+    ##
 
-
+    ## variance partitioning
     vars1 <- extract(fit[[i]], pars='stDProps')[[1]]
     colnames(vars1) <- c(paste0('ADiv.',colnames(factLevelMat)), paste0('Specificity.',colnames(factLevelMat)), 'ADiv.host', 'host.specificity', 'microbe.prevalence')
 
-    pdf(file=paste0(currplotdir,'scalesboxes.pdf'), width=25, height=15)
+    pdf(file=file.path(currplotdir,'scalesboxes.pdf'), width=25, height=15)
     boxplot(vars1, cex.axis=0.5, las=2)
     graphics.off()
 
-    save(vars1,file=paste0(currdatadir,'stDProps.RData'))
+    save(vars1,file=file.path(currdatadir,'stDProps.RData'))
+    ##
     
-    
+    ## alpha diversity
     scaledAlphaDivEffects <- extract(fit[[i]], pars='scaledAlphaDivEffects')[[1]]
-    
-    save(scaledAlphaDivEffects,file=paste0(currdatadir,'scaledAlphaDivEffects.RData'))
+    save(scaledAlphaDivEffects,file=file.path(currdatadir,'scaledAlphaDivEffects.RData'))
+    ##
 
-
+    ## proportion of variance explained by each time bin
     timeBinProps <- extract(fit[[i]], pars='timeBinProps')[[1]]
-
-    pdf(file=paste0(currplotdir,'timeBinProps_boxes.pdf'), width=25, height=15)
+    pdf(file=file.path(currplotdir,'timeBinProps_boxes.pdf'), width=25, height=15)
     boxplot(timeBinProps, cex.axis=0.5, las=2)
     graphics.off()
-
-    save(timeBinProps,file=paste0(currdatadir,'timeBinProps.RData'))
+    save(timeBinProps,file=file.path(currdatadir,'timeBinProps.RData'))
+    ##
     
-    
+    ## compare rates of host evolution in each time bin
 	meanBoundariesRounded <- round(meanBoundaries,1)
     relativeEvolRates <- extract(fit[[i]], pars='relativeEvolRates')[[1]]
     colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - ',meanBoundariesRounded[4],' mya'), paste0(meanBoundariesRounded[4],' - present'))
 
-    pdf(file=paste0(currplotdir,'evolRatesRelToWeightedMean.pdf'), width=25, height=15)
+    pdf(file=file.path(currplotdir,'evolRatesRelToWeightedMean.pdf'), width=25, height=15)
     boxplot(relativeEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to Weighted Mean')
     graphics.off()
 
-	save(relativeEvolRates,file=paste0(currdatadir,'relativeEvolRates.RData'))
+	save(relativeEvolRates,file=file.path(currdatadir,'relativeEvolRates.RData'))
     
     relativeEvolRate4p5 <- (relativeEvolRates[,4] * timeBinSizes[[1]][[4]] + relativeEvolRates[,5] * timeBinSizes[[1]][[5]]) / (timeBinSizes[[1]][[4]] + timeBinSizes[[1]][[5]])
     relativeEvolRatesMerged45 <- cbind(relativeEvolRates[,-c(4,5)],relativeEvolRate4p5)
     colnames(relativeEvolRates)[[4]] <- paste0(meanBoundariesRounded[3],' - present')
     
-    pdf(file=paste0(currplotdir,'evolRatesRelToWeightedMeanMerged45.pdf'), width=25, height=15)
+    pdf(file=file.path(currplotdir,'evolRatesRelToWeightedMeanMerged45.pdf'), width=25, height=15)
     boxplot(relativeEvolRatesMerged45, xlab='Time Period', ylab='Rate of Evolution Relative to Weighted Mean')
     graphics.off()
     
-    pdf(file=paste0(currplotdir,'logEvolRatesRelToWeightedMeanMerged45.pdf'), width=25, height=15)
+    pdf(file=file.path(currplotdir,'logEvolRatesRelToWeightedMeanMerged45.pdf'), width=25, height=15)
     boxplot(log(relativeEvolRatesMerged45), xlab='Time Period', ylab='Log Rate of Evolution Relative to Weighted Mean')
     graphics.off()
-
+    ##
+    
+    ## see if any pairs of clades have higher variance among their descendants (maybe suggesting codiversification)
     sums <- summary(fit[[i]], pars='phyloLogVarMultRaw', probs=c(0.05,0.95), use_cache = F)
 
-    sums3d <- array(NA, dim=c(NHostNodes - NHostTips, NEstMicrobeNodes - NEstMicrobeTips, ncol(sums$summary)))
+    sums3d <- array(NA, dim=c(NHostNodes - NHostTips, NMicrobeNodes - NMicrobeTips, ncol(sums$summary)))
     for(effect in 1:(NHostNodes - NHostTips)) {
-        sums3d[effect,,] <- sums$summary[(effect-1) * (NEstMicrobeNodes - NEstMicrobeTips) + (1:(NEstMicrobeNodes - NEstMicrobeTips)),]
+        sums3d[effect,,] <- sums$summary[(effect-1) * (NMicrobeNodes - NMicrobeTips) + (1:(NMicrobeNodes - NMicrobeTips)),]
     }
-    dimnames(sums3d) <- list(colnames(hostAncestors[[i]])[(NHostTips + 1):NHostNodes], rownames(microbeAncestors)[(NEstMicrobeTips + 1):NEstMicrobeNodes], colnames(sums$summary))
+    dimnames(sums3d) <- list(colnames(hostAncestors[[i]])[(NHostTips + 1):NHostNodes], rownames(microbeAncestors)[(NMicrobeTips + 1):NMicrobeNodes], colnames(sums$summary))
     factorfilenames <- colnames(hostAncestors[[i]])[(NHostTips + 1):NHostNodes]
 
     for(effect in 1:(NHostNodes - NHostTips)) {
-        cat('\t', file=paste0(currtabledir, factorfilenames[[effect]],'.txt'))
-        write.table(sums3d[effect,,], file=paste0(currtabledir, factorfilenames[[effect]],'.txt'), sep='\t', quote=F,append=T)
+        cat('\t', file=file.path(currtabledir, factorfilenames[[effect]],'.txt'))
+        write.table(sums3d[effect,,], file=file.path(currtabledir, paste0(factorfilenames[[effect]],'.txt')), sep='\t', quote=F,append=T)
     }
-
+    ##
 }
+##
 
-currplotdir <- paste0(outdir,'alltrees/plots/')
-currtabledir <- paste0(outdir,'alltrees/tables/nodes/')
-currdatadir <- paste0(outdir,'alltrees/data/')
+## summarize results for parameters that can be interpretted across all sampled host trees
+currplotdir <- file.path(outdir,'alltrees','plots')
+currtabledir <- file.path(outdir,'alltrees','tables','nodes')
+currdatadir <- file.path(outdir,'alltrees','data')
 
 dir.create(currplotdir, recursive=T)
 dir.create(currtabledir, recursive=T)
 dir.create(currdatadir, recursive=T)
 
-
-
-
 allfit <- sflist2stanfit(fit)
-
-
 
 vars1 <- extract(allfit, pars='stDProps')[[1]]
 colnames(vars1) <- c(paste0('ADiv.',colnames(factLevelMat)), paste0('Specificity.',colnames(factLevelMat)), 'ADiv.host', 'host.specificity')
 
-pdf(file=paste0(currplotdir,'scalesboxes.pdf'), width=25, height=15)
+pdf(file=file.path(currplotdir,'scalesboxes.pdf'), width=25, height=15)
 boxplot(vars1, cex.axis=0.5, las=2)
 graphics.off()
 
-save(vars1,file=paste0(currdatadir,'stDProps.RData'))
+save(vars1,file=file.path(currdatadir,'stDProps.RData'))
 
 
 
 timeBinProps <- extract(allfit, pars='timeBinProps')[[1]]
 
-pdf(file=paste0(currplotdir,'timeBinPropsboxes.pdf'), width=25, height=15)
+pdf(file=file.path(currplotdir,'timeBinPropsboxes.pdf'), width=25, height=15)
 boxplot(timeBinProps, cex.axis=0.5, las=2)
 graphics.off()
 
-save(timeBinProps,file=paste0(currdatadir,'timeBinProps.RData'))
-
+save(timeBinProps,file=file.path(currdatadir,'timeBinProps.RData'))
 
 
 relativeEvolRates <- extract(allfit, pars='relativeEvolRates')[[1]]
 colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - ',meanBoundariesRounded[4],' mya'), paste0(meanBoundariesRounded[4],' - present'))
 
-pdf(file=paste0(currplotdir,'evolRatesRelToWeightedMean.pdf'), width=25, height=15)
+pdf(file=file.path(currplotdir,'evolRatesRelToWeightedMean.pdf'), width=25, height=15)
 boxplot(relativeEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to Weighted Mean')
 graphics.off()
 
-save(relativeEvolRates,file=paste0(currdatadir,'relativeEvolRates.RData'))
+save(relativeEvolRates,file=file.path(currdatadir,'relativeEvolRates.RData'))
 
 relativeEvolRate4p5 <- (relativeEvolRates[,4] * timeBinSizes[[1]][[4]] + relativeEvolRates[,5] * timeBinSizes[[1]][[5]]) / (timeBinSizes[[1]][[4]] + timeBinSizes[[1]][[5]])
 relativeEvolRatesMerged45 <- cbind(relativeEvolRates[,-c(4,5)],relativeEvolRate4p5)
 colnames(relativeEvolRates)[[4]] <- paste0(meanBoundariesRounded[3],' - present')
 
-pdf(file=paste0(currplotdir,'evolRatesADivRelToWeightedMeanMerged45.pdf'), width=25, height=15)
+pdf(file=file.path(currplotdir,'evolRatesADivRelToWeightedMeanMerged45.pdf'), width=25, height=15)
 boxplot(relativeEvolRatesMerged45, xlab='Time Period', ylab='Rate of Evolution Relative to Weighted Mean')
 graphics.off()
 
-pdf(file=paste0(currplotdir,'logEvolRatesADivRelToWeightedMeanMerged45.pdf'), width=25, height=15)
+pdf(file=file.path(currplotdir,'logEvolRatesADivRelToWeightedMeanMerged45.pdf'), width=25, height=15)
 boxplot(log(relativeEvolRatesMerged45), xlab='Time Period', ylab='Log Rate of Evolution Relative to Weighted Mean')
 graphics.off()
-
+## fin
