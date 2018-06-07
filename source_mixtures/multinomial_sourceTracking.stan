@@ -1,43 +1,42 @@
 data {
     int NEstSamples;
-    int NEstTaxNodes;
-    int NEstTips;
-    int NEnvs;
-    int NFactors;
-    int envs[NEstSamples];
-    int NSepFacts;
-    matrix[NEnvs, NSepFacts] envFact;
-    matrix[NEstSamples, NFactors] modelMat;
-    int y[NEstTips, NEstSamples];
-    real taxAveStDPriorExpect;
-    real envPropAveStDPriorExpect;
-    matrix[NEstTaxNodes, NEstTips] ancestors;
-    vector[NEstTaxNodes] taxNodeScales;
+	int NEstTaxNodes;
+	int NEstTips;
+	int NEnvs;
+	int NFactors;
+	int envs[NEstSamples];
+	int NSepFacts;
+	matrix[NEnvs, NSepFacts] envFact;
+	matrix[NEstSamples, NFactors] modelMat;
+	int y[NEstTips, NEstSamples];
+	real taxAveStDPriorExpect;
+	real envPropAveStDPriorExpect;
+	matrix[NEstTaxNodes, NEstTips] ancestors;
+	vector[NEstTaxNodes] taxNodeScales;
 }
 transformed data {
-    real<lower=2.0> taxEffectsDF = 5.0;
-    real<lower=2.0> envPropsDF = 5.0;
-    int NEnvSamps = NEnvs * NEstSamples;
-    int NTotalFactors = NSepFacts * NFactors;
-    matrix[NEnvs + 1, NEnvs + 1] envTaxMat;
-    matrix[NEnvs + 1, NSepFacts] envFactWithUnk;
-    envTaxMat[1:NEnvs, 2:(NEnvs + 1)] = diag_matrix(rep_vector(1, NEnvs));
-    envTaxMat[NEnvs + 1, 2:(NEnvs + 1)] = rep_row_vector(-1, NEnvs);
-    envTaxMat[,1] = rep_vector(1, NEnvs + 1);
-    envFactWithUnk = append_row(envFact, rep_row_vector(0, NSepFacts));
+	real<lower=2.0> taxEffectsDF = 5.0;
+	real<lower=2.0> envPropsDF = 5.0;
+	int NEnvSamps = NEnvs * NEstSamples;
+	matrix[NEnvs + 1, NEnvs + 1] envTaxMat;
+	matrix[NEnvs + 1, NSepFacts] envFactWithUnk;
+	envTaxMat[1:NEnvs, 2:(NEnvs + 1)] = diag_matrix(rep_vector(1, NEnvs));
+	envTaxMat[NEnvs + 1, 2:(NEnvs + 1)] = rep_row_vector(-1, NEnvs);
+	envTaxMat[,1] = rep_vector(1, NEnvs + 1);
+	envFactWithUnk = append_row(envFact, rep_row_vector(0, NSepFacts));
 }
 parameters {
-    real<lower=0> taxAveStD;
-    real<lower=0> envPropAveStD;
-    simplex[NEnvs] envPropResidualProps;
-    vector[NEnvs] basePropsRaw;
-    matrix<upper=0>[NEnvs, NEnvs] envPropMeansRaw;
-    matrix[NEnvs, NEstSamples] envPropResiduals;
-    row_vector[NEstTaxNodes] taxIntercepts;
-    simplex[NTotalFactors + 2] taxVarianceProps;
-    simplex[NEstTips] taxResidualVarianceProps;
-    vector[(NEnvs + NTotalFactors + NEstSamples) * NEstTaxNodes] taxEffects;
-    vector[NEstSamples] multinomialNuisance;
+	real<lower=0> taxAveStD;
+	real<lower=0> envPropAveStD;
+	simplex[NEnvs] envPropResidualProps;
+	vector[NEnvs] basePropsRaw;
+	matrix[NEnvs, NEnvs] envPropMeansRaw;
+	matrix[NEnvs, NEstSamples] envPropResiduals;
+	row_vector[NEstTaxNodes] taxIntercepts;
+	simplex[NSepFacts * NFactors + 2] taxVarianceProps;
+	simplex[NEstTips] taxResidualVarianceProps;
+	vector[(NEnvs + NSepFacts * NFactors + NEstSamples) * NEstTaxNodes] taxEffects;
+	vector[NEstSamples] multinomialNuisance;
 }
 transformed parameters {
     vector<lower=0>[NEnvs] envPropResidualScales;
@@ -80,17 +79,15 @@ transformed parameters {
                * NEstTips
                * taxResidualVarianceProps)
           * taxAveStD;
-    baseProps
-        = append_row(basePropsRaw, 0);
+    baseProps = append_row(basePropsRaw, 0);
     for (i in 1:NEnvs) {
-        envPropMeans[1:(i - 1), i]
-            = baseProps[1:(i - 1)] + envPropMeansRaw[1:(i - 1), i];
-        envPropMeans[i, i]
-            = baseProps[i];
-        envPropMeans[(i + 1):(NEnvs + 1), i]
-            = baseProps[(i + 1):(NEnvs + 1)] + envPropMeansRaw[i:NEnvs, i];
+        envPropMeans[1:(i-1), i]         = baseProps[1:(i-1)]
+                                           - NEnvs * exp(envPropMeansRaw[1:(i-1), i]);
+        envPropMeans[i, i]               = baseProps[i];
+        envPropMeans[(i+1):(NEnvs+1), i] = baseProps[(i+1):(NEnvs+1)]
+                                           - NEnvs * exp(envPropMeansRaw[i:NEnvs, i]);
     }
-    for (k in 1:NEstSamples) {
+        for (k in 1:NEstSamples) {
         vector[NEnvs + 1] samp_prop_normal;
         samp_prop_normal[1:(envs[k] - 1)]
             = envPropResidualScales[envs[k]] * envPropResiduals[1:(envs[k] - 1), k]
@@ -142,7 +139,7 @@ model {
     taxAveStD ~ exponential(1.0 / taxAveStDPriorExpect);
     envPropAveStD ~ exponential(1.0 / envPropAveStDPriorExpect);
     basePropsRaw ~ student_t(envPropsDF, 0, 10);
-    to_vector(envPropMeansRaw) ~ student_t(envPropsDF, 0, NEnvs * 10);
+    to_vector(envPropMeansRaw) ~ student_t(envPropsDF, 0, 10);
     to_vector(envPropResiduals) ~ student_t(envPropsDF, 0, 1);
     taxIntercepts ~ cauchy(0, 2.5);
     taxEffects ~ student_t(taxEffectsDF, 0, 1);
@@ -176,10 +173,10 @@ model {
     to_array_1d(y) ~ poisson_log(to_array_1d(logProps));
 }
 generated quantities {
-    simplex[NEnvs + 1] env_props[NEnvs];
-    simplex[NEnvs + 1] samp_props[NEstSamples];
-    for (j in 1:NEnvs)
-        env_props[j] = softmax(envPropMeans[, j]);
-    for (k in 1:NEstSamples)
-        samp_props[k] = exp(log_samp_props[k]);
+	simplex[NEnvs + 1] env_props[NEnvs];
+	simplex[NEnvs + 1] samp_props[NEstSamples];
+	for (j in 1:NEnvs)
+		env_props[j] = softmax(envPropMeans[,j]);
+	for (k in 1:NEstSamples)
+		samp_props[k] = exp(log_samp_props[k]);
 }

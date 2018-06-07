@@ -9,21 +9,25 @@ library(reshape2)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
-outdir <- 'multinomial_sourceTracking_out/'
+outdir <- file.path('output',gsub(':','-',gsub(' ', '_', Sys.time())))
 
-pathd8path <- './PATHd8'
+modelPath <- 'scripts/multinomial_sourceTracking.stan' #stan model
+pathd8path <- 'scripts/PATHd8'
 
-modelfile <- paste0(outdir,'/multinomial_sourceTracking.stan')
-fulltable <- t(read.table(paste0(outdir,'/otu_table_n500.txt'), header=T, sep='\t', comment.char='', skip=1, row.names=1)) # OTU-table
-bacttree <- read.tree(paste0(outdir,'/gg_constrained_fastttree.tre'))
-tax_assignments <- paste0(outdir,'/rep_set_tax_assignments.txt')
-map <- read.table(paste0(outdir,'/map_full_20171115.txt'),header=T,sep='\t',comment.char='',check.names=F)
-rownames(map) <- map[,'#SampleID']
+microbeTreePath <- 'raw_data/gg_constrained_fastttree.tre' # greengenes-constrained phylogeny of 97% OTUs
+fulltablePath <- 'raw_data/otu_table_n500.txt' # open reference 97% OTUs, filtered to samples that had a minimum 500 reads
+taxAssignmentsPath <- 'raw_data/rep_set_tax_assignments.txt' # greengenes taxonomy assignments
+mapfilePath <- 'raw_data/map_full_20171115.txt' #mapping file
 
 
 mincountnode <- 5
 minsampsnode <- 1
 mincountsamp <- 100
+
+
+map <- read.table(mapfilePath, header=T, sep='\t', comment.char='', check.names=F)
+rownames(map) <- map[,'#SampleID']
+
 
 ## filter the data
 newmap <- droplevels(map[map$date==20120816,])
@@ -53,7 +57,11 @@ newmap$nutrientsXplastic <- as.factor(newmap$nutrientsXplastic)
 
 modelform <- ~ nutrients + dictyota_contact + sargassum_contact + halimeda_contact + plastic_contact + nutrientsXdictyota + nutrientsXsargassum + nutrientsXhalimeda + nutrientsXplastic
 
+fulltable <- t(read.table(fulltablePath, header=T, sep='\t', comment.char='', skip=1, row.names=1))
+
 idx <- rownames(fulltable)[rownames(fulltable) %in% rownames(newmap)]
+
+bacttree <- read.tree(microbeTreePath)
 
 y.old <- fulltable[idx,colnames(fulltable) %in% bacttree$tip.label]
 newermap <- newmap[idx,]
@@ -79,7 +87,7 @@ cat('Taxa remaining after second filter: ', ncol(y.filt), '\n')
 
 bacttreeY <- drop.tip(bacttree,bacttree$tip.label[!bacttree$tip.label %in% colnames(y.filt)])
 
-taxdat <- read.table(tax_assignments,sep='\t',stringsAsFactors=F, row.names=1)
+taxdat <- read.table(taxAssignmentsPath,sep='\t',stringsAsFactors=F, row.names=1)
 x <- strsplit(taxdat[,1],'; ')
 most <- max(sapply(x,length))
 parsedtax <- lapply(x,function(x) {length(x) <- most; return(x)})
@@ -181,13 +189,13 @@ isBaseSample <- as.numeric(sapply(1:length(envs), function(x) sum(envs[x]==envs[
 
 nchains=4
 
-fit <- vb(stan_model(file=modelfile), data=list(y=t(y), NEstSamples=NEstSamples, NEstTaxNodes=NEstTaxNodes, NEstTips=NEstTips, NEnvs=NEnvs, envs=as.numeric(envs), envTaxMat=envTaxMat, NFactors=NFactors, modelMat=modelMat, envFact=envFact, NSepFacts=NSepFacts, ancestors=ancestors, taxAveStDPriorExpect=1.0, envPropAveStDPriorExpect=10.0, taxNodeScales=taxNodeScales ), iter=10000, pars=c('env_props','samp_props') ) #adapt_engaged=F, eta=0.1
+fit <- vb(stan_model(file=modelPath), data=list(y=t(y), NEstSamples=NEstSamples, NEstTaxNodes=NEstTaxNodes, NEstTips=NEstTips, NEnvs=NEnvs, envs=as.numeric(envs), envTaxMat=envTaxMat, NFactors=NFactors, modelMat=modelMat, envFact=envFact, NSepFacts=NSepFacts, ancestors=ancestors, taxAveStDPriorExpect=1.0, envPropAveStDPriorExpect=10.0, taxNodeScales=taxNodeScales ), iter=10000, pars=c('env_props','samp_props') ) #adapt_engaged=F, eta=0.1
 
-save.image(file=paste0(outdir,'stMultinomial5_vb_out.RData'))
+save.image(file='/raid1/home/micro/mcmindsr/ryan/20180216_stan_CA/stMultinomial7vb_out.RData')
 
 ext <- extract(fit, pars=c('env_props[1,1]','env_props[2,2]','env_props[3,3]','env_props[4,4]','env_props[5,5]','env_props[6,6]','env_props[7,7]','env_props[1,8]','env_props[4,8]','samp_props[7,4]','samp_props[4,7]'))
 
-pdf(file=paste0(outdir,'stMultinomial5_vb_boxes.pdf'))
+pdf(file='/raid1/home/micro/mcmindsr/ryan/20180216_stan_CA/stMultinomial7vb_boxes.pdf')
 boxplot(ext)
 graphics.off()
 
