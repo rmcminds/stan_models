@@ -18,13 +18,13 @@ transformed data {
     real<lower=2.0> taxEffectsDF = 5.0;
     real<lower=2.0> envPropsDF = 5.0;
     int NEnvSamps = NEnvs * NEstSamples;
+    int NTotalFactors = NSepFacts * NFactors;
     matrix[NEnvs + 1, NEnvs + 1] envTaxMat;
     matrix[NEnvs + 1, NSepFacts] envFactWithUnk;
     envTaxMat[1:NEnvs, 2:(NEnvs + 1)] = diag_matrix(rep_vector(1, NEnvs));
     envTaxMat[NEnvs + 1, 2:(NEnvs + 1)] = rep_row_vector(-1, NEnvs);
     envTaxMat[,1] = rep_vector(1, NEnvs + 1);
     envFactWithUnk = append_row(envFact, rep_row_vector(0, NSepFacts));
-    int NTotalFactors = NSepFacts * NFactors;
 }
 parameters {
     real<lower=0> taxAveStD;
