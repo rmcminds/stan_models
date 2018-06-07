@@ -51,7 +51,6 @@ transformed parameters {
     matrix[NFactors, NEstTaxNodes] taxNode_normFacts[NSepFacts];
     matrix[NFactors, NEstTips] tax_normFacts[NSepFacts];
     vector[NEnvs + 1] baseProps;
-
     envPropResidualScales
         = sqrt((envPropsDF - 2)
                / envPropsDF
@@ -82,28 +81,24 @@ transformed parameters {
           * taxAveStD;
     baseProps = append_row(basePropsRaw, 0);
     for (i in 1:NEnvs) {
-        envPropMeans[1:(i-1), i]         = baseProps[1:(i-1)]
-                                           - NEnvs * exp(envPropMeansRaw[1:(i-1), i]);
-        envPropMeans[i, i]               = baseProps[i];
-        envPropMeans[(i+1):(NEnvs+1), i] = baseProps[(i+1):(NEnvs+1)]
-                                           - NEnvs * exp(envPropMeansRaw[i:NEnvs, i]);
+        int idxs           = (1:(i - 1),
+                             (i + 1):(NEnvs + 1));
+        envPropMeans[i, i] = baseProps[i];
+        envPropMeans[idxs] = baseProps[idxs]
+                             - NEnvs * exp(envPropMeansRaw[, i]);
     }
     for (k in 1:NEstSamples) {
         vector[NEnvs + 1] samp_prop_normal;
-        samp_prop_normal[1:(envs[k] - 1)]
-            = envPropResidualScales[envs[k]] * envPropResiduals[1:(envs[k] - 1), k]
-              + envPropMeans[1:(envs[k] - 1), envs[k]];
-        samp_prop_normal[envs[k]]
-            = envPropMeans[envs[k], envs[k]];
-        samp_prop_normal[(envs[k] + 1):(NEnvs + 1)]
-            = envPropResidualScales[envs[k]] * envPropResiduals[envs[k]:NEnvs, k]
-              + envPropMeans[(envs[k] + 1):(NEnvs + 1), envs[k]];
-        log_samp_props[k]
-            = log_softmax(samp_prop_normal);
+        int idxs                  = (1:(envs[k] - 1),
+                                    (envs[k] + 1):(NEnvs + 1));
+        samp_prop_normal[envs[k]] = envPropMeans[envs[k], envs[k]];
+        samp_prop_normal[idxs]    = envPropMeans[idxs, envs[k]]
+                                    + envPropResidualScales[envs[k]] * envPropResiduals[, k];
+        log_samp_props[k]         = log_softmax(samp_prop_normal);
     }
     {
         taxEffectMat
-            = to_matrix(taxEffects[1:(NEnvs * NEstTaxNodes)]),
+            = to_matrix(taxEffects[1:(NEnvs * NEstTaxNodes)],
                         NEnvs, NEstTaxNodes);
         taxNode_normEnvEffects
             = diag_post_multiply(
@@ -111,12 +106,10 @@ transformed parameters {
                            taxEnvScale * taxEffectMat),
                 taxNodeScales);
     }
-    tax_normEnvEffects
-        = taxNode_normEnvEffects * ancestors;
+    tax_normEnvEffects = taxNode_normEnvEffects * ancestors;
     for (h in 1:NSepFacts) {
         int startIndex = NEstTaxNodes * (NEnvs + NFactors * (h - 1)) + 1;
         matrix[NFactors, NEstTaxNodes] taxEffectMat;
-
         taxEffectMat
             = to_matrix(segment(taxEffects,
                                 startIndex,
@@ -128,15 +121,13 @@ transformed parameters {
                     taxFactScales[,h],
                     taxEffectMat),
                 taxNodeScales);
-        tax_normFacts[h]
-            = taxNode_normFacts[h] * ancestors;
+        tax_normFacts[h] = taxNode_normFacts[h] * ancestors;
     }
 }
 model {
     matrix[NEstSamples, NEstTips] sampleTaxEffects[NSepFacts];
     matrix[NEstTips, NEstSamples] logProps;
     matrix[NEnvs + 1, NEstTips] tax_normEnvs;
-
     taxAveStD ~ exponential(1.0 / taxAveStDPriorExpect);
     envPropAveStD ~ exponential(1.0 / envPropAveStDPriorExpect);
     basePropsRaw ~ student_t(envPropsDF, 0, 10);
@@ -144,20 +135,17 @@ model {
     to_vector(envPropResiduals) ~ student_t(envPropsDF, 0, 1);
     taxIntercepts ~ cauchy(0, 2.5);
     taxEffects ~ student_t(taxEffectsDF, 0, 1);
-
-    tax_normEnvs
-        = envTaxMat * tax_normEnvEffects;
+    tax_normEnvs = envTaxMat * tax_normEnvEffects;
     for (h in 1:NSepFacts)
         sampleTaxEffects[h] = modelMat * tax_normFacts[h];
     for (k in 1:NEstSamples) {
         matrix[NSepFacts, NEstTips] sampleTaxEffectsTransposed;
         matrix[NEstTips, NEnvs + 1] allEnvSampleTaxEffects;
         matrix[NEstTips, NEnvs + 1] allEnvSampleTaxLogProps;
-
         for (h in 1:NSepFacts)
             sampleTaxEffectsTransposed[h,] = sampleTaxEffects[h,k,];
-        allEnvSampleTaxEffects
-                = (tax_normEnvs + envFactWithUnk * sampleTaxEffectsTransposed)';
+        allEnvSampleTaxEffects = (tax_normEnvs
+                                  + envFactWithUnk * sampleTaxEffectsTransposed)';
         for (i in 1:(NEnvs + 1)) {
             int startIndex = NEstTaxNodes * (NEnvs + NTotalFactors)
                              + (k - 1) * NEstTips
