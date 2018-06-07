@@ -1,5 +1,5 @@
 raw_data/
 output/
 *.rds
-private_readme.txt
+private_*
 sge_logs*
