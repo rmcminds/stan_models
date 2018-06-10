@@ -87,7 +87,7 @@ cat('Taxa remaining after second filter: ', ncol(y.filt), '\n')
 
 bacttreeY <- drop.tip(bacttree,bacttree$tip.label[!bacttree$tip.label %in% colnames(y.filt)])
 
-taxdat <- read.table(taxAssignmentsPath,sep='\t',stringsAsFactors=F, row.names=1)
+taxdat <- read.table(taxAssignmentsPath, sep='\t', stringsAsFactors=F, row.names=1)
 x <- strsplit(taxdat[,1],'; ')
 most <- max(sapply(x,length))
 parsedtax <- lapply(x,function(x) {length(x) <- most; return(x)})
@@ -107,6 +107,8 @@ if(is.rooted(bacttreeY)) {
 }
 ##
 
+dir.create(outdir, recursive=T)
+
 if(is.null(bacttreeY.root$edge.length)) {
     bacttreeY.root.chronos <- bacttreeY.root
     bacttreeY.root.chronos$edge.length <- rep(1,length(bacttreeY.root.chronos$edge))
@@ -115,43 +117,41 @@ if(is.null(bacttreeY.root$edge.length)) {
 } else {
     bacttreeY.root.chronos <- bacttreeY.root
     bacttreeY.root.chronos$node.label <- NULL
-    write.tree(bacttreeY.root.chronos, file=paste0(outdir,'bacttreeY.root.tree'), digits = 20)
-    system(paste(pathd8path, paste0(outdir,'bacttreeY.root.tree'), paste0(outdir,'bacttreeY.root.pathd8.tree'), sep = " ")) ##taken from geiger's utility function PATHd8.phylo
-    system(paste("grep \"d8 tree\" ", paste0(outdir,'bacttreeY.root.pathd8.tree'), ">", paste0(outdir,'bacttreeY.root.pathd8.parsed.tree'),
+    write.tree(bacttreeY.root.chronos, file=file.path(outdir,'bacttreeY.root.tree'), digits = 20)
+    system(paste(pathd8path, file.path(outdir,'bacttreeY.root.tree'), file.path(outdir,'bacttreeY.root.pathd8.tree'), sep = " ")) ##taken from geiger's utility function PATHd8.phylo
+    system(paste("grep \"d8 tree\" ", file.path(outdir,'bacttreeY.root.pathd8.tree'), ">", file.path(outdir,'bacttreeY.root.pathd8.parsed.tree'),
     sep = " "))
-    bacttreeY.root.chronos = read.tree(paste0(outdir,'bacttreeY.root.pathd8.parsed.tree'))
+    bacttreeY.root.chronos = read.tree(file.path(outdir,'bacttreeY.root.pathd8.parsed.tree'))
 }
 
 
 
 ## summarize the putative taxa to be estimated
-taxa <- factor(colnames(y.filt),levels=bacttreeY.root.chronos$tip.label)
-taxnames <- levels(taxa)
-NTaxa <- length(taxnames)
+taxnames <- levels(factor(colnames(y.filt),levels=bacttreeY.root.chronos$tip.label))
+NMicrobeTips <- length(taxnames)
 NIntTaxNodes <- bacttreeY.root.chronos$Nnode
-NEstTaxNodes <- NTaxa + NIntTaxNodes
+NMicrobeNodes <- NMicrobeTips + NIntTaxNodes
 
 
-taxNodeScalesRaw <- sqrt(bacttreeY.root.chronos$edge.length)
-names(taxNodeScalesRaw) <- bacttreeY.root.chronos$edge[,2]
-taxNodeScalesRaw[as.character(length(bacttreeY.root.chronos$tip.label) + 1)] <- 1
+microbeNodeScalesRaw <- sqrt(bacttreeY.root.chronos$edge.length)
+names(microbeNodeScalesRaw) <- bacttreeY.root.chronos$edge[,2]
+microbeNodeScalesRaw[as.character(length(bacttreeY.root.chronos$tip.label) + 1)] <- 1
 
-taxNodeScales <- taxNodeScalesRaw[as.character(1:NEstTaxNodes)]
+microbeNodeScales <- microbeNodeScalesRaw[as.character(1:NMicrobeNodes)]
 
 
 ## sort the OTU table so its entries match the tree's tip labels
 y <- y.filt[,taxnames]
 ##
-NEstTips <- ncol(y)
 
-ancestors <- matrix(0, NEstTaxNodes, NEstTips)
-for(tip in 1:NEstTips) {
-    ancestors[, tip] <- as.numeric(1:NEstTaxNodes %in% c(Ancestors(bacttreeY.root.chronos, tip), tip))
+microbeAncestors <- matrix(0, NMicrobeNodes, NMicrobeTips)
+for(tip in 1:NMicrobeTips) {
+    microbeAncestors[, tip] <- as.numeric(1:NMicrobeNodes %in% c(Ancestors(bacttreeY.root.chronos, tip), tip))
 }
 
-colnames(ancestors) <- paste0('t',colnames(y))
-rownames(ancestors) <- paste0('i',1:NEstTaxNodes)
-rownames(ancestors)[1:NEstTips] <- colnames(ancestors)
+colnames(microbeAncestors) <- paste0('t',colnames(y))
+rownames(microbeAncestors) <- paste0('i',1:NMicrobeNodes)
+rownames(microbeAncestors)[1:NMicrobeTips] <- colnames(microbeAncestors)
 
 
 ## remove some potentially large objects to free up some memory
@@ -170,10 +170,10 @@ NSepFacts <- 2
 modelMat <- model.matrix(modelform, data=newestmap)[,-1]
 
 
-NEstSamples <- nrow(y)
+NSamples <- nrow(y)
 NFactors <- ncol(modelMat)
 
-envMat <- matrix(0,NEstSamples,NEnvs)
+envMat <- matrix(0,NSamples,NEnvs)
 for (env in 1:NEnvs) {
     envMat[,env] <- as.numeric(newestmap$Env == envnames[[env]])
 }
@@ -189,13 +189,17 @@ isBaseSample <- as.numeric(sapply(1:length(envs), function(x) sum(envs[x]==envs[
 
 nchains=4
 
-fit <- vb(stan_model(file=modelPath), data=list(y=t(y), NEstSamples=NEstSamples, NEstTaxNodes=NEstTaxNodes, NEstTips=NEstTips, NEnvs=NEnvs, envs=as.numeric(envs), envTaxMat=envTaxMat, NFactors=NFactors, modelMat=modelMat, envFact=envFact, NSepFacts=NSepFacts, ancestors=ancestors, taxAveStDPriorExpect=1.0, envPropAveStDPriorExpect=10.0, taxNodeScales=taxNodeScales ), iter=10000, pars=c('env_props','samp_props') ) #adapt_engaged=F, eta=0.1
 
-save.image(file='/raid1/home/micro/mcmindsr/ryan/20180216_stan_CA/stMultinomial7vb_out.RData')
+save.image(file=file.path(outdir, 'stMultinomial_vb_setup.RData'))
+
+
+fit <- vb(stan_model(file=modelPath), data=list(y=t(y), NSamples=NSamples, NMicrobeNodes=NMicrobeNodes, NMicrobeTips=NMicrobeTips, NEnvs=NEnvs, envs=as.numeric(envs), envTaxMat=envTaxMat, NFactors=NFactors, modelMat=modelMat, envFact=envFact, NSepFacts=NSepFacts, microbeAncestors=microbeAncestors, taxAveStDPriorExpect=1.0, envPropAveStDPriorExpect=1.0, microbeNodeScales=microbeNodeScales ), iter=10000, pars=c('env_props','samp_props') ) #adapt_engaged=F, eta=0.1
+
+save(fit, file=file.path(outdir, 'stMultinomial_vb_fit.RData'))
 
 ext <- extract(fit, pars=c('env_props[1,1]','env_props[2,2]','env_props[3,3]','env_props[4,4]','env_props[5,5]','env_props[6,6]','env_props[7,7]','env_props[1,8]','env_props[4,8]','samp_props[7,4]','samp_props[4,7]'))
 
-pdf(file='/raid1/home/micro/mcmindsr/ryan/20180216_stan_CA/stMultinomial7vb_boxes.pdf')
+pdf(file=file.path(outdir, 'stMultinomial_vb_boxes.pdf'))
 boxplot(ext)
 graphics.off()
 
