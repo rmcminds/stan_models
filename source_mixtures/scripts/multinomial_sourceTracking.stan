@@ -44,7 +44,7 @@ transformed parameters {
     matrix<lower=0>[NFactors, NSepFacts] taxFactScales;
     real<lower=0> taxEnvScale;
     vector<lower=0>[NMicrobeTips] taxResidualScales;
-    matrix[NEnvs + 1, NEnvs] envPropMeans;
+    vector[NEnvs + 1] envPropMeans[NEnvs];
     vector[NEnvs + 1] log_samp_props[NSamples];
     matrix[NEnvs + 1, NMicrobeNodes] taxNode_normEnvEffects;
     matrix[NEnvs + 1, NMicrobeTips] tax_normEnvEffects;
@@ -81,22 +81,23 @@ transformed parameters {
           * taxAveStD;
     baseProps = append_row(basePropsRaw, 0);
     for (i in 1:NEnvs) {
-        envPropMeans[(1:(i - 1)]           = baseProps[(1:(i - 1)]
-                                             - NEnvs * exp(envPropMeansRaw[, i]);
-        envPropMeans[i, i]                 = baseProps[i];
-        envPropMeans[(i + 1):(NEnvs + 1))] = baseProps[(i + 1):(NEnvs + 1))]
-                                             - NEnvs * exp(envPropMeansRaw[, i]);
+        envPropMeans[i, 1:(i - 1)]           = baseProps[1:(i - 1)]
+                                               - NEnvs * exp(envPropMeansRaw[1:(i - 1), i]);
+        envPropMeans[i, i]                   = baseProps[i];
+        envPropMeans[i, (i + 1):(NEnvs + 1)] = baseProps[(i + 1):(NEnvs + 1)]
+                                               - NEnvs * exp(envPropMeansRaw[i:NEnvs, i]);
     }
     for (k in 1:NSamples) {
         vector[NEnvs + 1] samp_prop_normal;
-        samp_prop_normal[(1:(envs[k] - 1)]           = envPropMeans[(1:(envs[k] - 1), envs[k]]
-                                                       + envPropResidualScales[envs[k]] * envPropResiduals[, k];
-        samp_prop_normal[envs[k]]                    = envPropMeans[envs[k], envs[k]];
-        samp_prop_normal[(envs[k] + 1):(NEnvs + 1))] = envPropMeans[(envs[k] + 1):(NEnvs + 1)), envs[k]]
-                                                       + envPropResidualScales[envs[k]] * envPropResiduals[, k];
-        log_samp_props[k]                            = log_softmax(samp_prop_normal);
+        samp_prop_normal[1:(envs[k] - 1)]           = envPropMeans[envs[k], 1:(envs[k] - 1)]
+                                                       + envPropResidualScales[envs[k]] * envPropResiduals[1:(envs[k] - 1), k];
+        samp_prop_normal[envs[k]]                   = envPropMeans[envs[k], envs[k]];
+        samp_prop_normal[(envs[k] + 1):(NEnvs + 1)] = envPropMeans[envs[k], (envs[k] + 1):(NEnvs + 1)]
+                                                       + envPropResidualScales[envs[k]] * envPropResiduals[envs[k]:NEnvs, k];
+        log_samp_props[k]                           = log_softmax(samp_prop_normal);
     }
     {
+        matrix[NEnvs, NMicrobeNodes] taxEffectMat;
         taxEffectMat
             = to_matrix(taxEffects[1:(NEnvs * NMicrobeNodes)],
                         NEnvs, NMicrobeNodes);
@@ -164,8 +165,8 @@ model {
 generated quantities {
     simplex[NEnvs + 1] env_props[NEnvs];
     simplex[NEnvs + 1] samp_props[NSamples];
-    for (j in 1:NEnvs)
-        env_props[j] = softmax(envPropMeans[, j]);
+    for (i in 1:NEnvs)
+        env_props[i] = softmax(envPropMeans[i]);
     for (k in 1:NSamples)
         samp_props[k] = exp(log_samp_props[k]);
 }
