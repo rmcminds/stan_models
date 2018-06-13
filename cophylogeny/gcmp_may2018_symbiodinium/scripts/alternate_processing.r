@@ -19,25 +19,6 @@ load(paste0(outdir,'fit.RData'))
 
 outdir <- '/raid1/home/micro/mcmindsr/ryan/20180131_stansymbio/logistic_GLM_RMcMinds_nodeEffects_host16/reprocessed_3/'
 
-
-ancestors <- matrix(0, NEstTaxNodes + 1, NEstTaxNodes + 1)
-for(node in 1:(NEstTaxNodes + 1)) {
-    ancestors[, node] <- as.numeric(1:(NEstTaxNodes + 1) %in% c(Ancestors(bacttree.root.chronos.Y.filtered, node), node))
-}
-
-colnames(ancestors) <- rownames(ancestors) <- paste0('i',1:(NEstTaxNodes + 1))
-colnames(ancestors)[1:NEstTips] <- rownames(ancestors)[1:NEstTips] <- paste0('t',colnames(yb))
-
-ancestors <- ancestors[-(NEstTips + 1), -(NEstTips + 1)]
-
-
-minsamples <- 2000
-
-thin = max(1, floor(iterations/minsamples))
-nsamples <- iterations / thin
-warmup <- nsamples / 2
-
-
 for(i in 1:nparalleltrees) {
     
     check_hmc_diagnostics(fit[[i]])
@@ -49,15 +30,15 @@ for(i in 1:nparalleltrees) {
     dir.create(paste0(currtabledir, 'nodes/'), recursive=T)
     dir.create(paste0(currtabledir, 'nodes_summed/'), recursive=T)
 
-    scaledTaxNodeEffects <- array(c(scaledTaxNodeEffects, extract(fit[[i]], pars='scaledTaxNodeEffects', permuted=F, inc_warmup=T)), dim=c(nsamples, nchains, NEffects + NHostNodes, NEstTaxNodes, i), dimnames=list(sample=NULL, chain=NULL, effect=c(colnames(modelMat)[1:NEffects],colnames(hostAncestors[[i]])), taxnode=colnames(ancestors), hostTree=i))
+    scaledTaxNodeEffects <- array(c(scaledTaxNodeEffects, extract(fit[[i]], pars='scaledTaxNodeEffects', permuted=F, inc_warmup=T)), dim=c(NMCSamples, nchains, NEffects + NHostNodes, NEstTaxNodes, i), dimnames=list(sample=NULL, chain=NULL, effect=c(colnames(modelMat)[1:NEffects],colnames(hostAncestors[[i]])), taxnode=colnames(microbeAncestors), hostTree=i))
     
     
-    summedScaledTaxNodeEffects <- array(NA, dim=c(nsamples, nchains, NEffects + NHostNodes, NEstTaxNodes, i), dimnames=list(sample=NULL, chain=NULL, effect=c(colnames(modelMat)[1:NEffects],colnames(hostAncestors[[i]])), taxnode=colnames(ancestors), hostTree=i))
-    baseLevelEffects <- array(NA, dim=c(nsamples, nchains, NFactors, NEstTaxNodes, i))
-    summedBaseLevelEffects <- array(NA, dim=c(nsamples, nchains, NFactors, NEstTaxNodes, i))
-    for(j in 1:nsamples) {
+    summedScaledTaxNodeEffects <- array(NA, dim=c(NMCSamples, nchains, NEffects + NHostNodes, NEstTaxNodes, i), dimnames=list(sample=NULL, chain=NULL, effect=c(colnames(modelMat)[1:NEffects],colnames(hostAncestors[[i]])), taxnode=colnames(microbeAncestors), hostTree=i))
+    baseLevelEffects <- array(NA, dim=c(NMCSamples, nchains, NFactors, NEstTaxNodes, i))
+    summedBaseLevelEffects <- array(NA, dim=c(NMCSamples, nchains, NFactors, NEstTaxNodes, i))
+    for(j in 1:NMCSamples) {
         for(k in 1:nchains) {
-            summedScaledTaxNodeEffects[j,k,,,i] <- scaledTaxNodeEffects[j,k,,,i] %*% ancestors
+            summedScaledTaxNodeEffects[j,k,,,i] <- scaledTaxNodeEffects[j,k,,,i] %*% microbeAncestors
             for(m in sumconts) {
                 baseLevelEffects[j,k,m,,i] <- -colSums(scaledTaxNodeEffects[j,k,factLevelMat[,m] == 1,,i])
                 summedBaseLevelEffects[j,k,m,,i] <- -colSums(summedScaledTaxNodeEffects[j,k,factLevelMat[,m] == 1,,i])
