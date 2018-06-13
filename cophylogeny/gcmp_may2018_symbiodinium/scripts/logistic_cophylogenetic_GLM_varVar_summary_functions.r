@@ -108,11 +108,11 @@ for(i in 1:NTrees) {
     baseLevelEffects <- array(NA,
                               dim=c(NMCSamples,
                                     NChains,
-                                    NFactors,
+                                    length(sumconts),
                                     NMicrobeNodes),
                               dimnames=list(sample  = NULL,
                                             chain   = NULL,
-                                            effect  = NULL,
+                                            effect  = sumconts,
                                             taxnode = colnames(microbeAncestors)))
     for(j in 1:NMCSamples) {
         for(k in 1:NChains) {
@@ -125,13 +125,21 @@ for(i in 1:NTrees) {
     save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
 
     for(l in 1:(NEffects + NHostNodes + 1)) {
-        yeah <- monitor(scaledMicrobeNodeEffects[,,l], warmup = warmup, probs=c(0.05,0.95))
+        yeah <- monitor(array(scaledMicrobeNodeEffects[,,l,],
+                              dim = c(NMCSamples, NChains, NMicrobeNodes)),
+                        warmup = warmup,
+                        probs = c(0.05, 0.95))
+        rownames(yeah) <- rownames(microbeAncestors)
         cat('\t', file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')))
         write.table(yeah, file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')), sep='\t', quote=F,append=T)
     }
     
     for(m in sumconts) {
-        yeah <- monitor(baseLevelEffects[,,m], warmup = warmup, probs=c(0.05,0.95))
+        yeah <- monitor(array(baseLevelEffects[,,m,],
+                              dim = c(NMCSamples, NChains, NMicrobeNodes)),
+                        warmup = warmup,
+                        probs = c(0.05, 0.95))
+        rownames(yeah) <- rownames(microbeAncestors)
         cat('\t', file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')))
         write.table(yeah, file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')), sep='\t', quote=F,append=T)
     }

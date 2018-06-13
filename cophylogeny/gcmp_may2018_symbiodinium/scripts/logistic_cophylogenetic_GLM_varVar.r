@@ -340,8 +340,10 @@ save(fit, file=file.path(outdir,'fit.RData'))
 ## summarize the results separately for each sampled host tree
 for(i in 1:NTrees) {
     
+    check_hmc_diagnostics(fit[[i]])
+
     currplotdir <- file.path(outdir,paste0('tree_',i),'plots')
-    currtabledir <- file.path(outdir,paste0('tree_',i),'tables','nodes')
+    currtabledir <- file.path(outdir,paste0('tree_',i),'tables')
     currdatadir <- file.path(outdir,paste0('tree_',i),'data')
 
     dir.create(currplotdir, recursive=T)
@@ -358,14 +360,14 @@ for(i in 1:NTrees) {
     ##
 
     ## variance partitioning
-    vars1 <- extract(fit[[i]], pars='stDProps')[[1]]
-    colnames(vars1) <- c(paste0('ADiv.',colnames(factLevelMat)), paste0('Specificity.',colnames(factLevelMat)), 'ADiv.host', 'host.specificity', 'microbe.prevalence')
+    stDProps <- extract(fit[[i]], pars='stDProps')[[1]]
+    colnames(stDProps) <- c(paste0('ADiv.',colnames(factLevelMat)), paste0('Specificity.',colnames(factLevelMat)), 'ADiv.host', 'host.specificity', 'microbe.prevalence')
 
     pdf(file=file.path(currplotdir,'scalesboxes.pdf'), width=25, height=15)
-    boxplot(vars1, cex.axis=0.5, las=2)
+    boxplot(stDProps, cex.axis=0.5, las=2)
     graphics.off()
 
-    save(vars1,file=file.path(currdatadir,'stDProps.RData'))
+    save(stDProps,file=file.path(currdatadir,'stDProps.RData'))
     ##
     
     ## alpha diversity
@@ -379,6 +381,15 @@ for(i in 1:NTrees) {
     boxplot(timeBinProps, cex.axis=0.5, las=2)
     graphics.off()
     save(timeBinProps,file=file.path(currdatadir,'timeBinProps.RData'))
+    ##
+    
+    ## proportion of variance explained by each time bin
+    metaVarProps <- extract(fit[[i]], pars='metaVarProps')[[1]]
+    colnames(metaVarProps) <- c('prevalence','adiv','specificty')
+    pdf(file=file.path(currplotdir,'metaVarProps_boxes.pdf'), width=25, height=15)
+    boxplot(metaVarProps, cex.axis=0.5, las=2)
+    graphics.off()
+    save(metaVarProps,file=file.path(currdatadir,'metaVarProps.RData'))
     ##
     
     ## compare rates of host evolution in each time bin
@@ -405,7 +416,66 @@ for(i in 1:NTrees) {
     graphics.off()
     ##
     
+    ## summarize effects
+    currsubtabledir <- file.path(currtabledir, 'nodeEffects')
+    dir.create(currsubtabledir, recursive=T)
+
+    scaledMicrobeNodeEffects <- array(extract(fit[[i]], pars='scaledMicrobeNodeEffects', permuted=F, inc_warmup=T),
+                                      dim=c(NMCSamples,
+                                            NChains,
+                                            NEffects + NHostNodes + 1,
+                                            NMicrobeNodes),
+                                      dimnames=list(sample  = NULL,
+                                                    chain   = NULL,
+                                                    effect  = c('microbePrevalence', colnames(modelMat)[1:NEffects], colnames(hostAncestors[[i]])),
+                                                    taxnode = colnames(microbeAncestors)))
+                                                    
+    save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
+                                                    
+    baseLevelEffects <- array(NA,
+                              dim=c(NMCSamples,
+                                    NChains,
+                                    length(sumconts),
+                                    NMicrobeNodes),
+                              dimnames=list(sample  = NULL,
+                                            chain   = NULL,
+                                            effect  = sumconts,
+                                            taxnode = colnames(microbeAncestors)))
+    for(j in 1:NMCSamples) {
+        for(k in 1:NChains) {
+            for(m in sumconts) {
+                baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j,k,factLevelMat[,m] == 1,])
+            }
+        }
+    }
+    
+    save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
+
+    for(l in 1:(NEffects + NHostNodes + 1)) {
+        yeah <- monitor(array(scaledMicrobeNodeEffects[,,l,],
+                              dim = c(NMCSamples, NChains, NMicrobeNodes)),
+                        warmup = warmup,
+                        probs = c(0.05, 0.95))
+        rownames(yeah) <- rownames(microbeAncestors)
+        cat('\t', file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')))
+        write.table(yeah, file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')), sep='\t', quote=F,append=T)
+    }
+    
+    for(m in sumconts) {
+        yeah <- monitor(array(baseLevelEffects[,,m,],
+                              dim = c(NMCSamples, NChains, NMicrobeNodes)),
+                        warmup = warmup,
+                        probs = c(0.05, 0.95))
+        rownames(yeah) <- rownames(microbeAncestors)
+        cat('\t', file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')))
+        write.table(yeah, file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')), sep='\t', quote=F,append=T)
+    }
+    ##
+    
     ## see if any pairs of clades have higher variance among their descendants (maybe suggesting codiversification)
+    currsubtabledir <- file.path(currtabledir, 'codivEffects')
+    dir.create(currsubtabledir, recursive=T)
+    
     sums <- summary(fit[[i]], pars='phyloLogVarMultRaw', probs=c(0.05,0.95), use_cache = F)
 
     sums3d <- array(NA, dim=c(NHostNodes - NHostTips, NMicrobeNodes - NMicrobeTips, ncol(sums$summary)))
@@ -416,16 +486,16 @@ for(i in 1:NTrees) {
     factorfilenames <- colnames(hostAncestors[[i]])[(NHostTips + 1):NHostNodes]
 
     for(effect in 1:(NHostNodes - NHostTips)) {
-        cat('\t', file=file.path(currtabledir, factorfilenames[[effect]],'.txt'))
-        write.table(sums3d[effect,,], file=file.path(currtabledir, paste0(factorfilenames[[effect]],'.txt')), sep='\t', quote=F,append=T)
+        cat('\t', file=file.path(currsubtabledir, paste0(factorfilenames[[effect]],'.txt')))
+        write.table(sums3d[effect,,], file=file.path(currsubtabledir, paste0(factorfilenames[[effect]],'.txt')), sep='\t', quote=F,append=T)
     }
     ##
     
     ## summarize the mean branch lengths of the hosts
-    sums <- summary(fit, pars='hostScales', probs=c(0.05,0.95), use_cache = F)
-    hostTreesSampled[[1]]$edge.length <- sums$mean^2
+    sums <- summary(fit[[i]], pars='hostScales', probs=c(0.05,0.95), use_cache = F)
+    hostTreesSampled[[i]]$edge.length <- sums$summary[,'mean']^2
     pdf(file=file.path(currplotdir,'hostTreeWEstimatedEdgeLengths.pdf'), width=25, height=15)
-    plot(hostTreesSampled[[1]], cex=0.5)
+    plot(hostTreesSampled[[i]], cex=0.5)
     graphics.off()
     ##
 }
@@ -442,15 +512,14 @@ dir.create(currdatadir, recursive=T)
 
 allfit <- sflist2stanfit(fit)
 
-vars1 <- extract(allfit, pars='stDProps')[[1]]
-colnames(vars1) <- c(paste0('ADiv.',colnames(factLevelMat)), paste0('Specificity.',colnames(factLevelMat)), 'ADiv.host', 'host.specificity')
+stDProps <- extract(allfit, pars='stDProps')[[1]]
+colnames(stDProps) <- c(paste0('ADiv.',colnames(factLevelMat)), paste0('Specificity.',colnames(factLevelMat)), 'ADiv.host', 'host.specificity')
 
 pdf(file=file.path(currplotdir,'scalesboxes.pdf'), width=25, height=15)
-boxplot(vars1, cex.axis=0.5, las=2)
+boxplot(stDProps, cex.axis=0.5, las=2)
 graphics.off()
 
-save(vars1,file=file.path(currdatadir,'stDProps.RData'))
-
+save(stDProps,file=file.path(currdatadir,'stDProps.RData'))
 
 
 timeBinProps <- extract(allfit, pars='timeBinProps')[[1]]
@@ -484,8 +553,8 @@ boxplot(log(relativeEvolRatesMerged45), xlab='Time Period', ylab='Log Rate of Ev
 graphics.off()
 
 ## summarize the mean branch lengths of the microbes
-sums <- summary(fit, pars='microbeScales', probs=c(0.05,0.95), use_cache = F)
-microbeTree.root.Y$edge.length <- sums$mean^2
+sums <- summary(allfit, pars='microbeScales', probs=c(0.05,0.95), use_cache = F)
+microbeTree.root.Y$edge.length <- sums$summary[,'mean']^2
 pdf(file=file.path(currplotdir,'microbeTreeWEstimatedEdgeLengths.pdf'), width=25, height=15)
 plot(microbeTree.root.Y, cex=0.5)
 graphics.off()
