@@ -132,7 +132,8 @@ microbeTips <- colnames(yb)
 NMicrobeTips <- length(microbeTips)
 NIntMicrobeNodes <- microbeTree.root.Y$Nnode
 NMicrobeNodes <- NMicrobeTips + NIntMicrobeNodes - 1
-microbeEdges <- microbeTree.root.Y$edge.length
+microbeEdgeOrder <- order(microbeTree.root.Y$edge[,2])
+microbeEdges <- microbeTree.root.Y$edge.length[microbeEdgeOrder]
 ##
 
 ## melt the data into long format to feed to model, and generate summary numbers about samples
@@ -252,6 +253,7 @@ meanBoundaries <- apply(boundaries,2,mean)
 timeBinSizes <- list()
 relativeTimeBinSizes <- list()
 edgeToBin <- list()
+hostEdgeOrder <- list()
 for(i in 1:NTrees) {
     nh <- nodeHeights(hostTreesSampled[[i]])
     maxNH <- max(nh)
@@ -285,8 +287,9 @@ for(i in 1:NTrees) {
 
 		edgeToBin[[i]][,j] <- edgeToBin[[i]][,j] / timeBinSizes[[i]][j]
     }
+    hostEdgeOrder[[i]] <- order(hostTreesSampled[[i]]$edge[,2])
     rownames(edgeToBin[[i]]) <- hostTreesSampled[[i]]$edge[,2]
-    edgeToBin[[i]] <- edgeToBin[[i]][order(as.numeric(rownames(edgeToBin[[i]]))),]
+    edgeToBin[[i]] <- edgeToBin[[i]][hostEdgeOrder[[i]],]
 }
 ##
 
@@ -493,7 +496,8 @@ for(i in 1:NTrees) {
     
     ## summarize the mean branch lengths of the hosts
     sums <- summary(fit[[i]], pars='hostScales', probs=c(0.05,0.95), use_cache = F)
-    hostTreesSampled[[i]]$edge.length <- sums$summary[,'mean']^2
+    newEdges <- sums$summary[,'mean']^2
+    hostTreesSampled[[i]]$edge.length <- newEdges[order(hostEdgeOrder[[i]])]
     pdf(file=file.path(currplotdir,'hostTreeWEstimatedEdgeLengths.pdf'), width=25, height=15)
     plot(hostTreesSampled[[i]], cex=0.5)
     graphics.off()
@@ -513,7 +517,7 @@ dir.create(currdatadir, recursive=T)
 allfit <- sflist2stanfit(fit)
 
 stDProps <- extract(allfit, pars='stDProps')[[1]]
-colnames(stDProps) <- c(paste0('ADiv.',colnames(factLevelMat)), paste0('Specificity.',colnames(factLevelMat)), 'ADiv.host', 'host.specificity')
+colnames(stDProps) <- c(paste0('ADiv.',colnames(factLevelMat)), paste0('Specificity.',colnames(factLevelMat)), 'ADiv.host', 'host.specificity', 'microbe.prevalence')
 
 pdf(file=file.path(currplotdir,'scalesboxes.pdf'), width=25, height=15)
 boxplot(stDProps, cex.axis=0.5, las=2)
@@ -530,7 +534,7 @@ graphics.off()
 
 save(timeBinProps,file=file.path(currdatadir,'timeBinProps.RData'))
 
-
+meanBoundariesRounded <- round(meanBoundaries,1)
 relativeEvolRates <- extract(allfit, pars='relativeEvolRates')[[1]]
 colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - ',meanBoundariesRounded[4],' mya'), paste0(meanBoundariesRounded[4],' - present'))
 
@@ -554,7 +558,8 @@ graphics.off()
 
 ## summarize the mean branch lengths of the microbes
 sums <- summary(allfit, pars='microbeScales', probs=c(0.05,0.95), use_cache = F)
-microbeTree.root.Y$edge.length <- sums$summary[,'mean']^2
+newEdges <- sums$summary[,'mean']^2
+microbeTree.root.Y$edge.length <- newEdges[order(microbeEdgeOrder)]
 pdf(file=file.path(currplotdir,'microbeTreeWEstimatedEdgeLengths.pdf'), width=25, height=15)
 plot(microbeTree.root.Y, cex=0.5)
 graphics.off()
