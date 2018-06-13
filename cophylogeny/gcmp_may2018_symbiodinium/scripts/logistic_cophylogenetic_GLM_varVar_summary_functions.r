@@ -18,6 +18,7 @@ outdir <- file.path('output','2018-06-05_17-12-31')
 load(file=file.path(outdir,'setup.RData'))
 load(file=file.path(outdir,'fit.RData'))
 ##
+hostEdgeOrder <- list()
 
 ## summarize the results separately for each sampled host tree
 for(i in 1:NTrees) {
@@ -42,14 +43,14 @@ for(i in 1:NTrees) {
     ##
 
     ## variance partitioning
-    vars1 <- extract(fit[[i]], pars='stDProps')[[1]]
-    colnames(vars1) <- c(paste0('ADiv.',colnames(factLevelMat)), paste0('Specificity.',colnames(factLevelMat)), 'ADiv.host', 'host.specificity', 'microbe.prevalence')
+    stDProps <- extract(fit[[i]], pars='stDProps')[[1]]
+    colnames(stDProps) <- c(paste0('ADiv.',colnames(factLevelMat)), paste0('Specificity.',colnames(factLevelMat)), 'ADiv.host', 'host.specificity', 'microbe.prevalence')
 
     pdf(file=file.path(currplotdir,'scalesboxes.pdf'), width=25, height=15)
-    boxplot(vars1, cex.axis=0.5, las=2)
+    boxplot(stDProps, cex.axis=0.5, las=2)
     graphics.off()
 
-    save(vars1,file=file.path(currdatadir,'stDProps.RData'))
+    save(stDProps,file=file.path(currdatadir,'stDProps.RData'))
     ##
     
     ## alpha diversity
@@ -165,8 +166,10 @@ for(i in 1:NTrees) {
     ##
     
     ## summarize the mean branch lengths of the hosts
+    hostEdgeOrder[[i]] <- order(hostTreesSampled[[i]]$edge[,2])
     sums <- summary(fit[[i]], pars='hostScales', probs=c(0.05,0.95), use_cache = F)
-    hostTreesSampled[[i]]$edge.length <- sums$summary[,'mean']^2
+    newEdges <- sums$summary[,'mean']^2
+    hostTreesSampled[[i]]$edge.length <- newEdges[order(hostEdgeOrder[[i]])]
     pdf(file=file.path(currplotdir,'hostTreeWEstimatedEdgeLengths.pdf'), width=25, height=15)
     plot(hostTreesSampled[[i]], cex=0.5)
     graphics.off()
@@ -185,14 +188,14 @@ dir.create(currdatadir, recursive=T)
 
 allfit <- sflist2stanfit(fit)
 
-vars1 <- extract(allfit, pars='stDProps')[[1]]
-colnames(vars1) <- c(paste0('ADiv.',colnames(factLevelMat)), paste0('Specificity.',colnames(factLevelMat)), 'ADiv.host', 'host.specificity')
+stDProps <- extract(allfit, pars='stDProps')[[1]]
+colnames(stDProps) <- c(paste0('ADiv.',colnames(factLevelMat)), paste0('Specificity.',colnames(factLevelMat)), 'ADiv.host', 'host.specificity', 'microbe.prevalence')
 
 pdf(file=file.path(currplotdir,'scalesboxes.pdf'), width=25, height=15)
-boxplot(vars1, cex.axis=0.5, las=2)
+boxplot(stDProps, cex.axis=0.5, las=2)
 graphics.off()
 
-save(vars1,file=file.path(currdatadir,'stDProps.RData'))
+save(stDProps,file=file.path(currdatadir,'stDProps.RData'))
 
 
 
@@ -204,7 +207,7 @@ graphics.off()
 
 save(timeBinProps,file=file.path(currdatadir,'timeBinProps.RData'))
 
-
+meanBoundariesRounded <- round(meanBoundaries,1)
 relativeEvolRates <- extract(allfit, pars='relativeEvolRates')[[1]]
 colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - ',meanBoundariesRounded[4],' mya'), paste0(meanBoundariesRounded[4],' - present'))
 
@@ -227,8 +230,10 @@ boxplot(log(relativeEvolRatesMerged45), xlab='Time Period', ylab='Log Rate of Ev
 graphics.off()
 
 ## summarize the mean branch lengths of the microbes
+microbeEdgeOrder <- order(microbeTree.root.Y$edge[,2])
 sums <- summary(allfit, pars='microbeScales', probs=c(0.05,0.95), use_cache = F)
-microbeTree.root.Y$edge.length <- sums$summary[,'mean']^2
+newEdges <- sums$summary[,'mean']^2
+microbeTree.root.Y$edge.length <- newEdges[order(microbeEdgeOrder)]
 pdf(file=file.path(currplotdir,'microbeTreeWEstimatedEdgeLengths.pdf'), width=25, height=15)
 plot(microbeTree.root.Y, cex=0.5)
 graphics.off()
