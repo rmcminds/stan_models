@@ -447,7 +447,7 @@ for(i in 1:NTrees) {
     for(j in 1:NMCSamples) {
         for(k in 1:NChains) {
             for(m in sumconts) {
-                baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j,k,factLevelMat[,m] == 1,])
+                baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j,k,rownames(factLevelMat)[factLevelMat[,m]==1],])
             }
         }
     }
@@ -507,7 +507,7 @@ for(i in 1:NTrees) {
 
 ## summarize results for parameters that can be interpretted across all sampled host trees
 currplotdir <- file.path(outdir,'alltrees','plots')
-currtabledir <- file.path(outdir,'alltrees','tables','nodes')
+currtabledir <- file.path(outdir,'alltrees','tables')
 currdatadir <- file.path(outdir,'alltrees','data')
 
 dir.create(currplotdir, recursive=T)
@@ -564,5 +564,62 @@ pdf(file=file.path(currplotdir,'microbeTreeWEstimatedEdgeLengths.pdf'), width=25
 plot(microbeTree.root.Y, cex=0.5)
 graphics.off()
 ##
+
+## summarize effects
+currsubtabledir <- file.path(currtabledir, 'nodeEffects')
+dir.create(currsubtabledir, recursive=T)
+
+scaledMicrobeNodeEffects <- array(extract(allfit, pars='scaledMicrobeNodeEffects', permuted=F, inc_warmup=T),
+                                  dim=c(NMCSamples,
+                                        NChains,
+                                        NEffects + NHostNodes + 1,
+                                        NMicrobeNodes),
+                                  dimnames=list(sample  = NULL,
+                                                chain   = NULL,
+                                                effect  = c('microbePrevalence', colnames(modelMat)[1:NEffects], colnames(hostAncestors[[i]])),
+                                                taxnode = colnames(microbeAncestors)))
+                                                
+save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
+                                                
+baseLevelEffects <- array(NA,
+                          dim=c(NMCSamples,
+                                NChains,
+                                length(sumconts),
+                                NMicrobeNodes),
+                          dimnames=list(sample  = NULL,
+                                        chain   = NULL,
+                                        effect  = sumconts,
+                                        taxnode = colnames(microbeAncestors)))
+for(j in 1:NMCSamples) {
+    for(k in 1:NChains) {
+        for(m in sumconts) {
+            baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j,k,rownames(factLevelMat)[factLevelMat[,m]==1],])
+        }
+    }
+}
+
+save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
+
+for(l in 1:(NEffects + NHostNodes + 1)) {
+    yeah <- monitor(array(scaledMicrobeNodeEffects[,,l,],
+                          dim = c(NMCSamples, NChains, NMicrobeNodes)),
+                    warmup = warmup,
+                    probs = c(0.05, 0.95))
+    rownames(yeah) <- rownames(microbeAncestors)
+    cat('\t', file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')))
+    write.table(yeah, file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')), sep='\t', quote=F,append=T)
+}
+
+for(m in sumconts) {
+    yeah <- monitor(array(baseLevelEffects[,,m,],
+                          dim = c(NMCSamples, NChains, NMicrobeNodes)),
+                    warmup = warmup,
+                    probs = c(0.05, 0.95))
+    rownames(yeah) <- rownames(microbeAncestors)
+    cat('\t', file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')))
+    write.table(yeah, file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')), sep='\t', quote=F,append=T)
+}
+##
+
 
 ## fin
