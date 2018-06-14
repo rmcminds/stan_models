@@ -245,7 +245,7 @@ dir.create(currsubtabledir, recursive=T)
 
 scaledMicrobeNodeEffects <- array(extract(allfit, pars='scaledMicrobeNodeEffects', permuted=F, inc_warmup=T),
                                   dim=c(NMCSamples,
-                                        NChains,
+                                        NChains * NTrees,
                                         NEffects + NHostNodes + 1,
                                         NMicrobeNodes),
                                   dimnames=list(sample  = NULL,
@@ -257,7 +257,7 @@ save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeE
                                                 
 baseLevelEffects <- array(NA,
                           dim=c(NMCSamples,
-                                NChains,
+                                NChains * NTrees,
                                 length(sumconts),
                                 NMicrobeNodes),
                           dimnames=list(sample  = NULL,
@@ -265,7 +265,7 @@ baseLevelEffects <- array(NA,
                                         effect  = sumconts,
                                         taxnode = colnames(microbeAncestors)))
 for(j in 1:NMCSamples) {
-    for(k in 1:NChains) {
+    for(k in 1:(NChains * NTrees)) {
         for(m in sumconts) {
             baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j,k,rownames(factLevelMat)[factLevelMat[,m]==1],])
         }
@@ -276,7 +276,7 @@ save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
 
 for(l in 1:(NEffects + NHostNodes + 1)) {
     yeah <- monitor(array(scaledMicrobeNodeEffects[,,l,],
-                          dim = c(NMCSamples, NChains, NMicrobeNodes)),
+                          dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes)),
                     warmup = warmup,
                     probs = c(0.05, 0.95))
     rownames(yeah) <- rownames(microbeAncestors)
@@ -286,7 +286,7 @@ for(l in 1:(NEffects + NHostNodes + 1)) {
 
 for(m in sumconts) {
     yeah <- monitor(array(baseLevelEffects[,,m,],
-                          dim = c(NMCSamples, NChains, NMicrobeNodes)),
+                          dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes)),
                     warmup = warmup,
                     probs = c(0.05, 0.95))
     rownames(yeah) <- rownames(microbeAncestors)

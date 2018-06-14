@@ -18,6 +18,7 @@ hostTreePath <- 'raw_data/combined_trees.newick' #set of Bayesian draws of host 
 mapfilePath <- 'raw_data/GCMP_symbiodinium_map2.txt' #mapping file
 fulltablePath <- 'raw_data/species_table.txt' #250 bp deblur otu table output
 modelPath <- 'scripts/logistic_cophylogenetic_GLM_varVar.stan' #stan model
+seed <- 123
 
 outdir <- file.path('output',gsub(':','-',gsub(' ', '_', Sys.time())))
 
@@ -320,7 +321,7 @@ for (i in 1:NTrees) {
 
 thin = max(1, floor(NIterations/minMCSamples))
 NMCSamples <- NIterations / thin
-warmup <- NMCSamples / 2
+warmup <- floor(NMCSamples / 2)
 ##
 
 ## save the inputs
@@ -335,7 +336,7 @@ save(timeBinSizes,file=file.path(outdir,'timeBinSizes.RData'))
 ##
 
 ## run the model!
-fit <- mclapply(1:NTrees, function(i) stan(file=modelPath, data=standat[[i]], control=list(adapt_delta=adapt_delta, max_treedepth=max_treedepth), iter=NIterations, thin=thin, chains=NChains ))
+fit <- mclapply(1:NTrees, function(i) stan(file=modelPath, data=standat[[i]], control=list(adapt_delta=adapt_delta, max_treedepth=max_treedepth), iter=NIterations, thin=thin, chains=NChains, seed=seed, chain_id=(NChains * (i - 1) + (1:NChains)) ))
 
 save(fit, file=file.path(outdir,'fit.RData'))
 ##
@@ -571,7 +572,7 @@ dir.create(currsubtabledir, recursive=T)
 
 scaledMicrobeNodeEffects <- array(extract(allfit, pars='scaledMicrobeNodeEffects', permuted=F, inc_warmup=T),
                                   dim=c(NMCSamples,
-                                        NChains,
+                                        NChains * NTrees,
                                         NEffects + NHostNodes + 1,
                                         NMicrobeNodes),
                                   dimnames=list(sample  = NULL,
@@ -583,7 +584,7 @@ save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeE
                                                 
 baseLevelEffects <- array(NA,
                           dim=c(NMCSamples,
-                                NChains,
+                                NChains * NTrees,
                                 length(sumconts),
                                 NMicrobeNodes),
                           dimnames=list(sample  = NULL,
@@ -591,7 +592,7 @@ baseLevelEffects <- array(NA,
                                         effect  = sumconts,
                                         taxnode = colnames(microbeAncestors)))
 for(j in 1:NMCSamples) {
-    for(k in 1:NChains) {
+    for(k in 1:(NChains * NTrees)) {
         for(m in sumconts) {
             baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j,k,rownames(factLevelMat)[factLevelMat[,m]==1],])
         }
@@ -602,7 +603,7 @@ save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
 
 for(l in 1:(NEffects + NHostNodes + 1)) {
     yeah <- monitor(array(scaledMicrobeNodeEffects[,,l,],
-                          dim = c(NMCSamples, NChains, NMicrobeNodes)),
+                          dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes)),
                     warmup = warmup,
                     probs = c(0.05, 0.95))
     rownames(yeah) <- rownames(microbeAncestors)
@@ -612,7 +613,7 @@ for(l in 1:(NEffects + NHostNodes + 1)) {
 
 for(m in sumconts) {
     yeah <- monitor(array(baseLevelEffects[,,m,],
-                          dim = c(NMCSamples, NChains, NMicrobeNodes)),
+                          dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes)),
                     warmup = warmup,
                     probs = c(0.05, 0.95))
     rownames(yeah) <- rownames(microbeAncestors)
