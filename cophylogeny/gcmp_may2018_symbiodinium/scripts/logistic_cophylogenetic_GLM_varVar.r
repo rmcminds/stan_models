@@ -248,6 +248,7 @@ for(i in 1:NTrees) {
 
 ## average cut points among all the trees so the bins of time are consistent across replicates
 meanBoundaries <- apply(boundaries,2,mean)
+meanBoundariesRounded <- round(meanBoundaries,1)
 ##
 
 ## create matrices that relate the portion of each host branch that belongs to each time bin
@@ -286,8 +287,10 @@ for(i in 1:NTrees) {
         edgeToBin[[i]][allin,j] <- hostTreesSampled[[i]]$edge.length[allin]
         edgeToBin[[i]][allout,j] <- 0
 
-		edgeToBin[[i]][,j] <- edgeToBin[[i]][,j] / timeBinSizes[[i]][j]
+		#edgeToBin[[i]][,j] <- edgeToBin[[i]][,j] / timeBinSizes[[i]][j]
     }
+    edgeToBin[[i]] <- edgeToBin[[i]] / maxNH #this replaces the commented line above
+
     hostEdgeOrder[[i]] <- order(hostTreesSampled[[i]]$edge[,2])
     rownames(edgeToBin[[i]]) <- hostTreesSampled[[i]]$edge[,2]
     edgeToBin[[i]] <- edgeToBin[[i]][hostEdgeOrder[[i]],]
@@ -316,7 +319,7 @@ for (i in 1:NTrees) {
 ## collect data to feed to stan
 standat <- list()
 for (i in 1:NTrees) {
-    standat[[i]] <- list(NSamples=NSamples, NObs=NObs, NMicrobeNodes=NMicrobeNodes, NMicrobeTips=NMicrobeTips, NFactors=NFactors, NEffects=NEffects, present=present, sampleNames=sampleNames, microbeTipNames=microbeTipNames, factLevelMat=factLevelMat, microbeAncestors=microbeAncestors, modelMat=modelMat, hostAncestors=hostAncestors[[i]], hostAncestorsExpanded=hostAncestorsExpanded[[i]], edgeToBin=edgeToBin[[i]], NHostNodes=NHostNodes, NTimeBins=NTimeBins, aveStDPriorExpect=aveStDPriorExpect, timeBinSizes=relativeTimeBinSizes[[i]], microbeEdges=microbeEdges)
+    standat[[i]] <- list(NSamples=NSamples, NObs=NObs, NMicrobeNodes=NMicrobeNodes, NMicrobeTips=NMicrobeTips, NFactors=NFactors, NEffects=NEffects, present=present, sampleNames=sampleNames, microbeTipNames=microbeTipNames, factLevelMat=factLevelMat, microbeAncestors=microbeAncestors, modelMat=modelMat, hostAncestors=hostAncestors[[i]], hostAncestorsExpanded=hostAncestorsExpanded[[i]], edgeToBin=edgeToBin[[i]], NHostNodes=NHostNodes, NTimeBins=NTimeBins, aveStDPriorExpect=aveStDPriorExpect, microbeEdges=microbeEdges)
 }
 
 thin = max(1, floor(NIterations/minMCSamples))
@@ -378,14 +381,6 @@ for(i in 1:NTrees) {
     scaledAlphaDivEffects <- extract(fit[[i]], pars='scaledAlphaDivEffects')[[1]]
     save(scaledAlphaDivEffects,file=file.path(currdatadir,'scaledAlphaDivEffects.RData'))
     ##
-
-    ## proportion of variance explained by each time bin
-    timeBinProps <- extract(fit[[i]], pars='timeBinProps')[[1]]
-    pdf(file=file.path(currplotdir,'timeBinProps_boxes.pdf'), width=25, height=15)
-    boxplot(timeBinProps, cex.axis=0.5, las=2)
-    graphics.off()
-    save(timeBinProps,file=file.path(currdatadir,'timeBinProps.RData'))
-    ##
     
     ## proportion of variance explained by each time bin
     metaVarProps <- extract(fit[[i]], pars='metaVarProps')[[1]]
@@ -397,7 +392,6 @@ for(i in 1:NTrees) {
     ##
     
     ## compare rates of host evolution in each time bin
-	meanBoundariesRounded <- round(meanBoundaries,1)
     relativeEvolRates <- extract(fit[[i]], pars='relativeEvolRates')[[1]]
     colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - ',meanBoundariesRounded[4],' mya'), paste0(meanBoundariesRounded[4],' - present'))
 
@@ -407,7 +401,7 @@ for(i in 1:NTrees) {
 
 	save(relativeEvolRates,file=file.path(currdatadir,'relativeEvolRates.RData'))
     
-    relativeEvolRate4p5 <- (relativeEvolRates[,4] * timeBinSizes[[1]][[4]] + relativeEvolRates[,5] * timeBinSizes[[1]][[5]]) / (timeBinSizes[[1]][[4]] + timeBinSizes[[1]][[5]])
+    relativeEvolRate4p5 <- (relativeEvolRates[,4] + relativeEvolRates[,5]) / (timeBinSizes[[i]][[4]] + timeBinSizes[[i]][[5]])
     relativeEvolRatesMerged45 <- cbind(relativeEvolRates[,-c(4,5)],relativeEvolRate4p5)
     colnames(relativeEvolRates)[[4]] <- paste0(meanBoundariesRounded[3],' - present')
     
@@ -526,16 +520,6 @@ graphics.off()
 
 save(stDProps,file=file.path(currdatadir,'stDProps.RData'))
 
-
-timeBinProps <- extract(allfit, pars='timeBinProps')[[1]]
-
-pdf(file=file.path(currplotdir,'timeBinPropsboxes.pdf'), width=25, height=15)
-boxplot(timeBinProps, cex.axis=0.5, las=2)
-graphics.off()
-
-save(timeBinProps,file=file.path(currdatadir,'timeBinProps.RData'))
-
-meanBoundariesRounded <- round(meanBoundaries,1)
 relativeEvolRates <- extract(allfit, pars='relativeEvolRates')[[1]]
 colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - ',meanBoundariesRounded[4],' mya'), paste0(meanBoundariesRounded[4],' - present'))
 
@@ -545,7 +529,7 @@ graphics.off()
 
 save(relativeEvolRates,file=file.path(currdatadir,'relativeEvolRates.RData'))
 
-relativeEvolRate4p5 <- (relativeEvolRates[,4] * timeBinSizes[[1]][[4]] + relativeEvolRates[,5] * timeBinSizes[[1]][[5]]) / (timeBinSizes[[1]][[4]] + timeBinSizes[[1]][[5]])
+relativeEvolRate4p5 <- (relativeEvolRates[,4] + relativeEvolRates[,5]) / (timeBinSizes[[i]][[4]] + timeBinSizes[[i]][[5]])
 relativeEvolRatesMerged45 <- cbind(relativeEvolRates[,-c(4,5)],relativeEvolRate4p5)
 colnames(relativeEvolRates)[[4]] <- paste0(meanBoundariesRounded[3],' - present')
 

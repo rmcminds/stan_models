@@ -131,8 +131,8 @@ model {
     matrix[NEnvs + 1, NMicrobeTips] tax_normEnvs;
     taxAveStD ~ exponential(1.0 / taxAveStDPriorExpect);
     envPropAveStD ~ exponential(1.0 / envPropAveStDPriorExpect);
-    basePropsRaw ~ student_t(envPropsDF, 0, 10);
-    to_vector(envPropMeansRaw) ~ student_t(envPropsDF, 0, 10);
+    basePropsRaw ~ student_t(envPropsDF, 0, 1);
+    to_vector(envPropMeansRaw) ~ student_t(envPropsDF, 0, 1);
     to_vector(envPropResiduals) ~ student_t(envPropsDF, 0, 1);
     taxIntercepts ~ cauchy(0, 2.5);
     taxEffects ~ student_t(taxEffectsDF, 0, 1);
