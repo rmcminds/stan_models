@@ -61,8 +61,8 @@ filterfunction <- function(dfin) {
     contrasts(df2$reef_name) <- 'contr.sum'
     contrasts(df2$colony_name) <- 'contr.sum'
     contrasts(df2$host_genus) <- 'contr.sum'
-	contrasts(df2$host_clade_sensu_fukami) <- 'contr.sum'
-	df2$longitude <- as.numeric(as.character(df2$longitude))
+    contrasts(df2$host_clade_sensu_fukami) <- 'contr.sum'
+    df2$longitude <- as.numeric(as.character(df2$longitude))
     df2$latitude <- as.numeric(as.character(df2$latitude))
     levels(df2[,sampleTipKey])[levels(df2[,sampleTipKey]) == 'Homophyllia_hillae'] <- "Homophyllia_bowerbanki"
     levels(df2[,sampleTipKey])[levels(df2[,sampleTipKey]) == 'Pocillopora_eydouxi'] <- "Pocillopora_grandis"
@@ -115,7 +115,7 @@ rownames(tax) <- rownames(taxdat)
 colnames(tax) <- c('Kingdom','Phylum','Class','Order','Family','Genus','Species')
 
 
-endos <- rownames(tax[tax[,'Order']=='o__Oceanospirillales' & !is.na(tax[,'Order']),])
+endos <- rownames(tax[(tax[,'Family']=='f__Endozoicimonaceae' | tax[,'Family']=='f__Hahellaceae' | tax[,'Family']=='f__HOC21' | tax[,'Family']=='f__Oleiphilaceae') & !is.na(tax[,'Family']),])
 
 y.binary.filtered.endos <- y.binary.filtered[,colnames(y.binary.filtered) %in% endos]
 
@@ -254,14 +254,14 @@ for(i in 1:NTrees) {
         }
         levels(sampleMap[[i]][,sampleTipKey])[levels(sampleMap[[i]][,sampleTipKey]) %in% grep(paste0(j,'_'),study.species.missing,value=T)] <- sample(grep(paste0(j,'_'), possibleGenera, value=T), sum(generaOfUnknowns == j)) ## assign unidentified species to a random member of their genus independently for each tree
     }
-
-	#filter the tree only contain the sampled (or assigned) species
-	hostTreesSampled[[i]] <- ladderize(drop.tip(hostTree[[i]],hostTree[[i]]$tip.label[!hostTree[[i]]$tip.label %in% levels(sampleMap[[i]][,sampleTipKey])]))
-
-	#divide total evolutionary time into chunks that contain approximately equal numbers of splits
-	lttHostTreesSampled <- ltt(hostTreesSampled[[i]],log.lineages=F,plot=F)
-	temp <- max(nodeHeights(hostTreesSampled[[i]])) - lttHostTreesSampled$times[-length(lttHostTreesSampled$times)]
-	splittimes[[i]] <- split(temp, ceiling(seq_along(temp)/NSplits))
+    
+    #filter the tree only contain the sampled (or assigned) species
+    hostTreesSampled[[i]] <- ladderize(drop.tip(hostTree[[i]],hostTree[[i]]$tip.label[!hostTree[[i]]$tip.label %in% levels(sampleMap[[i]][,sampleTipKey])]))
+    
+    #divide total evolutionary time into chunks that contain approximately equal numbers of splits
+    lttHostTreesSampled <- ltt(hostTreesSampled[[i]],log.lineages=F,plot=F)
+    temp <- max(nodeHeights(hostTreesSampled[[i]])) - lttHostTreesSampled$times[-length(lttHostTreesSampled$times)]
+    splittimes[[i]] <- split(temp, ceiling(seq_along(temp)/NSplits))
     if(length(splittimes[[i]][[NTimeBins]]) < NSplits/2) {
         splittimes[[i]][[NTimeBins - 1]] <- c(splittimes[[i]][[NTimeBins - 1]], splittimes[[i]][[NTimeBins]])
         splittimes[[i]][[NTimeBins]] <- NULL
@@ -271,7 +271,7 @@ for(i in 1:NTrees) {
     
     #cut points in each phylogeny that would result in approximately equal numbers of splits per bin of time
     boundaries[i,] <- sapply(2:NTimeBins, function(x) max(splittimes[[i]][[x]]))
-
+    
 }
 
 
@@ -299,7 +299,7 @@ for(i in 1:NTrees) {
     for(j in 1:NTimeBins) {
         if(j == 1) {
             allin <- which(nd[,2] >= meanBoundaries[j])
-			allout <- which(nd[,1] <= meanBoundaries[j])
+            allout <- which(nd[,1] <= meanBoundaries[j])
             cedge <- which((nd[,1] > meanBoundaries[j]) & (nd[,2] < meanBoundaries[j]))
             edgeToBin[[i]][cedge,j] <- nd[cedge,1] - meanBoundaries[j]
         } else if(j == NTimeBins) {
@@ -319,7 +319,7 @@ for(i in 1:NTrees) {
         }
         edgeToBin[[i]][allin,j] <- hostTreesSampled[[i]]$edge.length[allin]
         edgeToBin[[i]][allout,j] <- 0
-
+        
     }
     edgeToBin[[i]] <- edgeToBin[[i]] / maxNH
     hostEdgeOrder[[i]] <- order(hostTreesSampled[[i]]$edge[,2])
@@ -332,10 +332,10 @@ for(i in 1:NTrees) {
 hostAncestors <- list()
 hostAncestorsExpanded <- list()
 for (i in 1:NTrees) {
-	hostAncestors[[i]] <- matrix(NA, NHostNodes+1, NHostNodes+1)
-	for(node in 1:(NHostNodes+1)) {
-	    hostAncestors[[i]][node, ] <- as.numeric(1:(NHostNodes+1) %in% c(Ancestors(hostTreesSampled[[i]], node), node))
-	}
+    hostAncestors[[i]] <- matrix(NA, NHostNodes+1, NHostNodes+1)
+    for(node in 1:(NHostNodes+1)) {
+        hostAncestors[[i]][node, ] <- as.numeric(1:(NHostNodes+1) %in% c(Ancestors(hostTreesSampled[[i]], node), node))
+    }
     colnames(hostAncestors[[i]]) <- rownames(hostAncestors[[i]]) <- paste0('i',1:(NHostNodes+1))
     colnames(hostAncestors[[i]])[1:NHostTips] <- rownames(hostAncestors[[i]])[1:NHostTips] <- hostTreesSampled[[i]]$tip.label
     hostAncestors[[i]] <- hostAncestors[[i]][-(NHostTips + 1), -(NHostTips + 1)]
@@ -376,15 +376,15 @@ save(fit, file=file.path(outdir,'fit.RData'))
 for(i in 1:NTrees) {
     
     check_hmc_diagnostics(fit[[i]])
-
+    
     currplotdir <- file.path(outdir,paste0('tree_',i),'plots')
     currtabledir <- file.path(outdir,paste0('tree_',i),'tables')
     currdatadir <- file.path(outdir,paste0('tree_',i),'data')
-
+    
     dir.create(currplotdir, recursive=T)
     dir.create(currtabledir, recursive=T)
     dir.create(currdatadir, recursive=T)
-
+    
     ## plot the sampled tree with the time bins marked
     pdf(file=file.path(currplotdir,'sampledTree.pdf'), width=25, height=15)
     plot(hostTreesSampled[[i]],cex=0.75)
@@ -393,15 +393,15 @@ for(i in 1:NTrees) {
     }
     graphics.off()
     ##
-
+    
     ## variance partitioning
     stDProps <- extract(fit[[i]], pars='stDProps')[[1]]
     colnames(stDProps) <- c(paste0('ADiv.',colnames(factLevelMat)), paste0('Specificity.',colnames(factLevelMat)), 'ADiv.host', 'host.specificity', 'microbe.prevalence')
-
+    
     pdf(file=file.path(currplotdir,'scalesboxes.pdf'), width=25, height=15)
     boxplot(stDProps, cex.axis=0.5, las=2)
     graphics.off()
-
+    
     save(stDProps,file=file.path(currdatadir,'stDProps.RData'))
     ##
     
@@ -422,38 +422,38 @@ for(i in 1:NTrees) {
     ## compare rates of host evolution in each time bin
     relativeEvolRates <- extract(fit[[i]], pars='relativeEvolRates')[[1]]
     colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - present'))
-
+    
     pdf(file=file.path(currplotdir,'evolRatesRelToWeightedMean.pdf'), width=25, height=15)
     boxplot(relativeEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to Weighted Mean')
     graphics.off()
-
-	save(relativeEvolRates,file=file.path(currdatadir,'relativeEvolRates.RData'))
+    
+    save(relativeEvolRates,file=file.path(currdatadir,'relativeEvolRates.RData'))
     
     ## summarize effects
     currsubtabledir <- file.path(currtabledir, 'nodeEffects')
     dir.create(currsubtabledir, recursive=T)
-
+    
     scaledMicrobeNodeEffects <- array(extract(fit[[i]], pars='scaledMicrobeNodeEffects', permuted=F, inc_warmup=T),
-                                      dim=c(NMCSamples,
-                                            NChains,
-                                            NEffects + NHostNodes + 1,
-                                            NMicrobeNodes),
-                                      dimnames=list(sample  = NULL,
-                                                    chain   = NULL,
-                                                    effect  = c('microbePrevalence', colnames(modelMat)[1:NEffects], colnames(hostAncestors[[i]])),
-                                                    taxnode = colnames(microbeAncestors)))
-                                                    
+    dim=c(NMCSamples,
+    NChains,
+    NEffects + NHostNodes + 1,
+    NMicrobeNodes),
+    dimnames=list(sample  = NULL,
+    chain   = NULL,
+    effect  = c('microbePrevalence', colnames(modelMat)[1:NEffects], colnames(hostAncestors[[i]])),
+    taxnode = colnames(microbeAncestors)))
+    
     save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
-                                                    
+    
     baseLevelEffects <- array(NA,
-                              dim=c(NMCSamples,
-                                    NChains,
-                                    length(sumconts),
-                                    NMicrobeNodes),
-                              dimnames=list(sample  = NULL,
-                                            chain   = NULL,
-                                            effect  = sumconts,
-                                            taxnode = colnames(microbeAncestors)))
+    dim=c(NMCSamples,
+    NChains,
+    length(sumconts),
+    NMicrobeNodes),
+    dimnames=list(sample  = NULL,
+    chain   = NULL,
+    effect  = sumconts,
+    taxnode = colnames(microbeAncestors)))
     for(j in 1:NMCSamples) {
         for(k in 1:NChains) {
             for(m in sumconts) {
@@ -463,12 +463,12 @@ for(i in 1:NTrees) {
     }
     
     save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
-
+    
     for(l in 1:(NEffects + NHostNodes + 1)) {
         yeah <- monitor(array(scaledMicrobeNodeEffects[,,l,],
-                              dim = c(NMCSamples, NChains, NMicrobeNodes)),
-                        warmup = warmup,
-                        probs = c(0.05, 0.95))
+        dim = c(NMCSamples, NChains, NMicrobeNodes)),
+        warmup = warmup,
+        probs = c(0.05, 0.95))
         rownames(yeah) <- rownames(microbeAncestors)
         cat('\t', file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')))
         write.table(yeah, file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')), sep='\t', quote=F,append=T)
@@ -476,9 +476,9 @@ for(i in 1:NTrees) {
     
     for(m in sumconts) {
         yeah <- monitor(array(baseLevelEffects[,,m,],
-                              dim = c(NMCSamples, NChains, NMicrobeNodes)),
-                        warmup = warmup,
-                        probs = c(0.05, 0.95))
+        dim = c(NMCSamples, NChains, NMicrobeNodes)),
+        warmup = warmup,
+        probs = c(0.05, 0.95))
         rownames(yeah) <- rownames(microbeAncestors)
         cat('\t', file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')))
         write.table(yeah, file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')), sep='\t', quote=F,append=T)
@@ -490,14 +490,14 @@ for(i in 1:NTrees) {
     dir.create(currsubtabledir, recursive=T)
     
     sums <- summary(fit[[i]], pars='phyloLogVarMultRaw', probs=c(0.05,0.95), use_cache = F)
-
+    
     sums3d <- array(NA, dim=c(NHostNodes - NHostTips, NMicrobeNodes - NMicrobeTips, ncol(sums$summary)))
     for(effect in 1:(NHostNodes - NHostTips)) {
         sums3d[effect,,] <- sums$summary[(effect-1) * (NMicrobeNodes - NMicrobeTips) + (1:(NMicrobeNodes - NMicrobeTips)),]
     }
     dimnames(sums3d) <- list(colnames(hostAncestors[[i]])[(NHostTips + 1):NHostNodes], rownames(microbeAncestors)[(NMicrobeTips + 1):NMicrobeNodes], colnames(sums$summary))
     factorfilenames <- colnames(hostAncestors[[i]])[(NHostTips + 1):NHostNodes]
-
+    
     for(effect in 1:(NHostNodes - NHostTips)) {
         cat('\t', file=file.path(currsubtabledir, paste0(factorfilenames[[effect]],'.txt')))
         write.table(sums3d[effect,,], file=file.path(currsubtabledir, paste0(factorfilenames[[effect]],'.txt')), sep='\t', quote=F,append=T)
@@ -558,26 +558,26 @@ currsubtabledir <- file.path(currtabledir, 'nodeEffects')
 dir.create(currsubtabledir, recursive=T)
 
 scaledMicrobeNodeEffects <- array(extract(allfit, pars='scaledMicrobeNodeEffects', permuted=F, inc_warmup=T),
-                                  dim=c(NMCSamples,
-                                        NChains * NTrees,
-                                        NEffects + NHostNodes + 1,
-                                        NMicrobeNodes),
-                                  dimnames=list(sample  = NULL,
-                                                chain   = NULL,
-                                                effect  = c('microbePrevalence', colnames(modelMat)[1:NEffects], colnames(hostAncestors[[i]])),
-                                                taxnode = colnames(microbeAncestors)))
-                                                
+dim=c(NMCSamples,
+NChains * NTrees,
+NEffects + NHostNodes + 1,
+NMicrobeNodes),
+dimnames=list(sample  = NULL,
+chain   = NULL,
+effect  = c('microbePrevalence', colnames(modelMat)[1:NEffects], colnames(hostAncestors[[i]])),
+taxnode = colnames(microbeAncestors)))
+
 save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
-                                                
+
 baseLevelEffects <- array(NA,
-                          dim=c(NMCSamples,
-                                NChains * NTrees,
-                                length(sumconts),
-                                NMicrobeNodes),
-                          dimnames=list(sample  = NULL,
-                                        chain   = NULL,
-                                        effect  = sumconts,
-                                        taxnode = colnames(microbeAncestors)))
+dim=c(NMCSamples,
+NChains * NTrees,
+length(sumconts),
+NMicrobeNodes),
+dimnames=list(sample  = NULL,
+chain   = NULL,
+effect  = sumconts,
+taxnode = colnames(microbeAncestors)))
 for(j in 1:NMCSamples) {
     for(k in 1:(NChains * NTrees)) {
         for(m in sumconts) {
@@ -590,9 +590,9 @@ save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
 
 for(l in 1:(NEffects + NHostNodes + 1)) {
     yeah <- monitor(array(scaledMicrobeNodeEffects[,,l,],
-                          dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes)),
-                    warmup = warmup,
-                    probs = c(0.05, 0.95))
+    dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes)),
+    warmup = warmup,
+    probs = c(0.05, 0.95))
     rownames(yeah) <- rownames(microbeAncestors)
     cat('\t', file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')))
     write.table(yeah, file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')), sep='\t', quote=F,append=T)
@@ -600,9 +600,9 @@ for(l in 1:(NEffects + NHostNodes + 1)) {
 
 for(m in sumconts) {
     yeah <- monitor(array(baseLevelEffects[,,m,],
-                          dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes)),
-                    warmup = warmup,
-                    probs = c(0.05, 0.95))
+    dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes)),
+    warmup = warmup,
+    probs = c(0.05, 0.95))
     rownames(yeah) <- rownames(microbeAncestors)
     cat('\t', file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')))
     write.table(yeah, file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')), sep='\t', quote=F,append=T)
