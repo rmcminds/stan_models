@@ -100,10 +100,10 @@ generaOfUnknowns <- sapply(study.species.missing, function(x) strsplit(x, '_')[[
 
 y.old <- fulltable[idx, ]
 
-y.old.filt <- apply(y.old,2,function(x) {
+y.old.filt <- t(apply(y.old,1,function(x) {
     temp <- x/sum(x)
     return(temp > minPercent & !is.na(temp))
-})
+}))
 y.old.binary <- apply(y.old,2,function(x) x > 0)
 mode(y.old.binary) <- 'numeric'
 
@@ -122,7 +122,7 @@ colnames(tax) <- c('Kingdom','Phylum','Class','Order','Family','Genus','Species'
 endos <- rownames(tax[tax[,'Family']=='f__Endozoicimonaceae' & !is.na(tax[,'Family']),])
 myEndos <- colnames(y.binary.filtered)[colnames(y.binary.filtered) %in% endos]
 
-oceanos <- rownames(tax[tax[,'Order']=='o__Oceanospirillales' & !is.na(tax[,'Family']),])
+oceanos <- rownames(tax[tax[,'Order']=='o__Oceanospirillales' & !is.na(tax[,'Order']),])
 myOceanos <- colnames(y.binary.filtered)[colnames(y.binary.filtered) %in% oceanos]
 myOceanosSampled <- sample(myOceanos[!myOceanos %in% myEndos], ceiling(length(myEndos) / 20))
 
@@ -192,9 +192,6 @@ NMicrobeNodes <- NMicrobeTips + NIntMicrobeNodes - 1
 
 microbeEdgeOrder <- order(microbeTree.Y.root$edge[,2])
 microbeEdges <- microbeTree.Y.root$edge.length[microbeEdgeOrder]
-
-dir.create(outdir, recursive=T)
-save.image(file.path(outdir,'setup.RData'))
 
 allnodes <- unique(microbeTree.Y.root$edge[,1])
 NSamplesRaw <- nrow(y)
