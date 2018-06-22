@@ -75,6 +75,7 @@ hostTree <- read.tree(hostTreePath)
 hostTree <- .compressTipLabel(hostTree)
 ##
 
+possibleFungidSpecs <- grep(paste0(paste(possibleFungidGenera,collapse='|'),'_'), attr(hostTree, "TipLabel"), value=T)
 
 map <- read.table(mapfilePath,header=T,sep='\t',comment.char='',check.names=F)
 rownames(map) <- map[,'#SampleID']
@@ -99,7 +100,10 @@ generaOfUnknowns <- sapply(study.species.missing, function(x) strsplit(x, '_')[[
 
 y.old <- fulltable[idx, ]
 
-y.old.filt <- apply(y.old,2,function(x) x/sum(x) > minPercent)
+y.old.filt <- apply(y.old,2,function(x) {
+    temp <- x/sum(x)
+    return(temp > minPercent & !is.na(temp))
+})
 y.old.binary <- apply(y.old,2,function(x) x > 0)
 mode(y.old.binary) <- 'numeric'
 
@@ -115,9 +119,16 @@ rownames(tax) <- rownames(taxdat)
 colnames(tax) <- c('Kingdom','Phylum','Class','Order','Family','Genus','Species')
 
 
-endos <- rownames(tax[(tax[,'Family']=='f__Endozoicimonaceae' | tax[,'Family']=='f__Hahellaceae' | tax[,'Family']=='f__HOC21' | tax[,'Family']=='f__Oleiphilaceae') & !is.na(tax[,'Family']),])
+endos <- rownames(tax[tax[,'Family']=='f__Endozoicimonaceae' & !is.na(tax[,'Family']),])
+myEndos <- colnames(y.binary.filtered)[colnames(y.binary.filtered) %in% endos]
 
-y.binary.filtered.endos <- y.binary.filtered[,colnames(y.binary.filtered) %in% endos]
+oceanos <- rownames(tax[tax[,'Order']=='o__Oceanospirillales' & !is.na(tax[,'Family']),])
+myOceanos <- colnames(y.binary.filtered)[colnames(y.binary.filtered) %in% oceanos]
+myOceanosSampled <- sample(myOceanos[!myOceanos %in% myEndos], ceiling(length(myEndos) / 20))
+
+myOthersSampled <- sample(colnames(y.binary.filtered)[!colnames(y.binary.filtered) %in% c(myEndos, myOceanos)], ceiling(length(myEndos) / 20))
+
+y.binary.filtered.endos <- y.binary.filtered[,colnames(y.binary.filtered) %in% c(myEndos, myOceanosSampled, myOthersSampled)]
 
 
 
@@ -246,7 +257,7 @@ boundaries <- matrix(NA,nrow=NTrees, ncol=NTimeBins-1)
 for(i in 1:NTrees) {
     sampleMap[[i]] <- newermap
     fungidSps <- grep('Fungid',levels(sampleMap[[i]][,sampleTipKey]))
-    levels(sampleMap[[i]][,sampleTipKey])[fungidSps] <- sample(grep(paste0(paste(possibleFungidGenera,collapse='|'),'_'), attr(hostTree, "TipLabel"), value=T), length(fungidSps)) ##assign unidentified Fungids to a random member of the group independently for each tree
+    levels(sampleMap[[i]][,sampleTipKey])[fungidSps] <- sample(possibleFungidSpecs[!possibleFungidSpecs %in% levels(sampleMap[[i]][,sampleTipKey])], length(fungidSps)) ##assign unidentified Fungids to a random member of the group independently for each tree
     for (j in unique(generaOfUnknowns)) {
         possibleGenera <- attr(hostTree, "TipLabel")[!attr(hostTree, "TipLabel") %in% levels(sampleMap[[i]][,sampleTipKey])]
         if(!any(grepl(j,possibleGenera))) {
