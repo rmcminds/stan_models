@@ -395,23 +395,16 @@ for(i in 1:NTrees) {
     relativeEvolRates <- extract(fit[[i]], pars='relativeEvolRates')[[1]]
     colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - ',meanBoundariesRounded[4],' mya'), paste0(meanBoundariesRounded[4],' - present'))
 
-    pdf(file=file.path(currplotdir,'evolRatesRelToWeightedMean.pdf'), width=25, height=15)
-    boxplot(relativeEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to Weighted Mean')
+    pdf(file=file.path(currplotdir,'evolRatesRelToMRCA.pdf'), width=25, height=15)
+    boxplot(relativeEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to MRCA')
+    graphics.off()
+    
+    pdf(file=file.path(currplotdir,'logEvolRatesRelToMRCA.pdf'), width=25, height=15)
+    boxplot(log(relativeEvolRates), xlab='Time Period', ylab='Log Rate of Evolution Relative to MRCA')
     graphics.off()
 
 	save(relativeEvolRates,file=file.path(currdatadir,'relativeEvolRates.RData'))
     
-    relativeEvolRate4p5 <- (relativeEvolRates[,4] + relativeEvolRates[,5]) / (timeBinSizes[[i]][[4]] + timeBinSizes[[i]][[5]])
-    relativeEvolRatesMerged45 <- cbind(relativeEvolRates[,-c(4,5)],relativeEvolRate4p5)
-    colnames(relativeEvolRates)[[4]] <- paste0(meanBoundariesRounded[3],' - present')
-    
-    pdf(file=file.path(currplotdir,'evolRatesRelToWeightedMeanMerged45.pdf'), width=25, height=15)
-    boxplot(relativeEvolRatesMerged45, xlab='Time Period', ylab='Rate of Evolution Relative to Weighted Mean')
-    graphics.off()
-    
-    pdf(file=file.path(currplotdir,'logEvolRatesRelToWeightedMeanMerged45.pdf'), width=25, height=15)
-    boxplot(log(relativeEvolRatesMerged45), xlab='Time Period', ylab='Log Rate of Evolution Relative to Weighted Mean')
-    graphics.off()
     ##
     
     ## summarize effects
@@ -523,23 +516,15 @@ save(stDProps,file=file.path(currdatadir,'stDProps.RData'))
 relativeEvolRates <- extract(allfit, pars='relativeEvolRates')[[1]]
 colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - ',meanBoundariesRounded[4],' mya'), paste0(meanBoundariesRounded[4],' - present'))
 
-pdf(file=file.path(currplotdir,'evolRatesRelToWeightedMean.pdf'), width=25, height=15)
-boxplot(relativeEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to Weighted Mean')
+pdf(file=file.path(currplotdir,'evolRatesRelToMRCA.pdf'), width=25, height=15)
+boxplot(relativeEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to MRCA')
+graphics.off()
+
+pdf(file=file.path(currplotdir,'logEvolRatesRelToMRCA.pdf'), width=25, height=15)
+boxplot(log(relativeEvolRates), xlab='Time Period', ylab='Log Rate of Evolution Relative to MRCA')
 graphics.off()
 
 save(relativeEvolRates,file=file.path(currdatadir,'relativeEvolRates.RData'))
-
-relativeEvolRate4p5 <- (relativeEvolRates[,4] + relativeEvolRates[,5]) / (timeBinSizes[[i]][[4]] + timeBinSizes[[i]][[5]])
-relativeEvolRatesMerged45 <- cbind(relativeEvolRates[,-c(4,5)],relativeEvolRate4p5)
-colnames(relativeEvolRates)[[4]] <- paste0(meanBoundariesRounded[3],' - present')
-
-pdf(file=file.path(currplotdir,'evolRatesADivRelToWeightedMeanMerged45.pdf'), width=25, height=15)
-boxplot(relativeEvolRatesMerged45, xlab='Time Period', ylab='Rate of Evolution Relative to Weighted Mean')
-graphics.off()
-
-pdf(file=file.path(currplotdir,'logEvolRatesADivRelToWeightedMeanMerged45.pdf'), width=25, height=15)
-boxplot(log(relativeEvolRatesMerged45), xlab='Time Period', ylab='Log Rate of Evolution Relative to Weighted Mean')
-graphics.off()
 
 ## summarize the mean branch lengths of the microbes
 sums <- summary(allfit, pars='microbeScales', probs=c(0.05,0.95), use_cache = F)
