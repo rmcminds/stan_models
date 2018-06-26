@@ -37,7 +37,7 @@ parameters {
 transformed parameters {
     vector<lower=0>[2 * NFactors + 3] scales;
     vector<lower=0>[3] metaScales;
-    vector[NTimeBins] relativeEvolRatesRaw;
+    vector[NTimeBins] relativeEvolRates;
     row_vector<lower=0>[NMicrobeNodes] microbeVarRaw;
     row_vector<lower=0>[NMicrobeNodes] microbeScales;
     vector<lower=0>[NHostNodes] hostVarRaw;
@@ -58,9 +58,9 @@ transformed parameters {
     microbeScales
         = sqrt(microbeVarRaw
                / mean(microbeVarRaw * microbeAncestors[, 1:NMicrobeTips]));
-    relativeEvolRatesRaw
+    relativeEvolRates
         = append_row(1,
-            exp(timeBinMetaVar
+            exp(cumulative_sum(timeBinMetaVar)
                 * metaScales[2]
                 * sqrt(hostMetaVarProps[1])));
     hostVarRaw
@@ -69,7 +69,7 @@ transformed parameters {
                 * metaScales[2]
                 * sqrt(hostMetaVarProps[2]))
           .* (edgeToBin
-              * relativeEvolRatesRaw);
+              * relativeEvolRates);
     hostScales
         = scales[2 * NFactors + 1]
           * sqrt(hostVarRaw
@@ -123,7 +123,4 @@ model {
     for (n in 1:NObs)
         logit_ratios[n] = sampleTipEffects[sampleNames[n], microbeTipNames[n]];
     present ~ bernoulli_logit(logit_ratios);
-}
-generated quantities {
-    vector[NTimeBins] relativeEvolRates = relativeEvolRatesRaw / mean(relativeEvolRatesRaw);
 }
