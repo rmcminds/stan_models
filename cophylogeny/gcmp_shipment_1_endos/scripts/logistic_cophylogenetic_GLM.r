@@ -427,6 +427,16 @@ for(i in 1:NTrees) {
     save(metaVarProps,file=file.path(currdatadir,'metaVarProps.RData'))
     ##
     
+    ## plot evolutionary rate changes
+    timeBinMetaVar <- extract(fit[[i]], pars='timeBinMetaVar')[[1]]
+    colnames(timeBinMetaVar) <- c(paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - present'))
+    
+    pdf(file=file.path(currplotdir,'timeBinMetaVar.pdf'), width=25, height=15)
+    boxplot(timeBinMetaVar, xlab='Time Period', ylab='timeBinMetaVar')
+    graphics.off()
+    
+    save(timeBinMetaVar,file=file.path(currdatadir,'timeBinMetaVar.RData'))
+
     ## compare rates of host evolution in each time bin
     relativeEvolRates <- extract(fit[[i]], pars='relativeEvolRates')[[1]]
     colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - present'))
@@ -546,6 +556,16 @@ boxplot(stDProps, cex.axis=0.5, las=2)
 graphics.off()
 
 save(stDProps,file=file.path(currdatadir,'stDProps.RData'))
+
+## plot evolutionary rate changes
+timeBinMetaVar <- extract(allfit, pars='timeBinMetaVar')[[1]]
+colnames(timeBinMetaVar) <- c(paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - present'))
+
+pdf(file=file.path(currplotdir,'timeBinMetaVar.pdf'), width=25, height=15)
+boxplot(timeBinMetaVar, xlab='Time Period', ylab='timeBinMetaVar')
+graphics.off()
+
+save(timeBinMetaVar,file=file.path(currdatadir,'timeBinMetaVar.RData'))
 
 relativeEvolRates <- extract(allfit, pars='relativeEvolRates')[[1]]
 colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - present'))
