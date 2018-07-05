@@ -375,7 +375,7 @@ save(timeBinSizes,file=file.path(outdir,'timeBinSizes.RData'))
 ##
 
 ## run the model!
-fit <- mclapply(1:NTrees, function(i) stan(file=modelPath, data=standat[[i]], control=list(adapt_delta=adapt_delta, max_treedepth=max_treedepth), iter=NIterations, thin=thin, chains=NChains, seed=seed, chain_id=(NChains * (i - 1) + (1:NChains)) ))
+fit <- mclapply(1:NTrees, function(i) stan(file=modelPath, data=standat[[i]], control=list(adapt_delta=adapt_delta, max_treedepth=max_treedepth), iter=NIterations, thin=thin, chains=NChains, seed=seed, chain_id=(NChains * (i - 1) + (1:NChains)) ), mc.preschedule=F)
 
 save(fit, file=file.path(outdir,'fit.RData'))
 ##
