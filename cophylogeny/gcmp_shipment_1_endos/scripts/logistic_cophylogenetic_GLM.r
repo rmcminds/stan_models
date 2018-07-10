@@ -375,8 +375,8 @@ save(hostTreesSampled,file=file.path(outdir,'hostTreesSampled.RData'))
 save(timeBinSizes,file=file.path(outdir,'timeBinSizes.RData'))
 ##
 
-cat('Fitting model')
-cat(as.character(Sys.time()))
+cat('\nFitting model\n')
+cat(paste0(as.character(Sys.time()),'\n'))
 
 ## run the model!
 fit <- mclapply(1:NTrees,
@@ -394,8 +394,8 @@ fit <- mclapply(1:NTrees,
         }, error = function(e) NA)
     }, mc.preschedule=F)
 
-cat('Saving results')
-cat(as.character(Sys.time()))
+cat('\nSaving results\n')
+cat(paste0(as.character(Sys.time()),'\n'))
 
 save(fit, file=file.path(outdir,'fit.RData'))
 ##
