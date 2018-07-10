@@ -20,7 +20,7 @@ fulltablePath <- 'raw_data/reference-hit.txt' #250 bp deblur otu table output
 taxAssignmentPath <- 'raw_data/reference-hit.seqs_tax_assignments.txt' #greegenes taxonomy
 modelPath <- 'scripts/logistic_cophylogenetic_GLM_varVar.stan' #stan model
 seed <- 123
-timeLimit <- 3600 * 1.5
+timeLimit <- 30 * 24 * 60 * 60
 
 outdir <- file.path('output',gsub(':', '-', gsub(' ', '_', Sys.time())))
 
@@ -32,7 +32,7 @@ minSamps <- 1 # minimum number of samples that a sequence variant is present in 
 
 ## model options
 aveStDPriorExpect <- 1.0
-NTrees <- 1 ## number of random trees to sample and to fit the model to
+NTrees <- 10 ## number of random trees to sample and to fit the model to
 NSplits <- 25 ## desired number of nodes per host timeBin
 ultrametricizeMicrobeTree <- TRUE
 ##
@@ -385,14 +385,15 @@ fit <- mclapply(1:NTrees,
         tryCatch({
             stan(file     = modelPath,
                  data     = standat[[i]],
-                 control  = list(adapt_delta=adapt_delta, max_treedepth=max_treedepth),
+                 control  = list(adapt_delta   = adapt_delta,
+                                 max_treedepth = max_treedepth),
                  iter     = NIterations,
                  thin     = thin,
                  chains   = NChains,
                  seed     = seed,
                  chain_id = (NChains * (i - 1) + (1:NChains)))
         }, error = function(e) NA)
-    }, mc.preschedule=F)
+    }, mc.preschedule = F)
 
 cat('\nSaving results\n')
 cat(paste0(as.character(Sys.time()),'\n'))
