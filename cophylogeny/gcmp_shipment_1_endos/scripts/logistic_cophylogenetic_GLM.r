@@ -20,6 +20,7 @@ fulltablePath <- 'raw_data/reference-hit.txt' #250 bp deblur otu table output
 taxAssignmentPath <- 'raw_data/reference-hit.seqs_tax_assignments.txt' #greegenes taxonomy
 modelPath <- 'scripts/logistic_cophylogenetic_GLM_varVar.stan' #stan model
 seed <- 123
+timeLimit <- 3600 * 1.5
 
 outdir <- file.path('output',gsub(':', '-', gsub(' ', '_', Sys.time())))
 
@@ -31,7 +32,7 @@ minSamps <- 1 # minimum number of samples that a sequence variant is present in 
 
 ## model options
 aveStDPriorExpect <- 1.0
-NTrees <- 10 ## number of random trees to sample and to fit the model to
+NTrees <- 1 ## number of random trees to sample and to fit the model to
 NSplits <- 25 ## desired number of nodes per host timeBin
 ultrametricizeMicrobeTree <- TRUE
 ##
@@ -374,16 +375,37 @@ save(hostTreesSampled,file=file.path(outdir,'hostTreesSampled.RData'))
 save(timeBinSizes,file=file.path(outdir,'timeBinSizes.RData'))
 ##
 
+cat('Fitting model')
+cat(as.character(Sys.time()))
+
 ## run the model!
-fit <- mclapply(1:NTrees, function(i) stan(file=modelPath, data=standat[[i]], control=list(adapt_delta=adapt_delta, max_treedepth=max_treedepth), iter=NIterations, thin=thin, chains=NChains, seed=seed, chain_id=(NChains * (i - 1) + (1:NChains)) ), mc.preschedule=F)
+fit <- mclapply(1:NTrees,
+    function(i) {
+        setTimeLimit(timeLimit)
+        tryCatch({
+            stan(file     = modelPath,
+                 data     = standat[[i]],
+                 control  = list(adapt_delta=adapt_delta, max_treedepth=max_treedepth),
+                 iter     = NIterations,
+                 thin     = thin,
+                 chains   = NChains,
+                 seed     = seed,
+                 chain_id = (NChains * (i - 1) + (1:NChains)))
+        }, error = function(e) NA)
+    }, mc.preschedule=F)
+
+cat('Saving results')
+cat(as.character(Sys.time()))
 
 save(fit, file=file.path(outdir,'fit.RData'))
 ##
 
+fitModes <- sapply(fit, function(x) x@mode)
+
 ## summarize the results separately for each sampled host tree
 for(i in 1:NTrees) {
     
-    if(is.na(fit[[i]])) next
+    if (fitModes[[i]] != 0) next
     
     check_hmc_diagnostics(fit[[i]])
     
@@ -548,105 +570,108 @@ dir.create(currplotdir, recursive=T)
 dir.create(currtabledir, recursive=T)
 dir.create(currdatadir, recursive=T)
 
-NSuccessTrees <- sum(!is.na(fit))
-allfit <- sflist2stanfit(fit[!is.na(fit)])
+NSuccessTrees <- sum(fitModes == 0)
 
-stDProps <- extract(allfit, pars='stDProps')[[1]]
-colnames(stDProps) <- c(paste0('ADiv.',colnames(factLevelMat)), paste0('Specificity.',colnames(factLevelMat)), 'ADiv.host', 'host.specificity', 'microbe.prevalence')
+if (NSuccessTrees > 1) {
+    
+    allfit <- sflist2stanfit(fit[fitModes == 0])
 
-pdf(file=file.path(currplotdir,'scalesboxes.pdf'), width=25, height=15)
-boxplot(stDProps, cex.axis=0.5, las=2)
-graphics.off()
+    stDProps <- extract(allfit, pars='stDProps')[[1]]
+    colnames(stDProps) <- c(paste0('ADiv.',colnames(factLevelMat)), paste0('Specificity.',colnames(factLevelMat)), 'ADiv.host', 'host.specificity', 'microbe.prevalence')
 
-save(stDProps,file=file.path(currdatadir,'stDProps.RData'))
+    pdf(file=file.path(currplotdir,'scalesboxes.pdf'), width=25, height=15)
+    boxplot(stDProps, cex.axis=0.5, las=2)
+    graphics.off()
 
-## plot evolutionary rate changes
-timeBinMetaVar <- extract(allfit, pars='timeBinMetaVar')[[1]]
-colnames(timeBinMetaVar) <- c(paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - present'))
+    save(stDProps,file=file.path(currdatadir,'stDProps.RData'))
 
-pdf(file=file.path(currplotdir,'timeBinMetaVar.pdf'), width=25, height=15)
-boxplot(timeBinMetaVar, xlab='Time Period', ylab='timeBinMetaVar')
-graphics.off()
+    ## plot evolutionary rate changes
+    timeBinMetaVar <- extract(allfit, pars='timeBinMetaVar')[[1]]
+    colnames(timeBinMetaVar) <- c(paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - present'))
 
-save(timeBinMetaVar,file=file.path(currdatadir,'timeBinMetaVar.RData'))
+    pdf(file=file.path(currplotdir,'timeBinMetaVar.pdf'), width=25, height=15)
+    boxplot(timeBinMetaVar, xlab='Time Period', ylab='timeBinMetaVar')
+    graphics.off()
 
-relativeEvolRates <- extract(allfit, pars='relativeEvolRates')[[1]]
-colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - present'))
+    save(timeBinMetaVar,file=file.path(currdatadir,'timeBinMetaVar.RData'))
 
-pdf(file=file.path(currplotdir,'evolRatesRelToMRCA.pdf'), width=25, height=15)
-boxplot(relativeEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to MRCA')
-graphics.off()
+    relativeEvolRates <- extract(allfit, pars='relativeEvolRates')[[1]]
+    colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - present'))
 
-pdf(file=file.path(currplotdir,'logEvolRatesRelToMRCA.pdf'), width=25, height=15)
-boxplot(log(relativeEvolRates), xlab='Time Period', ylab='Log Rate of Evolution Relative to MRCA')
-graphics.off()
+    pdf(file=file.path(currplotdir,'evolRatesRelToMRCA.pdf'), width=25, height=15)
+    boxplot(relativeEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to MRCA')
+    graphics.off()
 
-save(relativeEvolRates,file=file.path(currdatadir,'relativeEvolRates.RData'))
+    pdf(file=file.path(currplotdir,'logEvolRatesRelToMRCA.pdf'), width=25, height=15)
+    boxplot(log(relativeEvolRates), xlab='Time Period', ylab='Log Rate of Evolution Relative to MRCA')
+    graphics.off()
 
-## summarize the mean branch lengths of the microbes
-sums <- summary(allfit, pars='microbeScales', probs=c(0.05,0.95), use_cache = F)
-newEdges <- sums$summary[,'mean']^2
-microbeTree.Y.root$edge.length <- newEdges[order(microbeEdgeOrder)]
-pdf(file=file.path(currplotdir,'microbeTreeWEstimatedEdgeLengths.pdf'), width=25, height=15)
-plot(microbeTree.Y.root, cex=0.5)
-graphics.off()
-##
+    save(relativeEvolRates,file=file.path(currdatadir,'relativeEvolRates.RData'))
 
-## summarize effects
-currsubtabledir <- file.path(currtabledir, 'nodeEffects')
-dir.create(currsubtabledir, recursive=T)
+    ## summarize the mean branch lengths of the microbes
+    sums <- summary(allfit, pars='microbeScales', probs=c(0.05,0.95), use_cache = F)
+    newEdges <- sums$summary[,'mean']^2
+    microbeTree.Y.root$edge.length <- newEdges[order(microbeEdgeOrder)]
+    pdf(file=file.path(currplotdir,'microbeTreeWEstimatedEdgeLengths.pdf'), width=25, height=15)
+    plot(microbeTree.Y.root, cex=0.5)
+    graphics.off()
+    ##
 
-scaledMicrobeNodeEffects <- array(extract(allfit, pars='scaledMicrobeNodeEffects', permuted=F, inc_warmup=T),
-dim=c(NMCSamples,
-NChains * NSuccessTrees,
-NEffects + NHostNodes + 1,
-NMicrobeNodes),
-dimnames=list(sample  = NULL,
-chain   = NULL,
-effect  = c('microbePrevalence', colnames(modelMat)[1:NEffects], colnames(hostAncestors[[i]])),
-taxnode = colnames(microbeAncestors)))
+    ## summarize effects
+    currsubtabledir <- file.path(currtabledir, 'nodeEffects')
+    dir.create(currsubtabledir, recursive=T)
 
-save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
+    scaledMicrobeNodeEffects <- array(extract(allfit, pars='scaledMicrobeNodeEffects', permuted=F, inc_warmup=T),
+    dim=c(NMCSamples,
+    NChains * NSuccessTrees,
+    NEffects + NHostNodes + 1,
+    NMicrobeNodes),
+    dimnames=list(sample  = NULL,
+    chain   = NULL,
+    effect  = c('microbePrevalence', colnames(modelMat)[1:NEffects], colnames(hostAncestors[[i]])),
+    taxnode = colnames(microbeAncestors)))
 
-baseLevelEffects <- array(NA,
-dim=c(NMCSamples,
-NChains * NSuccessTrees,
-length(sumconts),
-NMicrobeNodes),
-dimnames=list(sample  = NULL,
-chain   = NULL,
-effect  = sumconts,
-taxnode = colnames(microbeAncestors)))
-for(j in 1:NMCSamples) {
-    for(k in 1:(NChains * NSuccessTrees)) {
-        for(m in sumconts) {
-            baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j,k,rownames(factLevelMat)[factLevelMat[,m]==1],])
+    save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
+
+    baseLevelEffects <- array(NA,
+    dim=c(NMCSamples,
+    NChains * NSuccessTrees,
+    length(sumconts),
+    NMicrobeNodes),
+    dimnames=list(sample  = NULL,
+    chain   = NULL,
+    effect  = sumconts,
+    taxnode = colnames(microbeAncestors)))
+    for(j in 1:NMCSamples) {
+        for(k in 1:(NChains * NSuccessTrees)) {
+            for(m in sumconts) {
+                baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j,k,rownames(factLevelMat)[factLevelMat[,m]==1],])
+            }
         }
     }
+
+    save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
+
+    for(l in 1:(NEffects + NHostNodes + 1)) {
+        yeah <- monitor(array(scaledMicrobeNodeEffects[,,l,],
+        dim = c(NMCSamples, NChains * NSuccessTrees, NMicrobeNodes)),
+        warmup = warmup,
+        probs = c(0.05, 0.95))
+        rownames(yeah) <- rownames(microbeAncestors)
+        cat('\t', file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')))
+        write.table(yeah, file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')), sep='\t', quote=F,append=T)
+    }
+
+    for(m in sumconts) {
+        yeah <- monitor(array(baseLevelEffects[,,m,],
+        dim = c(NMCSamples, NChains * NSuccessTrees, NMicrobeNodes)),
+        warmup = warmup,
+        probs = c(0.05, 0.95))
+        rownames(yeah) <- rownames(microbeAncestors)
+        cat('\t', file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')))
+        write.table(yeah, file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')), sep='\t', quote=F,append=T)
+    }
+    ##
 }
-
-save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
-
-for(l in 1:(NEffects + NHostNodes + 1)) {
-    yeah <- monitor(array(scaledMicrobeNodeEffects[,,l,],
-    dim = c(NMCSamples, NChains * NSuccessTrees, NMicrobeNodes)),
-    warmup = warmup,
-    probs = c(0.05, 0.95))
-    rownames(yeah) <- rownames(microbeAncestors)
-    cat('\t', file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')))
-    write.table(yeah, file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')), sep='\t', quote=F,append=T)
-}
-
-for(m in sumconts) {
-    yeah <- monitor(array(baseLevelEffects[,,m,],
-    dim = c(NMCSamples, NChains * NSuccessTrees, NMicrobeNodes)),
-    warmup = warmup,
-    probs = c(0.05, 0.95))
-    rownames(yeah) <- rownames(microbeAncestors)
-    cat('\t', file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')))
-    write.table(yeah, file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')), sep='\t', quote=F,append=T)
-}
-##
-
 
 ## fin
