@@ -3,3 +3,4 @@ output/
 *.rds
 private_*
 sge_logs*
+intermediate_data/
