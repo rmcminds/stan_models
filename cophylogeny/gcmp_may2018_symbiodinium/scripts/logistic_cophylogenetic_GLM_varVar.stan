@@ -20,6 +20,15 @@ data {
     matrix[NSamples, NHostNodes] hostAncestorsExpanded;
     row_vector[NMicrobeNodes] microbeEdges;
 }
+transformed data {
+    matrix[NSamples, 1 + NEffects + NHostNodes] fullModelMat = append_col(rep_vector(1, NSamples),
+                                                                append_col(modelMat,
+                                                                 hostAncestorsExpanded));
+    vector[rows(csr_extract_w(fullModelMat))] wFullModelMat = csr_extract_w(fullModelMat);
+    int vFullModelMat[size(csr_extract_v(fullModelMat))] = csr_extract_v(fullModelMat);
+    int uFullModelMat[size(csr_extract_u(fullModelMat))] = csr_extract_u(fullModelMat);
+
+}
 parameters {
     real<lower=0> aveStD;
     simplex[2 * NFactors + 3] stDProps;
@@ -114,12 +123,19 @@ model {
     globalIntercept ~ normal(0, 50);
     rawAlphaDivEffects ~ normal(0,1);
     to_vector(rawMicrobeNodeEffects) ~ normal(0,1);
-    sampleTipEffects
-        = append_col(rep_vector(1, NSamples),
-            append_col(modelMat,
-                hostAncestorsExpanded))
-          * (rep_matrix(scaledAlphaDivEffects, NMicrobeTips)
-             + scaledMicrobeNodeEffects * microbeAncestors[, 1:NMicrobeTips]);
+
+    microbePreMult = (microbeAncestors[, 1:NMicrobeTips]' * scaledMicrobeNodeEffects')';
+
+    for (t in 1:NMicrobeTips) {
+        sampleTipEffects[, t]
+            = csr_matrix_times_vector(NSamples,
+                                      1 + NEffects + NHostNodes,
+                                      wFullModelMat,
+                                      vFullModelMat,
+                                      uFullModelMat,
+                                      scaledAlphaDivEffects
+                                       + scaledMicrobeNodeEffects * microbeAncestors[, t]);
+    }
     for (n in 1:NObs)
         logit_ratios[n] = sampleTipEffects[sampleNames[n], microbeTipNames[n]];
     present ~ bernoulli_logit(logit_ratios);
