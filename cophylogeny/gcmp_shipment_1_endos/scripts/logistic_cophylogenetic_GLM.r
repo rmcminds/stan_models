@@ -10,7 +10,6 @@ library(reshape2)
 library(paleotree)
 library(parallel)
 rstan_options(auto_write = TRUE)
-options(mc.cores = parallel::detectCores())
 
 
 microbeTreePath <- 'raw_data/gg_constrained_fastttree.tre' #ML microbial phylogeny
@@ -32,16 +31,17 @@ minSamps <- 1 # minimum number of samples that a sequence variant is present in 
 
 ## model options
 aveStDPriorExpect <- 1.0
-NTrees <- 10 ## number of random trees to sample and to fit the model to
-NSplits <- 25 ## desired number of nodes per host timeBin
+NTrees <- 1 ## number of random trees to sample and to fit the model to
+NSplits <- 10 ## desired number of nodes per host timeBin
 ultrametricizeMicrobeTree <- TRUE
 ##
 
 ## Stan options
+NCores <- 10
 NChains <- 1 ## this is per tree; since I'm doing a large number of trees in parallel i'll just do one chain for each
-NIterations <- 2500 ## will probably need >10,000? maybe start with 2, check convergence, double it, check, double, check, double, etc.?
-max_treedepth <- 15 ## a warning will tell you if this needs to be increased
-adapt_delta <- 0.9 ## increase this if you get 'divergences' - even one means your model fit sucks!
+NIterations <- 500 ## will probably need >10,000? maybe start with 2, check convergence, double it, check, double, check, double, etc.?
+max_treedepth <- 10 ## a warning will tell you if this needs to be increased
+adapt_delta <- 0.8 ## increase this if you get 'divergences' - even one means your model fit sucks!
 minMCSamples <- 2000 ## approximate number of Monte Carlo samples to save from the fit
 ##
 
@@ -54,11 +54,11 @@ sampleTipKey <- 'host_scientific_name'
 
 filterfunction <- function(dfin) {
     levels(dfin[,sampleTipKey]) <- gsub(' ','_',levels(dfin[,sampleTipKey]))
-    df2 <- droplevels(dfin[(dfin$tissue_compartment=='T') & !grepl(paste(c('Unknown|Missing',taxaToExclude),collapse='|'),dfin[,sampleTipKey],ignore.case=T) ,]) #| dfin$tissue_compartment=='S' | dfin$tissue_compartment=='M'
+    df2 <- droplevels(dfin[(dfin$tissue_compartment=='T' | dfin$tissue_compartment=='S' | dfin$tissue_compartment=='M') & !grepl(paste(c('Unknown|Missing',taxaToExclude),collapse='|'),dfin[,sampleTipKey],ignore.case=T) ,])
     contrasts(df2$ocean) <- 'contr.sum'
     contrasts(df2$complex_robust) <- 'contr.sum'
     contrasts(df2$host_scientific_name) <- 'contr.sum'
-    #contrasts(df2$tissue_compartment) <- 'contr.sum'
+    contrasts(df2$tissue_compartment) <- 'contr.sum'
     contrasts(df2$reef_name) <- 'contr.sum'
     contrasts(df2$colony_name) <- 'contr.sum'
     contrasts(df2$host_genus) <- 'contr.sum'
@@ -209,13 +209,11 @@ microbeAncestors <- microbeAncestors[-(NMicrobeTips + 1), -(NMicrobeTips + 1)]
 
 newermap$sequencing_depth <- rowSums(y[,microbeTips])
 newermap$log_sequencing_depth <- log(newermap$sequencing_depth)
-newermap$log_sequencing_depth_scaled <- scale(newermap$log_sequencing_depth)
 
 
 
 
-
-modelform <- ~ ocean + reef_name + log_sequencing_depth_scaled # + tissue_compartment + colony_name
+modelform <- ~ ocean + reef_name + log_sequencing_depth + tissue_compartment + colony_name
 allfactors <- attr(terms.formula(modelform), "term.labels")
 NFactors <- length(allfactors)
 allfactorder <- sapply(allfactors, function(x) sum(gregexpr(':', x, fixed=TRUE)[[1]] > 0))
@@ -356,10 +354,28 @@ for (i in 1:NTrees) {
 ## collect data to feed to stan
 standat <- list()
 for (i in 1:NTrees) {
-    standat[[i]] <- list(NSamples=NSamples, NObs=NObs, NMicrobeNodes=NMicrobeNodes, NMicrobeTips=NMicrobeTips, NFactors=NFactors, NEffects=NEffects, present=present, sampleNames=sampleNames, microbeTipNames=microbeTipNames, factLevelMat=factLevelMat, microbeAncestors=microbeAncestors, modelMat=modelMat, hostAncestors=hostAncestors[[i]], hostAncestorsExpanded=hostAncestorsExpanded[[i]], edgeToBin=edgeToBin[[i]], NHostNodes=NHostNodes, NTimeBins=NTimeBins, aveStDPriorExpect=aveStDPriorExpect, microbeEdges=microbeEdges)
+    standat[[i]] <- list(NSamples              = NSamples,
+                         NObs                  = NObs,
+                         NMicrobeNodes         = NMicrobeNodes,
+                         NMicrobeTips          = NMicrobeTips,
+                         NFactors              = NFactors,
+                         NEffects              = NEffects,
+                         present               = present,
+                         sampleNames           = sampleNames,
+                         microbeTipNames       = microbeTipNames,
+                         factLevelMat          = factLevelMat,
+                         microbeAncestors      = microbeAncestors,
+                         modelMat              = modelMat,
+                         hostAncestors         = hostAncestors[[i]],
+                         hostAncestorsExpanded = hostAncestorsExpanded[[i]],
+                         edgeToBin             = edgeToBin[[i]],
+                         NHostNodes            = NHostNodes,
+                         NTimeBins             = NTimeBins,
+                         aveStDPriorExpect     = aveStDPriorExpect,
+                         microbeEdges          = microbeEdges)
 }
 
-thin = max(1, floor(NIterations/minMCSamples))
+thin = max(1, floor(NIterations / minMCSamples))
 NMCSamples <- NIterations / thin
 warmup <- floor(NMCSamples / 2)
 ##
@@ -391,9 +407,11 @@ fit <- mclapply(1:NTrees,
                  thin     = thin,
                  chains   = NChains,
                  seed     = seed,
-                 chain_id = (NChains * (i - 1) + (1:NChains)))
+                 chain_id = (NChains * (i - 1) + (1:NChains)),
+                 init     = 0)
         }, error = function(e) NA)
-    }, mc.preschedule = F)
+    }, mc.preschedule = F,
+       mc.cores       = NCores)
 
 cat('\nSaving results\n')
 cat(paste0(as.character(Sys.time()),'\n'))

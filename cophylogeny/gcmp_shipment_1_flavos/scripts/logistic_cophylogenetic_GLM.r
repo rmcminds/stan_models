@@ -10,7 +10,6 @@ library(reshape2)
 library(paleotree)
 library(parallel)
 rstan_options(auto_write = TRUE)
-options(mc.cores = parallel::detectCores())
 
 
 microbeTreePath <- 'raw_data/gg_constrained_fastttree.tre' #ML microbial phylogeny
@@ -25,21 +24,22 @@ timeLimit <- 30 * 24 * 60 * 60
 outdir <- file.path('output',gsub(':', '-', gsub(' ', '_', Sys.time())))
 
 ## filtration options
-minCountSamp <- 100 # minimum sequencing depth for a sample to be included
+minCountSamp <- 5 # minimum sequencing depth for a sample to be included
 minPercent <- 0 # minimum percent of a sample composed of a sequence variant for it to pass the below filter
 minSamps <- 1 # minimum number of samples that a sequence variant is present in at the above threshold for it to be included
 ##
 
 ## model options
 aveStDPriorExpect <- 1.0
-NTrees <- 10 ## number of random trees to sample and to fit the model to
+NTrees <- 1 ## number of random trees to sample and to fit the model to
 NSplits <- 25 ## desired number of nodes per host timeBin
 ultrametricizeMicrobeTree <- TRUE
 ##
 
 ## Stan options
+NCores <- 3
 NChains <- 1 ## this is per tree; since I'm doing a large number of trees in parallel i'll just do one chain for each
-NIterations <- 2500 ## will probably need >10,000? maybe start with 2, check convergence, double it, check, double, check, double, etc.?
+NIterations <- 500 ## will probably need >10,000? maybe start with 2, check convergence, double it, check, double, check, double, etc.?
 max_treedepth <- 15 ## a warning will tell you if this needs to be increased
 adapt_delta <- 0.9 ## increase this if you get 'divergences' - even one means your model fit sucks!
 minMCSamples <- 2000 ## approximate number of Monte Carlo samples to save from the fit
@@ -120,22 +120,14 @@ rownames(tax) <- rownames(taxdat)
 colnames(tax) <- c('Kingdom','Phylum','Class','Order','Family','Genus','Species')
 
 
-endos <- rownames(tax[tax[,'Family']=='f__Endozoicimonaceae' & !is.na(tax[,'Family']),])
-myEndos <- colnames(y.binary.filtered)[colnames(y.binary.filtered) %in% endos]
+flavos <- rownames(tax[tax[,'Family']=='f__Flavobacteriaceae' & !is.na(tax[,'Family']),])
 
-oceanos <- rownames(tax[tax[,'Order']=='o__Oceanospirillales' & !is.na(tax[,'Order']),])
-myOceanos <- colnames(y.binary.filtered)[colnames(y.binary.filtered) %in% oceanos]
-myOceanosSampled <- sample(myOceanos[!myOceanos %in% myEndos], ceiling(length(myEndos) / 20))
-
-myOthersSampled <- sample(colnames(y.binary.filtered)[!colnames(y.binary.filtered) %in% c(myEndos, myOceanos)], ceiling(length(myEndos) / 20))
-
-y.binary.filtered.endos <- y.binary.filtered[,colnames(y.binary.filtered) %in% c(myEndos, myOceanosSampled, myOthersSampled)]
-
+y.binary.filtered.flavos <- y.binary.filtered[,colnames(y.binary.filtered) %in% flavos]
 
 
 ## import microbe tree
 microbeTree <- read.tree(microbeTreePath)
-microbeTree.Y <- drop.tip(microbeTree, microbeTree$tip.label[!microbeTree$tip.label %in% colnames(y.binary.filtered.endos)])
+microbeTree.Y <- drop.tip(microbeTree, microbeTree$tip.label[!microbeTree$tip.label %in% colnames(y.binary.filtered.flavos)])
 ##
 
 
@@ -165,13 +157,13 @@ if(is.null(microbeTree.Y.root$edge.length)) {
 
 
 ## summarize the putative taxa to be estimated
-microbes <- factor(colnames(y.binary.filtered.endos),levels=microbeTree.Y.root$tip.label)
+microbes <- factor(colnames(y.binary.filtered.flavos),levels=microbeTree.Y.root$tip.label)
 microbeNames <- levels(microbes)
 NMicrobeTips <- length(microbeNames)
 ##
 
 ## sort the OTU table so its entries match the tree's tip labels
-y <- y.binary.filtered.endos[,microbeNames]
+y <- y.binary.filtered.flavos[,microbeNames]
 ##
 
 microbeTips <- colnames(y)
@@ -209,13 +201,12 @@ microbeAncestors <- microbeAncestors[-(NMicrobeTips + 1), -(NMicrobeTips + 1)]
 
 newermap$sequencing_depth <- rowSums(y[,microbeTips])
 newermap$log_sequencing_depth <- log(newermap$sequencing_depth)
-newermap$log_sequencing_depth_scaled <- scale(newermap$log_sequencing_depth)
 
 
 
 
 
-modelform <- ~ ocean + reef_name + log_sequencing_depth_scaled # + tissue_compartment + colony_name
+modelform <- ~ ocean + reef_name + log_sequencing_depth # + tissue_compartment + colony_name
 allfactors <- attr(terms.formula(modelform), "term.labels")
 NFactors <- length(allfactors)
 allfactorder <- sapply(allfactors, function(x) sum(gregexpr(':', x, fixed=TRUE)[[1]] > 0))
@@ -356,10 +347,28 @@ for (i in 1:NTrees) {
 ## collect data to feed to stan
 standat <- list()
 for (i in 1:NTrees) {
-    standat[[i]] <- list(NSamples=NSamples, NObs=NObs, NMicrobeNodes=NMicrobeNodes, NMicrobeTips=NMicrobeTips, NFactors=NFactors, NEffects=NEffects, present=present, sampleNames=sampleNames, microbeTipNames=microbeTipNames, factLevelMat=factLevelMat, microbeAncestors=microbeAncestors, modelMat=modelMat, hostAncestors=hostAncestors[[i]], hostAncestorsExpanded=hostAncestorsExpanded[[i]], edgeToBin=edgeToBin[[i]], NHostNodes=NHostNodes, NTimeBins=NTimeBins, aveStDPriorExpect=aveStDPriorExpect, microbeEdges=microbeEdges)
+    standat[[i]] <- list(NSamples              = NSamples,
+                         NObs                  = NObs,
+                         NMicrobeNodes         = NMicrobeNodes,
+                         NMicrobeTips          = NMicrobeTips,
+                         NFactors              = NFactors,
+                         NEffects              = NEffects,
+                         present               = present,
+                         sampleNames           = sampleNames,
+                         microbeTipNames       = microbeTipNames,
+                         factLevelMat          = factLevelMat,
+                         microbeAncestors      = microbeAncestors,
+                         modelMat              = modelMat,
+                         hostAncestors         = hostAncestors[[i]],
+                         hostAncestorsExpanded = hostAncestorsExpanded[[i]],
+                         edgeToBin             = edgeToBin[[i]],
+                         NHostNodes            = NHostNodes,
+                         NTimeBins             = NTimeBins,
+                         aveStDPriorExpect     = aveStDPriorExpect,
+                         microbeEdges          = microbeEdges)
 }
 
-thin = max(1, floor(NIterations/minMCSamples))
+thin = max(1, floor(NIterations / minMCSamples))
 NMCSamples <- NIterations / thin
 warmup <- floor(NMCSamples / 2)
 ##
@@ -393,7 +402,8 @@ fit <- mclapply(1:NTrees,
                  seed     = seed,
                  chain_id = (NChains * (i - 1) + (1:NChains)))
         }, error = function(e) NA)
-    }, mc.preschedule = F)
+    }, mc.preschedule = F,
+       mc.cores       = NCores)
 
 cat('\nSaving results\n')
 cat(paste0(as.character(Sys.time()),'\n'))
