@@ -400,7 +400,9 @@ fit <- mclapply(1:NTrees,
                  thin     = thin,
                  chains   = NChains,
                  seed     = seed,
-                 chain_id = (NChains * (i - 1) + (1:NChains)))
+                 chain_id = (NChains * (i - 1) + (1:NChains)),
+                 pars     = c('rawMicrobeNodeEffects'),
+                 include  = FALSE)
         }, error = function(e) NA)
     }, mc.preschedule = F,
        mc.cores       = NCores)

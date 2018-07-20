@@ -37,9 +37,9 @@ ultrametricizeMicrobeTree <- TRUE
 
 ## Stan options
 NChains <- 1 ## this is per tree; since I'm doing a large number of trees in parallel i'll just do one chain for each
-NIterations <- 5000 ## will probably need >10,000? maybe start with 2, check convergence, double it, check, double, check, double, etc.?
-max_treedepth <- 15 ## a warning will tell you if this needs to be increased
-adapt_delta <- 0.9 ## increase this if you get 'divergences' - even one means your model fit sucks!
+NIterations <- 2500 ## will probably need >10,000? maybe start with 2, check convergence, double it, check, double, check, double, etc.?
+max_treedepth <- 10 ## a warning will tell you if this needs to be increased
+adapt_delta <- 0.8 ## increase this if you get 'divergences' - even one means your model fit sucks!
 minMCSamples <- 2000 ## approximate number of Monte Carlo samples to save from the fit
 ##
 
@@ -319,10 +319,28 @@ for (i in 1:NTrees) {
 ## collect data to feed to stan
 standat <- list()
 for (i in 1:NTrees) {
-    standat[[i]] <- list(NSamples=NSamples, NObs=NObs, NMicrobeNodes=NMicrobeNodes, NMicrobeTips=NMicrobeTips, NFactors=NFactors, NEffects=NEffects, present=present, sampleNames=sampleNames, microbeTipNames=microbeTipNames, factLevelMat=factLevelMat, microbeAncestors=microbeAncestors, modelMat=modelMat, hostAncestors=hostAncestors[[i]], hostAncestorsExpanded=hostAncestorsExpanded[[i]], edgeToBin=edgeToBin[[i]], NHostNodes=NHostNodes, NTimeBins=NTimeBins, aveStDPriorExpect=aveStDPriorExpect, microbeEdges=microbeEdges)
+    standat[[i]] <- list(NSamples              = NSamples,
+                         NObs                  = NObs,
+                         NMicrobeNodes         = NMicrobeNodes,
+                         NMicrobeTips          = NMicrobeTips,
+                         NFactors              = NFactors,
+                         NEffects              = NEffects,
+                         present               = present,
+                         sampleNames           = sampleNames,
+                         microbeTipNames       = microbeTipNames,
+                         factLevelMat          = factLevelMat,
+                         microbeAncestors      = microbeAncestors,
+                         modelMat              = modelMat,
+                         hostAncestors         = hostAncestors[[i]],
+                         hostAncestorsExpanded = hostAncestorsExpanded[[i]],
+                         edgeToBin             = edgeToBin[[i]],
+                         NHostNodes            = NHostNodes,
+                         NTimeBins             = NTimeBins,
+                         aveStDPriorExpect     = aveStDPriorExpect,
+                         microbeEdges          = microbeEdges)
 }
 
-thin = max(1, floor(NIterations/minMCSamples))
+thin = max(1, floor(NIterations / minMCSamples))
 NMCSamples <- NIterations / thin
 warmup <- floor(NMCSamples / 2)
 ##
@@ -339,7 +357,17 @@ save(timeBinSizes,file=file.path(outdir,'timeBinSizes.RData'))
 ##
 
 ## run the model!
-fit <- mclapply(1:NTrees, function(i) stan(file=modelPath, data=standat[[i]], control=list(adapt_delta=adapt_delta, max_treedepth=max_treedepth), iter=NIterations, thin=thin, chains=NChains, seed=seed, chain_id=(NChains * (i - 1) + (1:NChains)) ))
+fit <- mclapply(1:NTrees, function(i) stan(file     = modelPath,
+                                           data     = standat[[i]],
+                                           control  = list(adapt_delta   = adapt_delta,
+                                                           max_treedepth = max_treedepth),
+                                           iter     = NIterations,
+                                           thin     = thin,
+                                           chains   = NChains,
+                                           seed     = seed,
+                                           chain_id = (NChains * (i - 1) + (1:NChains)),
+                                           pars     = c('rawMicrobeNodeEffects'),
+                                           include  = FALSE))
 
 save(fit, file=file.path(outdir,'fit.RData'))
 ##
