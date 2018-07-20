@@ -40,8 +40,8 @@ ultrametricizeMicrobeTree <- TRUE
 NCores <- 3
 NChains <- 1 ## this is per tree; since I'm doing a large number of trees in parallel i'll just do one chain for each
 NIterations <- 500 ## will probably need >10,000? maybe start with 2, check convergence, double it, check, double, check, double, etc.?
-max_treedepth <- 15 ## a warning will tell you if this needs to be increased
-adapt_delta <- 0.9 ## increase this if you get 'divergences' - even one means your model fit sucks!
+max_treedepth <- 10 ## a warning will tell you if this needs to be increased
+adapt_delta <- 0.8 ## increase this if you get 'divergences' - even one means your model fit sucks!
 minMCSamples <- 2000 ## approximate number of Monte Carlo samples to save from the fit
 ##
 
