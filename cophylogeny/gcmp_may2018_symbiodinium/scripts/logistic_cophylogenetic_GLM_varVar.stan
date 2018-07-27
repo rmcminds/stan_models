@@ -34,6 +34,7 @@ data {
     int sampleNames[NObs];
     int microbeTipNames[NObs];
     real<lower=0> aveStDPriorExpect;
+    real<lower=0> aveStDMetaPriorExpect;
     matrix[NMicrobeNodes, NMicrobeNodes] microbeAncestors;
     matrix[NEffects, NFactors] factLevelMat;
     matrix[NSamples, NEffects] modelMat;
@@ -65,9 +66,9 @@ parameters {
     real<lower=0> aveStDMeta;
     simplex[3] metaVarProps;
     simplex[2] hostMetaVarProps;
-    row_vector[NMicrobeNodes - NMicrobeTips] phyloLogVarMultPrev;
-    vector[NHostNodes - NHostTips] phyloLogVarMultADiv;
-    matrix[NHostNodes - NHostTips, NMicrobeNodes - NMicrobeTips] phyloLogVarMultRaw;
+    row_vector[NMicrobeNodes] phyloLogVarMultPrev;
+    vector[NHostNodes] phyloLogVarMultADiv;
+    matrix[NHostNodes, NMicrobeNodes] phyloLogVarMultRaw;
     real globalIntercept;
     vector[NEffects + NHostNodes] rawAlphaDivEffects;
     matrix[NEffects + NHostNodes + 1, NMicrobeNodes] rawMicrobeNodeEffects;
@@ -94,7 +95,7 @@ transformed parameters {
           * aveStDMeta;
     logMicrobeVarRaw
         = metaScales[1] * phyloLogVarMultPrev
-              * microbeAncestors[(NMicrobeTips + 1):, ]
+              * microbeAncestors
           + logMicrobeEdges;
     microbeVarRaw
         = exp(logMicrobeVarRaw);
@@ -114,7 +115,7 @@ transformed parameters {
     relativeEvolRates
         = exp(logRelativeEvolRates);
     logHostVarRaw
-        = hostAncestors[, (NHostTips + 1):]
+        = hostAncestors
               * phyloLogVarMultADiv
                 * metaScales[2]
                 * sqrt(hostMetaVarProps[2])
@@ -128,9 +129,9 @@ transformed parameters {
                   + log(NHostTips))
                  * 0.5);
     logPhyloScalesRaw
-        = hostAncestors[, (NHostTips + 1):]
+        = hostAncestors
               * (phyloLogVarMultRaw * metaScales[3])
-              * microbeAncestors[(NMicrobeTips + 1):, ]
+              * microbeAncestors
           + log_outer_exp(logHostVarRaw, logMicrobeVarRaw);
     phyloScales
         = exp(log(scales[2 * NFactors + 2])
@@ -161,7 +162,7 @@ model {
     aveStD ~ exponential(1.0 / aveStDPriorExpect);
     stDProps ~ dirichlet(rep_vector(1, 2 * NFactors + 3));
     timeBinMetaVar ~ normal(0,1);
-    aveStDMeta ~ exponential(1.0);
+    aveStDMeta ~ exponential(1.0 / aveStDMetaPriorExpect);
     metaVarProps ~ dirichlet(rep_vector(1, 3));
     hostMetaVarProps ~ dirichlet(rep_vector(1, 2));
     phyloLogVarMultPrev ~ normal(0,1);
