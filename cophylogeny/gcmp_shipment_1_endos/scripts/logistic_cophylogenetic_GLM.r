@@ -31,13 +31,14 @@ minSamps <- 1 # minimum number of samples that a sequence variant is present in 
 
 ## model options
 aveStDPriorExpect <- 1.0
-aveStDMetaPriorExpect <- 0.01
+aveStDMetaPriorExpect <- 0.1
 NTrees <- 1 ## number of random trees to sample and to fit the model to
 NSplits <- 10 ## desired number of nodes per host timeBin
 ultrametricizeMicrobeTree <- TRUE
 ##
 
 ## Stan options
+init_r = 0.0001
 NCores <- 10
 NChains <- 1 ## this is per tree; since I'm doing a large number of trees in parallel i'll just do one chain for each
 NIterations <- 500 ## will probably need >10,000? maybe start with 2, check convergence, double it, check, double, check, double, etc.?
@@ -208,13 +209,13 @@ colnames(microbeAncestors)[1:NMicrobeTips] <- rownames(microbeAncestors)[1:NMicr
 
 microbeAncestors <- microbeAncestors[-(NMicrobeTips + 1), -(NMicrobeTips + 1)]
 
-newermap$sequencing_depth <- rowSums(y[,microbeTips])
+newermap$sequencing_depth <- rowSums(y.old[,microbeTips])
 newermap$log_sequencing_depth <- log(newermap$sequencing_depth)
+newermap$log_sequencing_depth_scaled <- scale(newermap$log_sequencing_depth)
 
 
 
-
-modelform <- ~ ocean + reef_name + log_sequencing_depth + tissue_compartment + colony_name
+modelform <- ~ ocean + reef_name + log_sequencing_depth_scaled + tissue_compartment + colony_name
 allfactors <- attr(terms.formula(modelform), "term.labels")
 NFactors <- length(allfactors)
 allfactorder <- sapply(allfactors, function(x) sum(gregexpr(':', x, fixed=TRUE)[[1]] > 0))
@@ -410,7 +411,7 @@ fit <- mclapply(1:NTrees,
                  chains   = NChains,
                  seed     = seed,
                  chain_id = (NChains * (i - 1) + (1:NChains)),
-                 init_r   = 0.1)
+                 init_r   = init_r)
         }, error = function(e) NA)
     }, mc.preschedule = F,
        mc.cores       = NCores)
