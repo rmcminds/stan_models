@@ -38,7 +38,7 @@ ultrametricizeMicrobeTree <- TRUE
 ##
 
 ## Stan options
-init_r = 0.0001
+init_r = 2
 NCores <- 10
 NChains <- 1 ## this is per tree; since I'm doing a large number of trees in parallel i'll just do one chain for each
 NIterations <- 500 ## will probably need >10,000? maybe start with 2, check convergence, double it, check, double, check, double, etc.?
