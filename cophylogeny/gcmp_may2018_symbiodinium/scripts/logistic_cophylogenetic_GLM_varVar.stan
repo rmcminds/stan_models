@@ -2,36 +2,18 @@ functions {
     vector log_prod_exp_csr_mat_vect(int m, vector w, int[] v, int[] u, vector d) {
       vector[m] logX;
       for (i in 1:m) {
-        logX[i] = log_sum_exp(w[u[i]:(u[i+1]-1)] + d[v[u[i]:(u[i+1]-1)]]);
+        logX[i] = log_sum_exp(w[u[i]:(u[i + 1] - 1)] + d[v[u[i]:(u[i + 1] - 1)]]);
       }
       return logX;
     }
-    real mean_of_log_prod_exp_csr_mat_vect(int m, vector w, int[] v, int[] u, vector d) {
+    real log_mean_prod_exp_csr_mat_vect(int m, vector w, int[] v, int[] u, vector d) {
       vector[rows(w)] logX;
       real logMeanLength;
       for (i in 1:m) {
-        logX[u[i]:(u[i+1]-1)] = w[u[i]:(u[i+1]-1)] + d[v[u[i]:(u[i+1]-1)]];
+        logX[u[i]:(u[i + 1] - 1)] = w[u[i]:(u[i + 1] - 1)] + d[v[u[i]:(u[i + 1] - 1)]];
       }
       logMeanLength = log_sum_exp(logX) - log(m);
       return logMeanLength;
-    }
-    matrix log_prod_exp_csr_mat_dense_mat(int m, vector w, int[] v, int[] u, matrix d) {
-      matrix[m, cols(d)] logX;
-      for (j in 1:cols(d)) {
-        for (i in 1:m) {
-            logX[i, j] = log_sum_exp(w[u[i]:(u[i+1]-1)] + d[v[u[i]:(u[i+1]-1)], j]);
-        }
-      }
-      return logX;
-    }
-    matrix log_prod_exp_mats(matrix logA, matrix logB) {
-      matrix[rows(logA), cols(logB)] logX;
-      for (i in 1:rows(logX)) {
-        for (j in 1:cols(logX)) {
-          logX[i, j] = log_sum_exp(logA[i, ] + logB[, j]');
-        }
-      }
-      return logX;
     }
     vector log_prod_exp_mat_vect(matrix logA, vector logB) {
       vector[rows(logA)] logX;
@@ -42,7 +24,7 @@ functions {
       return logX;
     }
     matrix log_outer_exp(vector logA, vector logB) {
-      return rep_matrix(logA, cols(logB)) + rep_matrix(logB', rows(logA));
+      return rep_matrix(logA, rows(logB)) + rep_matrix(logB', rows(logA));
     }
 }
 data {
@@ -63,47 +45,47 @@ data {
     matrix[NEffects, NFactors] factLevelMat;
     matrix<lower=0>[NHostNodes, NTimeBins] edgeToBin;
     vector<lower=0>[NMicrobeNodes] microbeEdges;
+    int nnzMicrobeAncestors;
+    int nuMicrobeAncestors;
+    vector<lower=0>[nnzMicrobeAncestors] wMicrobeAncestors;
+    int vMicrobeAncestors[nnzMicrobeAncestors];
+    int uMicrobeAncestors[nuMicrobeAncestors];
     int nnzMicrobeTipAncestors;
     int nuMicrobeTipAncestors;
     vector<lower=0>[nnzMicrobeTipAncestors] wMicrobeTipAncestors;
     vector[nnzMicrobeTipAncestors] vMicrobeTipAncestors;
     vector[nuMicrobeTipAncestors] uMicrobeTipAncestors;
-    int nnzMicrobeAncestors;
-    int nuMicrobeAncestors;
-    vector<lower=0>[nnzMicrobeAncestors] wMicrobeAncestors;
-    int[nnzMicrobeAncestors] vMicrobeAncestors;
-    int[nuMicrobeAncestors] uMicrobeAncestors;
     int nnzHostAncestors;
     int nuHostAncestors;
     vector<lower=0>[nnzHostAncestors] wHostAncestors;
-    int[nnzHostAncestors] vHostAncestors;
-    int[nuHostAncestors] uHostAncestors;
+    int vHostAncestors[nnzHostAncestors];
+    int uHostAncestors[nuHostAncestors];
     int nnzHostTipAncestors;
     int nuHostTipAncestors;
     vector<lower=0>[nnzHostTipAncestors] wHostTipAncestors;
-    int[nnzHostTipAncestors] vHostTipAncestors;
-    int[nuHostTipAncestors] uHostTipAncestors;
+    int vHostTipAncestors[nnzHostTipAncestors];
+    int uHostTipAncestors[nuHostTipAncestors];
     int nnzHostKronMicrobeAncestors;
     int nuHostKronMicrobeAncestors;
     vector<lower=0>[nnzHostKronMicrobeAncestors] wHostKronMicrobeAncestors;
-    int[nnzHostKronMicrobeAncestors] vHostKronMicrobeAncestors;
-    int[nuHostKronMicrobeAncestors] uHostKronMicrobeAncestors;
+    int vHostKronMicrobeAncestors[nnzHostKronMicrobeAncestors];
+    int uHostKronMicrobeAncestors[nuHostKronMicrobeAncestors];
     int nnzHostKronMicrobeTipAncestors;
     int nuHostKronMicrobeTipAncestors;
     vector<lower=0>[nnzHostKronMicrobeTipAncestors] wHostKronMicrobeTipAncestors;
-    int[nnzHostKronMicrobeTipAncestors] vHostKronMicrobeTipAncestors;
-    int[nuHostKronMicrobeTipAncestors] uHostKronMicrobeTipAncestors;
+    int vHostKronMicrobeTipAncestors[nnzHostKronMicrobeTipAncestors];
+    int uHostKronMicrobeTipAncestors[nuHostKronMicrobeTipAncestors];
     int nnzFullModelMat;
     int nuFullModelMat;
     vector[nnzFullModelMat] wFullModelMat;
-    int[nnzFullModelMat] vFullModelMat;
-    int[nuFullModelMat] uFullModelMat;
+    int vFullModelMat[nnzFullModelMat];
+    int uFullModelMat[nuFullModelMat];
 }
 transformed data {
     matrix[NHostNodes, NTimeBins] logEdgeToBin = log(edgeToBin);
     vector[NMicrobeNodes] logMicrobeEdges = log(microbeEdges);
-    vector[nnzMicrobeTipAncestors] wMicrobeTipAncestorsLog = log(wMicrobeTipAncestors);
     vector[nnzMicrobeAncestors] wMicrobeAncestorsLog = log(wMicrobeAncestors);
+    vector[nnzMicrobeTipAncestors] wMicrobeTipAncestorsLog = log(wMicrobeTipAncestors);
     vector[nnzHostAncestors] wHostAncestorsLog = log(wHostAncestors);
     vector[nnzHostTipAncestors] wHostTipAncestorsLog = log(wHostTipAncestors);
     vector[nnzHostKronMicrobeAncestors] wHostKronMicrobeAncestorsLog = log(wHostKronMicrobeAncestors);
@@ -151,11 +133,11 @@ transformed parameters {
           + logMicrobeEdges;
     microbeScales
         = exp((logMicrobeVarRaw
-              - mean_of_log_prod_exp_csr_mat_vect(NMicrobeTips,
-                                                  wMicrobeTipAncestorsLog,
-                                                  vMicrobeAncestors,
-                                                  uMicrobeAncestors,
-                                                  logMicrobeVarRaw))
+               - log_mean_prod_exp_csr_mat_vect(NMicrobeTips,
+                                                   wMicrobeTipAncestorsLog,
+                                                   vMicrobeAncestors,
+                                                   uMicrobeAncestors,
+                                                   logMicrobeVarRaw))
               * 0.5)';
     logRelativeEvolRates
         = append_row(0,
@@ -169,13 +151,13 @@ transformed parameters {
                                     uHostAncestors,
                                     log(phyloLogVarMultADiv
                                         * metaScales[2]
-                                        * sqrt(hostMetaVarProps[2]))
+                                        * sqrt(hostMetaVarProps[2])))
           + log_prod_exp_mat_vect(logEdgeToBin,
                                   logRelativeEvolRates);
     hostScales
         = exp(log(scales[2 * NFactors + 1])
               + (logHostVarRaw
-                 - mean_of_log_prod_exp_csr_mat_vect(NHostTips,
+                 - log_mean_prod_exp_csr_mat_vect(NHostTips,
                                                      wHostTipAncestorsLog,
                                                      vHostTipAncestors,
                                                      uHostTipAncestors,
@@ -194,7 +176,7 @@ transformed parameters {
     phyloScales
         = exp(log(scales[2 * NFactors + 2])
               + (logPhyloVarRaw
-                 - mean_of_log_prod_exp_csr_mat_vect(NHostTips * NMicrobeTips,
+                 - log_mean_prod_exp_csr_mat_vect(NHostTips * NMicrobeTips,
                                                      wHostKronMicrobeTipAncestorsLog,
                                                      vHostKronMicrobeTipAncestors,
                                                      uHostKronMicrobeTipAncestors,
@@ -229,12 +211,14 @@ model {
     globalIntercept ~ normal(0, 50);
     rawAlphaDivEffects ~ normal(0,1);
     to_vector(rawMicrobeNodeEffects) ~ normal(0,1);
-    to_vector(sampleTipEffects) = csr_matrix_times_vector(NSamples * NMicrobeTips,
-                                                          (1 + NEffects + NHostNodes) * NMicrobeNodes,
-                                                          wFullModelMat,
-                                                          vFullModelMat,
-                                                          uFullModelMat,
-                                                          to_vector(scaledMicrobeNodeEffects + rep_matrix(scaledAlphaDivEffects, NMicrobeNodes)));
+    sampleTipEffects = to_matrix(csr_matrix_times_vector(NSamples * NMicrobeTips,
+                                                         (1 + NEffects + NHostNodes) * NMicrobeNodes,
+                                                         wFullModelMat,
+                                                         vFullModelMat,
+                                                         uFullModelMat,
+                                                         to_vector(scaledMicrobeNodeEffects
+                                                                   + rep_matrix(scaledAlphaDivEffects, NMicrobeNodes))),
+                                 NSamples, NMicrobeTips);
     for (n in 1:NObs)
         logit_ratios[n] = sampleTipEffects[sampleNames[n], microbeTipNames[n]];
     present ~ bernoulli_logit(logit_ratios);
