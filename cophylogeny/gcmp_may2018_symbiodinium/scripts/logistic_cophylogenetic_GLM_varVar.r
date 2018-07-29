@@ -9,6 +9,7 @@ library(nlme)
 library(reshape2)
 library(paleotree)
 library(parallel)
+library(Matrix)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
@@ -160,11 +161,13 @@ newermap$log_sequencing_depth_scaled <- scale(newermap$log_sequencing_depth)
 ## create ancestry matrix for microbes
 microbeAncestors <- matrix(0, NMicrobeNodes + 1, NMicrobeNodes + 1)
 for(node in 1:(NMicrobeNodes + 1)) {
-    microbeAncestors[, node] <- as.numeric(1:(NMicrobeNodes + 1) %in% c(Ancestors(microbeTree.root.Y, node), node))
+    microbeAncestors[node, ] <- as.numeric(1:(NMicrobeNodes + 1) %in% c(Ancestors(microbeTree.root.Y, node), node))
 }
 colnames(microbeAncestors) <- rownames(microbeAncestors) <- paste0('i',1:(NMicrobeNodes + 1))
 colnames(microbeAncestors)[1:NMicrobeTips] <- rownames(microbeAncestors)[1:NMicrobeTips] <- paste0('t',colnames(yb))
 microbeAncestors <- microbeAncestors[-(NMicrobeTips + 1), -(NMicrobeTips + 1)]
+microbeTipAncestors <- extract_sparse_parts(microbeAncestors[1:NMicrobeTips, ])
+microbeAncestorsSparse <- extract_sparse_parts(microbeAncestors)
 ##
 
 ## prepare data for the model matrix
@@ -303,7 +306,12 @@ NHostTips <- length(hostTreesSampled[[1]]$tip.label)
 NIntHostNodes <- hostTreesSampled[[1]]$Nnode
 NHostNodes <- NIntHostNodes + NHostTips - 1
 hostAncestors <- list()
+hostAncestorsSparse <- list()
+hostTipAncestors <- list()
 hostAncestorsExpanded <- list()
+hostKronMicrobeAncestors <- list()
+hostKronMicrobeTipAncestors <- list()
+fullModelMat <- list()
 for (i in 1:NTrees) {
 	hostAncestors[[i]] <- matrix(NA, NHostNodes+1, NHostNodes+1)
 	for(node in 1:(NHostNodes+1)) {
@@ -314,32 +322,74 @@ for (i in 1:NTrees) {
     hostAncestors[[i]] <- hostAncestors[[i]][-(NHostTips + 1), -(NHostTips + 1)]
     hostAncestorsExpanded[[i]] <- hostAncestors[[i]][as.character(sampleMap[[i]][,sampleTipKey]),]
     rownames(hostAncestorsExpanded[[i]]) <- rownames(sampleMap[[i]])
+    
+    hostAncestorsSparse[[i]] <- extract_sparse_parts(hostAncestors[[i]])
+    hostTipAncestors[[i]] <- extract_sparse_parts(hostAncestors[[i]][1:NHostTips, ])
+    hostKronMicrobeAncestors[[i]] <- extract_sparse_parts(kronecker(as(hostAncestors[[i]], 'dgRMatrix'), as(microbeAncestors, 'dgCMatrix')))
+    hostKronMicrobeTipAncestors[[i]] <- extract_sparse_parts(kronecker(as(hostAncestors[[i]][1:NHostTips, ], 'dgRMatrix'), as(microbeAncestors[1:NMicrobeTips, ], 'dgCMatrix')))
+    fullModelMat[[i]] <- extract_sparse_parts(kronecker(as(cbind(cbind(1, modelMat), hostAncestorsExpanded[[i]]), 'dgRMatrix'), as(microbeAncestors[1:NMicrobeTips, ], 'dgCMatrix')))
+    
 }
 ##
+
+#extract_sparse_parts()
 
 ## collect data to feed to stan
 standat <- list()
 for (i in 1:NTrees) {
-    standat[[i]] <- list(NSamples              = NSamples,
-                         NObs                  = NObs,
-                         NMicrobeNodes         = NMicrobeNodes,
-                         NMicrobeTips          = NMicrobeTips,
-                         NFactors              = NFactors,
-                         NEffects              = NEffects,
-                         present               = present,
-                         sampleNames           = sampleNames,
-                         microbeTipNames       = microbeTipNames,
-                         factLevelMat          = factLevelMat,
-                         microbeAncestors      = microbeAncestors,
-                         modelMat              = modelMat,
-                         hostAncestors         = hostAncestors[[i]],
-                         hostAncestorsExpanded = hostAncestorsExpanded[[i]],
-                         edgeToBin             = edgeToBin[[i]],
-                         NHostNodes            = NHostNodes,
-                         NTimeBins             = NTimeBins,
-                         aveStDPriorExpect     = aveStDPriorExpect,
-                         aveStDMetaPriorExpect = aveStDMetaPriorExpect,
-                         microbeEdges          = microbeEdges)
+    standat[[i]] <- list(NSamples                       = NSamples,
+                         NObs                           = NObs,
+                         NMicrobeNodes                  = NMicrobeNodes,
+                         NMicrobeTips                   = NMicrobeTips,
+                         NFactors                       = NFactors,
+                         NEffects                       = NEffects,
+                         present                        = present,
+                         sampleNames                    = sampleNames,
+                         microbeTipNames                = microbeTipNames,
+                         factLevelMat                   = factLevelMat,
+                         microbeAncestors               = microbeAncestors,
+                         hostAncestors                  = hostAncestors[[i]],
+                         edgeToBin                      = edgeToBin[[i]],
+                         NHostNodes                     = NHostNodes,
+                         NTimeBins                      = NTimeBins,
+                         aveStDPriorExpect              = aveStDPriorExpect,
+                         aveStDMetaPriorExpect          = aveStDMetaPriorExpect,
+                         microbeEdges                   = microbeEdges,
+                         nnzMicrobeTipAncestors         = length(microbeTipAncestors$w),
+                         nuMicrobeTipAncestors          = length(microbeTipAncestors$u),
+                         wMicrobeTipAncestors           = microbeTipAncestors$w,
+                         vMicrobeTipAncestors           = microbeTipAncestors$v,
+                         uMicrobeTipAncestors           = microbeTipAncestors$u,
+                         nnzMicrobeAncestors            = length(microbeAncestorsSparse$w),
+                         nuMicrobeAncestors             = length(microbeAncestorsSparse$u),
+                         wMicrobeAncestors              = microbeAncestorsSparse$w,
+                         vMicrobeAncestors              = microbeAncestorsSparse$v,
+                         uMicrobeAncestors              = microbeAncestorsSparse$u,
+                         nnzHostAncestors               = length(hostAncestorsSparse[[i]]$w),
+                         nuHostAncestors                = length(hostAncestorsSparse[[i]]$u),
+                         wHostAncestors                 = hostAncestorsSparse[[i]]$w,
+                         vHostAncestors                 = hostAncestorsSparse[[i]]$v,
+                         uHostAncestors                 = hostAncestorsSparse[[i]]$u,
+                         nnzHostTipAncestors            = length(hostTipAncestors[[i]]$w),
+                         nuHostTipAncestors             = length(hostTipAncestors[[i]]$u),
+                         wHostTipAncestors              = hostTipAncestors[[i]]$w,
+                         vHostTipAncestors              = hostTipAncestors[[i]]$v,
+                         uHostTipAncestors              = hostTipAncestors[[i]]$u,
+                         nnzHostKronMicrobeAncestors    = length(hostKronMicrobeAncestors[[i]]$w),
+                         nuHostKronMicrobeAncestors     = length(hostKronMicrobeAncestors[[i]]$u),
+                         wHostKronMicrobeAncestors      = hostKronMicrobeAncestors[[i]]$w,
+                         vHostKronMicrobeAncestors      = hostKronMicrobeAncestors[[i]]$v,
+                         uHostKronMicrobeAncestors      = hostKronMicrobeAncestors[[i]]$u,
+                         nnzHostKronMicrobeTipAncestors = length(hostKronMicrobeTipAncestors[[i]]$w),
+                         nuHostKronMicrobeTipAncestors  = length(hostKronMicrobeTipAncestors[[i]]$u),
+                         wHostKronMicrobeTipAncestors   = hostKronMicrobeTipAncestors[[i]]$w,
+                         vHostKronMicrobeTipAncestors   = hostKronMicrobeTipAncestors[[i]]$v,
+                         uHostKronMicrobeTipAncestors   = hostKronMicrobeTipAncestors[[i]]$u,
+                         nnzFullModelMat                = length(fullModelMat[[i]]$w),
+                         nuFullModelMat                 = length(fullModelMat[[i]]$u),
+                         wFullModelMat                  = fullModelMat[[i]]$w,
+                         vFullModelMat                  = fullModelMat[[i]]$v,
+                         uFullModelMat                  = fullModelMat[[i]]$u)
 }
 
 thin = max(1, floor(NIterations / minMCSamples))
@@ -422,7 +472,7 @@ for(i in 1:NTrees) {
     ##
     
     ## compare rates of host evolution in each time bin
-    relativeEvolRates <- extract(fit[[i]], pars='relativeEvolRates')[[1]]
+    relativeEvolRates <- exp(extract(fit[[i]], pars='logRelativeEvolRates')[[1]])
     colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - ',meanBoundariesRounded[4],' mya'), paste0(meanBoundariesRounded[4],' - present'))
 
     pdf(file=file.path(currplotdir,'evolRatesRelToMRCA.pdf'), width=25, height=15)
@@ -543,7 +593,7 @@ graphics.off()
 
 save(stDProps,file=file.path(currdatadir,'stDProps.RData'))
 
-relativeEvolRates <- extract(allfit, pars='relativeEvolRates')[[1]]
+relativeEvolRates <- exp(extract(allfit, pars='logRelativeEvolRates')[[1]])
 colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - ',meanBoundariesRounded[4],' mya'), paste0(meanBoundariesRounded[4],' - present'))
 
 pdf(file=file.path(currplotdir,'evolRatesRelToMRCA.pdf'), width=25, height=15)
