@@ -32,6 +32,7 @@ minSamps <- 1 # minimum number of samples that a sequence variant is present in 
 ## model options
 aveStDPriorExpect <- 1.0
 aveStDMetaPriorExpect <- 0.1
+globalScale <- 50
 NTrees <- 10 ## number of random trees to sample and to fit the model to
 NSplits <- 15 ## desired number of nodes per host timeBin
 ultrametricizeMicrobeTree <- TRUE
@@ -327,7 +328,7 @@ for (i in 1:NTrees) {
     hostTipAncestors[[i]] <- extract_sparse_parts(hostAncestors[[i]][1:NHostTips, ])
     hostKronMicrobeAncestors[[i]] <- extract_sparse_parts(kronecker(as(hostAncestors[[i]], 'dgRMatrix'), as(microbeAncestors, 'dgCMatrix')))
     hostKronMicrobeTipAncestors[[i]] <- extract_sparse_parts(kronecker(as(hostAncestors[[i]][1:NHostTips, ], 'dgRMatrix'), as(microbeAncestors[1:NMicrobeTips, ], 'dgCMatrix')))
-    fullModelMat[[i]] <- extract_sparse_parts(kronecker(as(cbind(cbind(1, modelMat), hostAncestorsExpanded[[i]]), 'dgRMatrix'), as(microbeAncestors[1:NMicrobeTips, ], 'dgCMatrix')))
+    fullModelMat[[i]] <- extract_sparse_parts(kronecker(as(cbind(cbind(1, modelMat), hostAncestorsExpanded[[i]]), 'dgRMatrix'), as(cbind(1, microbeAncestors[1:NMicrobeTips, ]), 'dgCMatrix')))
     
 }
 ##
@@ -357,7 +358,6 @@ for (i in 1:NTrees) {
                          microbeEdges                   = microbeEdges,
                          nnzMicrobeTipAncestors         = length(microbeTipAncestors$w),
                          nuMicrobeTipAncestors          = length(microbeTipAncestors$u),
-                         wMicrobeTipAncestors           = microbeTipAncestors$w,
                          vMicrobeTipAncestors           = microbeTipAncestors$v,
                          uMicrobeTipAncestors           = microbeTipAncestors$u,
                          nnzMicrobeAncestors            = length(microbeAncestorsSparse$w),
@@ -372,7 +372,6 @@ for (i in 1:NTrees) {
                          uHostAncestors                 = hostAncestorsSparse[[i]]$u,
                          nnzHostTipAncestors            = length(hostTipAncestors[[i]]$w),
                          nuHostTipAncestors             = length(hostTipAncestors[[i]]$u),
-                         wHostTipAncestors              = hostTipAncestors[[i]]$w,
                          vHostTipAncestors              = hostTipAncestors[[i]]$v,
                          uHostTipAncestors              = hostTipAncestors[[i]]$u,
                          nnzHostKronMicrobeAncestors    = length(hostKronMicrobeAncestors[[i]]$w),
@@ -382,14 +381,14 @@ for (i in 1:NTrees) {
                          uHostKronMicrobeAncestors      = hostKronMicrobeAncestors[[i]]$u,
                          nnzHostKronMicrobeTipAncestors = length(hostKronMicrobeTipAncestors[[i]]$w),
                          nuHostKronMicrobeTipAncestors  = length(hostKronMicrobeTipAncestors[[i]]$u),
-                         wHostKronMicrobeTipAncestors   = hostKronMicrobeTipAncestors[[i]]$w,
                          vHostKronMicrobeTipAncestors   = hostKronMicrobeTipAncestors[[i]]$v,
                          uHostKronMicrobeTipAncestors   = hostKronMicrobeTipAncestors[[i]]$u,
                          nnzFullModelMat                = length(fullModelMat[[i]]$w),
                          nuFullModelMat                 = length(fullModelMat[[i]]$u),
                          wFullModelMat                  = fullModelMat[[i]]$w,
                          vFullModelMat                  = fullModelMat[[i]]$v,
-                         uFullModelMat                  = fullModelMat[[i]]$u)
+                         uFullModelMat                  = fullModelMat[[i]]$u,
+                         globalScale                    = globalScale)
 }
 
 thin = max(1, floor(NIterations / minMCSamples))
@@ -457,11 +456,6 @@ for(i in 1:NTrees) {
     save(stDProps,file=file.path(currdatadir,'stDProps.RData'))
     ##
     
-    ## alpha diversity
-    scaledAlphaDivEffects <- extract(fit[[i]], pars='scaledAlphaDivEffects')[[1]]
-    save(scaledAlphaDivEffects,file=file.path(currdatadir,'scaledAlphaDivEffects.RData'))
-    ##
-    
     ## proportion of variance explained by each time bin
     metaVarProps <- extract(fit[[i]], pars='metaVarProps')[[1]]
     colnames(metaVarProps) <- c('prevalence','adiv','specificty')
@@ -495,11 +489,11 @@ for(i in 1:NTrees) {
                                       dim=c(NMCSamples,
                                             NChains,
                                             NEffects + NHostNodes + 1,
-                                            NMicrobeNodes),
+                                            NMicrobeNodes + 1),
                                       dimnames=list(sample  = NULL,
                                                     chain   = NULL,
                                                     effect  = c('microbePrevalence', colnames(modelMat)[1:NEffects], colnames(hostAncestors[[i]])),
-                                                    taxnode = colnames(microbeAncestors)))
+                                                    taxnode = c('alphaDiversity', colnames(microbeAncestors))))
                                                     
     save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
                                                     
@@ -507,11 +501,11 @@ for(i in 1:NTrees) {
                               dim=c(NMCSamples,
                                     NChains,
                                     length(sumconts),
-                                    NMicrobeNodes),
+                                    NMicrobeNodes + 1),
                               dimnames=list(sample  = NULL,
                                             chain   = NULL,
                                             effect  = sumconts,
-                                            taxnode = colnames(microbeAncestors)))
+                                            taxnode = c('alphaDiversity', colnames(microbeAncestors))))
     for(j in 1:NMCSamples) {
         for(k in 1:NChains) {
             for(m in sumconts) {
@@ -524,20 +518,20 @@ for(i in 1:NTrees) {
 
     for(l in 1:(NEffects + NHostNodes + 1)) {
         yeah <- monitor(array(scaledMicrobeNodeEffects[,,l,],
-                              dim = c(NMCSamples, NChains, NMicrobeNodes)),
+                              dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
                         warmup = warmup,
                         probs = c(0.05, 0.95))
-        rownames(yeah) <- rownames(microbeAncestors)
+        rownames(yeah) <- c('alphaDiversity', rownames(microbeAncestors))
         cat('\t', file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')))
         write.table(yeah, file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')), sep='\t', quote=F,append=T)
     }
     
     for(m in sumconts) {
         yeah <- monitor(array(baseLevelEffects[,,m,],
-                              dim = c(NMCSamples, NChains, NMicrobeNodes)),
+                              dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
                         warmup = warmup,
                         probs = c(0.05, 0.95))
-        rownames(yeah) <- rownames(microbeAncestors)
+        rownames(yeah) <- c('alphaDiversity', rownames(microbeAncestors))
         cat('\t', file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')))
         write.table(yeah, file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')), sep='\t', quote=F,append=T)
     }
@@ -623,11 +617,11 @@ scaledMicrobeNodeEffects <- array(extract(allfit, pars='scaledMicrobeNodeEffects
                                   dim=c(NMCSamples,
                                         NChains * NTrees,
                                         NEffects + NHostNodes + 1,
-                                        NMicrobeNodes),
+                                        NMicrobeNodes + 1),
                                   dimnames=list(sample  = NULL,
                                                 chain   = NULL,
                                                 effect  = c('microbePrevalence', colnames(modelMat)[1:NEffects], colnames(hostAncestors[[i]])),
-                                                taxnode = colnames(microbeAncestors)))
+                                                taxnode = c('alphaDiversity', colnames(microbeAncestors))))
                                                 
 save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
                                                 
@@ -635,11 +629,11 @@ baseLevelEffects <- array(NA,
                           dim=c(NMCSamples,
                                 NChains * NTrees,
                                 length(sumconts),
-                                NMicrobeNodes),
+                                NMicrobeNodes + 1),
                           dimnames=list(sample  = NULL,
                                         chain   = NULL,
                                         effect  = sumconts,
-                                        taxnode = colnames(microbeAncestors)))
+                                        taxnode = c('alphaDiversity', colnames(microbeAncestors))))
 for(j in 1:NMCSamples) {
     for(k in 1:(NChains * NTrees)) {
         for(m in sumconts) {
@@ -652,20 +646,20 @@ save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
 
 for(l in 1:(NEffects + NHostNodes + 1)) {
     yeah <- monitor(array(scaledMicrobeNodeEffects[,,l,],
-                          dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes)),
+                          dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes + 1)),
                     warmup = warmup,
                     probs = c(0.05, 0.95))
-    rownames(yeah) <- rownames(microbeAncestors)
+    rownames(yeah) <- c('alphaDiversity', rownames(microbeAncestors))
     cat('\t', file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')))
     write.table(yeah, file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')), sep='\t', quote=F,append=T)
 }
 
 for(m in sumconts) {
     yeah <- monitor(array(baseLevelEffects[,,m,],
-                          dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes)),
+                          dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes + 1)),
                     warmup = warmup,
                     probs = c(0.05, 0.95))
-    rownames(yeah) <- rownames(microbeAncestors)
+    rownames(yeah) <- c('alphaDiversity', rownames(microbeAncestors))
     cat('\t', file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')))
     write.table(yeah, file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')), sep='\t', quote=F,append=T)
 }
