@@ -1,6 +1,6 @@
 functions {
     real log_mean_prod_exp_binary_csr_mat_vect(int m, int[] v, int[] u, vector d) {
-      vector[rows(v)] logX;
+      vector[size(v)] logX;
       real logMeanLength;
       for (i in 1:m) {
         logX[u[i]:(u[i + 1] - 1)] = d[v[u[i]:(u[i + 1] - 1)]];
