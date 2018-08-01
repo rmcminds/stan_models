@@ -9,7 +9,6 @@ library(nlme)
 library(reshape2)
 library(paleotree)
 library(parallel)
-library(Matrix)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
@@ -167,8 +166,6 @@ for(node in 1:(NMicrobeNodes + 1)) {
 colnames(microbeAncestors) <- rownames(microbeAncestors) <- paste0('i',1:(NMicrobeNodes + 1))
 colnames(microbeAncestors)[1:NMicrobeTips] <- rownames(microbeAncestors)[1:NMicrobeTips] <- paste0('t',colnames(yb))
 microbeAncestors <- microbeAncestors[-(NMicrobeTips + 1), -(NMicrobeTips + 1)]
-microbeTipAncestors <- extract_sparse_parts(microbeAncestors[1:NMicrobeTips, ])
-microbeAncestorsSparse <- extract_sparse_parts(microbeAncestors)
 ##
 
 ## prepare data for the model matrix
@@ -307,12 +304,7 @@ NHostTips <- length(hostTreesSampled[[1]]$tip.label)
 NIntHostNodes <- hostTreesSampled[[1]]$Nnode
 NHostNodes <- NIntHostNodes + NHostTips - 1
 hostAncestors <- list()
-hostAncestorsSparse <- list()
-hostTipAncestors <- list()
 hostAncestorsExpanded <- list()
-hostKronMicrobeAncestors <- list()
-hostKronMicrobeTipAncestors <- list()
-fullModelMat <- list()
 for (i in 1:NTrees) {
 	hostAncestors[[i]] <- matrix(NA, NHostNodes+1, NHostNodes+1)
 	for(node in 1:(NHostNodes+1)) {
@@ -323,17 +315,9 @@ for (i in 1:NTrees) {
     hostAncestors[[i]] <- hostAncestors[[i]][-(NHostTips + 1), -(NHostTips + 1)]
     hostAncestorsExpanded[[i]] <- hostAncestors[[i]][as.character(sampleMap[[i]][,sampleTipKey]),]
     rownames(hostAncestorsExpanded[[i]]) <- rownames(sampleMap[[i]])
-    
-    hostAncestorsSparse[[i]] <- extract_sparse_parts(hostAncestors[[i]])
-    hostTipAncestors[[i]] <- extract_sparse_parts(hostAncestors[[i]][1:NHostTips, ])
-    hostKronMicrobeAncestors[[i]] <- extract_sparse_parts(kronecker(as(hostAncestors[[i]], 'dgRMatrix'), as(microbeAncestors, 'dgCMatrix')))
-    hostKronMicrobeTipAncestors[[i]] <- extract_sparse_parts(kronecker(as(hostAncestors[[i]][1:NHostTips, ], 'dgRMatrix'), as(microbeAncestors[1:NMicrobeTips, ], 'dgCMatrix')))
-    fullModelMat[[i]] <- extract_sparse_parts(kronecker(as(cbind(cbind(1, modelMat), hostAncestorsExpanded[[i]]), 'dgRMatrix'), as(cbind(1, microbeAncestors[1:NMicrobeTips, ]), 'dgCMatrix')))
-    
 }
 ##
 
-#extract_sparse_parts()
 
 ## collect data to feed to stan
 standat <- list()
@@ -348,46 +332,17 @@ for (i in 1:NTrees) {
                          sampleNames                    = sampleNames,
                          microbeTipNames                = microbeTipNames,
                          factLevelMat                   = factLevelMat,
-                         microbeAncestors               = microbeAncestors,
+                         modelMat                       = cbind(cbind(1, modelMat), hostAncestorsExpanded[[i]]),
+                         microbeAncestorsT              = t(microbeAncestors),
+                         microbeTipAncestorsT           = t(cbind(1, microbeAncestors[1:NMicrobeTips, ])),
                          hostAncestors                  = hostAncestors[[i]],
+                         hostTipAncestors               = hostAncestors[[i]][1:NHostTips, ],
                          edgeToBin                      = edgeToBin[[i]],
                          NHostNodes                     = NHostNodes,
                          NTimeBins                      = NTimeBins,
                          aveStDPriorExpect              = aveStDPriorExpect,
                          aveStDMetaPriorExpect          = aveStDMetaPriorExpect,
                          microbeEdges                   = microbeEdges,
-                         nnzMicrobeTipAncestors         = length(microbeTipAncestors$w),
-                         nuMicrobeTipAncestors          = length(microbeTipAncestors$u),
-                         vMicrobeTipAncestors           = microbeTipAncestors$v,
-                         uMicrobeTipAncestors           = microbeTipAncestors$u,
-                         nnzMicrobeAncestors            = length(microbeAncestorsSparse$w),
-                         nuMicrobeAncestors             = length(microbeAncestorsSparse$u),
-                         wMicrobeAncestors              = microbeAncestorsSparse$w,
-                         vMicrobeAncestors              = microbeAncestorsSparse$v,
-                         uMicrobeAncestors              = microbeAncestorsSparse$u,
-                         nnzHostAncestors               = length(hostAncestorsSparse[[i]]$w),
-                         nuHostAncestors                = length(hostAncestorsSparse[[i]]$u),
-                         wHostAncestors                 = hostAncestorsSparse[[i]]$w,
-                         vHostAncestors                 = hostAncestorsSparse[[i]]$v,
-                         uHostAncestors                 = hostAncestorsSparse[[i]]$u,
-                         nnzHostTipAncestors            = length(hostTipAncestors[[i]]$w),
-                         nuHostTipAncestors             = length(hostTipAncestors[[i]]$u),
-                         vHostTipAncestors              = hostTipAncestors[[i]]$v,
-                         uHostTipAncestors              = hostTipAncestors[[i]]$u,
-                         nnzHostKronMicrobeAncestors    = length(hostKronMicrobeAncestors[[i]]$w),
-                         nuHostKronMicrobeAncestors     = length(hostKronMicrobeAncestors[[i]]$u),
-                         wHostKronMicrobeAncestors      = hostKronMicrobeAncestors[[i]]$w,
-                         vHostKronMicrobeAncestors      = hostKronMicrobeAncestors[[i]]$v,
-                         uHostKronMicrobeAncestors      = hostKronMicrobeAncestors[[i]]$u,
-                         nnzHostKronMicrobeTipAncestors = length(hostKronMicrobeTipAncestors[[i]]$w),
-                         nuHostKronMicrobeTipAncestors  = length(hostKronMicrobeTipAncestors[[i]]$u),
-                         vHostKronMicrobeTipAncestors   = hostKronMicrobeTipAncestors[[i]]$v,
-                         uHostKronMicrobeTipAncestors   = hostKronMicrobeTipAncestors[[i]]$u,
-                         nnzFullModelMat                = length(fullModelMat[[i]]$w),
-                         nuFullModelMat                 = length(fullModelMat[[i]]$u),
-                         wFullModelMat                  = fullModelMat[[i]]$w,
-                         vFullModelMat                  = fullModelMat[[i]]$v,
-                         uFullModelMat                  = fullModelMat[[i]]$u,
                          globalScale                    = globalScale)
 }
 
