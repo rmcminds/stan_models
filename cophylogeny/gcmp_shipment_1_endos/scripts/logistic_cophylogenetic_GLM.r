@@ -473,7 +473,7 @@ for(i in 1:NTrees) {
     
     ## plot evolutionary rate changes
     timeBinMetaVar <- extract(fit[[i]], pars='timeBinMetaVar')[[1]]
-    colnames(timeBinMetaVar) <- c(paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - present'))
+    colnames(timeBinMetaVar) <- sapply(1:length(meanBoundariesRounded), function(x) paste0(meanBoundariesRounded[[x]], ' - ', c(meanBoundariesRounded, 'present')[[x+1]], ' mya'))
     
     pdf(file=file.path(currplotdir,'timeBinMetaVar.pdf'), width=25, height=15)
     boxplot(timeBinMetaVar, xlab='Time Period', ylab='timeBinMetaVar')
@@ -483,7 +483,7 @@ for(i in 1:NTrees) {
 
     ## compare rates of host evolution in each time bin
     relativeEvolRates <- exp(extract(fit[[i]], pars='logRelativeEvolRates')[[1]])
-    colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - present'))
+    colnames(relativeEvolRates) <- c(paste0('before ', meanBoundariesRounded[[1]], ' mya'), colnames(timeBinMetaVar))
     
     pdf(file=file.path(currplotdir,'evolRatesRelToMRCA.pdf'), width=25, height=15)
     boxplot(relativeEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to MRCA')
@@ -607,7 +607,7 @@ if (NSuccessTrees > 1) {
 
     ## plot evolutionary rate changes
     timeBinMetaVar <- extract(allfit, pars='timeBinMetaVar')[[1]]
-    colnames(timeBinMetaVar) <- c(paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - present'))
+    colnames(timeBinMetaVar) <- sapply(1:length(meanBoundariesRounded), function(x) paste0(meanBoundariesRounded[[x]], ' - ', c(meanBoundariesRounded, 'present')[[x+1]], ' mya'))
 
     pdf(file=file.path(currplotdir,'timeBinMetaVar.pdf'), width=25, height=15)
     boxplot(timeBinMetaVar, xlab='Time Period', ylab='timeBinMetaVar')
@@ -616,7 +616,7 @@ if (NSuccessTrees > 1) {
     save(timeBinMetaVar,file=file.path(currdatadir,'timeBinMetaVar.RData'))
 
     relativeEvolRates <- exp(extract(allfit, pars='logRelativeEvolRates')[[1]])
-    colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - present'))
+    colnames(relativeEvolRates) <- c(paste0('before ', meanBoundariesRounded[[1]], ' mya'), colnames(timeBinMetaVar))
 
     pdf(file=file.path(currplotdir,'evolRatesRelToMRCA.pdf'), width=25, height=15)
     boxplot(relativeEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to MRCA')
