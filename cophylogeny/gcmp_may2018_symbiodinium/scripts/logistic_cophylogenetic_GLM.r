@@ -643,11 +643,6 @@ for(i in 1:(NTrees + 1)) {
     pairs(allfit[[i]], pars=pars, log=T)
     graphics.off()
     
-    pars <- c(paste0('phyloLogVarMultADiv[',1:10,']'), paste0('rawAlphaDivEffects[',1:10,']'))
-    
-    pdf(file=file.path(currdiagnosticdir,'pairs_phyloLogVarMultADiv.pdf'), width=100, height=100)
-    pairs(allfit[[i]], pars=pars, log=T)
-    graphics.off()
 }
 ##
 
