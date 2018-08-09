@@ -542,9 +542,9 @@ for(i in 1:NTrees) {
     
     for(m in sumconts) {
         yeah <- monitor(array(baseLevelEffects[,,m,],
-        dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
-        warmup = warmup,
-        probs = c(0.05, 0.95))
+                              dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
+                        warmup = warmup,
+                        probs = c(0.05, 0.95))
         rownames(yeah) <- c('alphaDiversity', rownames(microbeAncestors))
         cat('\t', file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')))
         write.table(yeah, file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')), sep='\t', quote=F,append=T)
@@ -642,26 +642,26 @@ if (NSuccessTrees > 1) {
     dir.create(currsubtabledir, recursive=T)
 
     scaledMicrobeNodeEffects <- array(extract(allfit, pars='scaledMicrobeNodeEffects', permuted=F, inc_warmup=T),
-    dim=c(NMCSamples,
-    NChains * NSuccessTrees,
-    NEffects + NHostNodes + 1,
-    NMicrobeNodes + 1),
-    dimnames=list(sample  = NULL,
-    chain   = NULL,
-    effect  = c('microbePrevalence', colnames(modelMat)[1:NEffects], colnames(hostAncestors[[i]])),
-    taxnode = c('alphaDiversity', colnames(microbeAncestors))))
+                                      dim = c(NMCSamples,
+                                              NChains * NSuccessTrees,
+                                              NEffects + NHostNodes + 1,
+                                              NMicrobeNodes + 1),
+                                      dimnames = list(sample  = NULL,
+                                                      chain   = NULL,
+                                                      effect  = c('microbePrevalence', colnames(modelMat)[1:NEffects], colnames(hostAncestors[[i]])),
+                                                      taxnode = c('alphaDiversity', colnames(microbeAncestors))))
 
     save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
 
     baseLevelEffects <- array(NA,
-    dim=c(NMCSamples,
-    NChains * NSuccessTrees,
-    length(sumconts),
-    NMicrobeNodes + 1),
-    dimnames=list(sample  = NULL,
-    chain   = NULL,
-    effect  = sumconts,
-    taxnode = c('alphaDiversity', colnames(microbeAncestors))))
+                              dim = c(NMCSamples,
+                                      NChains * NSuccessTrees,
+                                      length(sumconts),
+                                      NMicrobeNodes + 1),
+                              dimnames = list(sample  = NULL,
+                                              chain   = NULL,
+                                              effect  = sumconts,
+                                              taxnode = c('alphaDiversity', colnames(microbeAncestors))))
     for(j in 1:NMCSamples) {
         for(k in 1:(NChains * NSuccessTrees)) {
             for(m in sumconts) {
@@ -674,9 +674,9 @@ if (NSuccessTrees > 1) {
 
     for(l in 1:(NEffects + NHostNodes + 1)) {
         yeah <- monitor(array(scaledMicrobeNodeEffects[,,l,],
-        dim = c(NMCSamples, NChains * NSuccessTrees, NMicrobeNodes + 1)),
-        warmup = warmup,
-        probs = c(0.05, 0.95))
+                              dim = c(NMCSamples, NChains * NSuccessTrees, NMicrobeNodes + 1)),
+                        warmup = warmup,
+                        probs = c(0.05, 0.95))
         rownames(yeah) <- c('alphaDiversity', rownames(microbeAncestors))
         cat('\t', file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')))
         write.table(yeah, file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')), sep='\t', quote=F,append=T)
@@ -684,9 +684,9 @@ if (NSuccessTrees > 1) {
 
     for(m in sumconts) {
         yeah <- monitor(array(baseLevelEffects[,,m,],
-        dim = c(NMCSamples, NChains * NSuccessTrees, NMicrobeNodes + 1)),
-        warmup = warmup,
-        probs = c(0.05, 0.95))
+                              dim = c(NMCSamples, NChains * NSuccessTrees, NMicrobeNodes + 1)),
+                        warmup = warmup,
+                        probs = c(0.05, 0.95))
         rownames(yeah) <- c('alphaDiversity', rownames(microbeAncestors))
         cat('\t', file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')))
         write.table(yeah, file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')), sep='\t', quote=F,append=T)
