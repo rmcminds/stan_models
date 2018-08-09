@@ -31,7 +31,7 @@ minSamps <- 1 # minimum number of samples that a sequence variant is present in 
 
 ## model options
 aveStDPriorExpect <- 1.0
-aveStDMetaPriorExpect <- 0.1
+aveStDMetaPriorExpect <- 1.0
 globalScale <- 50
 NTrees <- 1 ## number of random trees to sample and to fit the model to
 NSplits <- 10 ## desired number of nodes per host timeBin
@@ -40,10 +40,10 @@ ultrametricizeMicrobeTree <- FALSE
 
 ## Stan options
 init_r = 2
-NCores <- 10
+NCores <- 1
 NChains <- 1 ## this is per tree; since I'm doing a large number of trees in parallel i'll just do one chain for each
-NIterations <- 500 ## will probably need >10,000? maybe start with 2, check convergence, double it, check, double, check, double, etc.?
-max_treedepth <- 10 ## a warning will tell you if this needs to be increased
+NIterations <- 1000 ## will probably need >10,000? maybe start with 2, check convergence, double it, check, double, check, double, etc.?
+max_treedepth <- 15 ## a warning will tell you if this needs to be increased
 adapt_delta <- 0.8 ## increase this if you get 'divergences' - even one means your model fit sucks!
 minMCSamples <- 2000 ## approximate number of Monte Carlo samples to save from the fit
 ##
