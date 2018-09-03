@@ -495,6 +495,15 @@ for(i in 1:NTrees) {
     
     save(relativeEvolRates,file=file.path(currdatadir,'relativeEvolRates.RData'))
     
+    ## summarize the mean branch lengths of the microbes
+    sums <- summary(fit[[i]], pars='microbeScales', probs=c(0.05,0.95), use_cache = F)
+    newEdges <- sums$summary[,'mean']^2
+    microbeTree.Y.root$edge.length <- newEdges[order(microbeEdgeOrder)]
+    pdf(file=file.path(currplotdir,'microbeTreeWEstimatedEdgeLengths.pdf'), width=25, height=15)
+    plot(microbeTree.Y.root, cex=0.5)
+    graphics.off()
+    ##
+    
     ## summarize effects
     currsubtabledir <- file.path(currtabledir, 'nodeEffects')
     dir.create(currsubtabledir, recursive=T)
@@ -679,7 +688,7 @@ if (NSuccessTrees > 1) {
                         probs = c(0.05, 0.95))
         rownames(yeah) <- c('alphaDiversity', rownames(microbeAncestors))
         cat('\t', file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')))
-        write.table(yeah, file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')), sep='\t', quote=F,append=T)
+        write.table(yeah, file = file.path(currsubtabledir, paste0(dimnames(scaledMicrobeNodeEffects)[[3]][l], '.txt')), sep='\t', quote=F, append=T)
     }
 
     for(m in sumconts) {
@@ -689,7 +698,7 @@ if (NSuccessTrees > 1) {
                         probs = c(0.05, 0.95))
         rownames(yeah) <- c('alphaDiversity', rownames(microbeAncestors))
         cat('\t', file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')))
-        write.table(yeah, file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')), sep='\t', quote=F,append=T)
+        write.table(yeah, file = file.path(currsubtabledir, paste0(m, levels(newermap[,m])[nlevels(newermap[,m])], '.txt')), sep='\t', quote=F, append=T)
     }
     ##
 }
