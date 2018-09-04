@@ -1,3 +1,10 @@
+functions {
+    vector rescaleOU(matrix nhs, real alpha) {
+        return (exp(-2.0 * alpha * (1 - nhs[,2]))
+                - exp(-2.0 * alpha * (1 - nhs[,1])))
+               ./ (nhs[,2] - nhs[,1]);
+    }
+}
 data {
     int NSamples;
     int NObs;
@@ -19,6 +26,7 @@ data {
     matrix[NMicrobeNodes + 1, NMicrobeTips] microbeTipAncestorsT;
     matrix[NHostNodes, NHostNodes] hostAncestors;
     matrix[NHostTips, NHostNodes] hostTipAncestors;
+    matrix[NHostNodes, 2] hostNodeHeights;
     matrix<lower=0>[NHostNodes, NTimeBins] edgeToBin;
     row_vector<lower=0>[NMicrobeNodes] microbeEdges;
     real<lower=0> globalScale;
@@ -26,6 +34,7 @@ data {
 parameters {
     real<lower=0> aveStD;
     simplex[2 * NFactors + 3] stDProps;
+    real<lower=0> OUAlpha;
     vector[NTimeBins - 1] timeBinMetaVar;
     real<lower=0> aveStDMeta;
     simplex[3] metaVarProps;
@@ -65,15 +74,16 @@ transformed parameters {
                 * metaScales[2]
                 * sqrt(hostMetaVarProps[1]));
     hostVarRaw
-        = exp(hostAncestors
+        = rescaleOU(hostNodeHeights, OUAlpha)
+          .* (edgeToBin * exp(logRelativeEvolRates))
+          .* exp(hostAncestors
               * (phyloLogVarMultADiv
                  * metaScales[2]
-                 * sqrt(hostMetaVarProps[2])))
-          .* (edgeToBin * exp(logRelativeEvolRates));
+                 * sqrt(hostMetaVarProps[2])));
     hostScales
         = scales[2 * NFactors + 1]
           * sqrt(hostVarRaw
-                 / mean(hostTipAncestors * hostVarRaw));
+                  / mean(hostTipAncestors * hostVarRaw));
 
     phyloVarRaw
         = exp(hostAncestors
@@ -83,11 +93,10 @@ transformed parameters {
           .* (hostVarRaw * microbeVarRaw);
     phyloScales
         = scales[2 * NFactors + 2]
-              * sqrt(phyloVarRaw
-                     / mean(hostTipAncestors
-                            * (phyloVarRaw
-                               * microbeTipAncestorsT[2:,])));
-
+          * sqrt(phyloVarRaw
+                 / mean(hostTipAncestors
+                        * (phyloVarRaw
+                           * microbeTipAncestorsT[2:,])));
     scaledMicrobeNodeEffects
         = append_col(
                 append_row(globalScale,
@@ -106,6 +115,7 @@ model {
     vector[NObs] logit_ratios;
     aveStD ~ exponential(1.0 / aveStDPriorExpect);
     stDProps ~ dirichlet(rep_vector(1, 2 * NFactors + 3));
+    OUAlpha ~ exponential(1.0 / aveStDMetaPriorExpect);
     timeBinMetaVar ~ normal(0,1);
     aveStDMeta ~ exponential(1.0 / aveStDMetaPriorExpect);
     metaVarProps ~ dirichlet(rep_vector(1, 3));

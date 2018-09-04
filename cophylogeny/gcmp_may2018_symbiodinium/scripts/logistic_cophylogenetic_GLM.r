@@ -32,7 +32,7 @@ minSamps <- 1 # minimum number of samples that a sequence variant is present in 
 aveStDPriorExpect <- 1.0
 aveStDMetaPriorExpect <- 1.0
 globalScale <- 50
-NTrees <- 10 ## number of random trees to sample and to fit the model to
+NTrees <- 2 ## number of random trees to sample and to fit the model to
 NSplits <- 15 ## desired number of nodes per host timeBin
 ultrametricizeMicrobeTree <- TRUE
 ##
@@ -258,12 +258,15 @@ timeBinSizes <- list()
 relativeTimeBinSizes <- list()
 edgeToBin <- list()
 hostEdgeOrder <- list()
+nh <- list()
+maxNH <- list()
+nhRel <- list()
 for(i in 1:NTrees) {
-    nh <- nodeHeights(hostTreesSampled[[i]])
-    maxNH <- max(nh)
-    timeBinSizes[[i]] <- sapply(2:(length(meanBoundaries)+2),function(x) c(maxNH,meanBoundaries,0)[x-1] - c(maxNH,meanBoundaries,0)[x]) #size in millions of years of each bin (consistent across replicates /except/ for the oldest bin
+    nh[[i]] <- nodeHeights(hostTreesSampled[[i]])
+    maxNH[[i]] <- max(nh[[i]])
+    timeBinSizes[[i]] <- sapply(2:(length(meanBoundaries)+2),function(x) c(maxNH[[i]],meanBoundaries,0)[x-1] - c(maxNH[[i]],meanBoundaries,0)[x]) #size in millions of years of each bin (consistent across replicates /except/ for the oldest bin
     relativeTimeBinSizes[[i]] <- timeBinSizes[[i]] / sum(timeBinSizes[[i]]) #proportion of total tree height belonging to each bin (differs for each replicate due to the varying sizes of the oldest bin)
-    nd <- maxNH - nh
+    nd <- maxNH[[i]] - nh[[i]]
     edgeToBin[[i]] <- matrix(NA,ncol=NTimeBins,nrow=nrow(hostTreesSampled[[i]]$edge)) #create a matrix for each replicate that describes the proportion of each time bin that each branch exists for
     for(j in 1:NTimeBins) {
         if(j == 1) {
@@ -291,11 +294,15 @@ for(i in 1:NTrees) {
 
 		#edgeToBin[[i]][,j] <- edgeToBin[[i]][,j] / timeBinSizes[[i]][j]
     }
-    edgeToBin[[i]] <- edgeToBin[[i]] / maxNH #this replaces the commented line above
+    edgeToBin[[i]] <- edgeToBin[[i]] / maxNH[[i]] #this replaces the commented line above
 
     hostEdgeOrder[[i]] <- order(hostTreesSampled[[i]]$edge[,2])
     rownames(edgeToBin[[i]]) <- hostTreesSampled[[i]]$edge[,2]
     edgeToBin[[i]] <- edgeToBin[[i]][hostEdgeOrder[[i]],]
+    
+    nhRel[[i]] <- nh[[i]] / maxNH[[i]]
+    rownames(nhRel[[i]]) <- hostTreesSampled[[i]]$edge[,2]
+    nhRel[[i]] <- nhRel[[i]][hostEdgeOrder[[i]],]
 }
 ##
 
@@ -337,6 +344,7 @@ for (i in 1:NTrees) {
                          microbeTipAncestorsT           = t(cbind(1, microbeAncestors[1:NMicrobeTips, ])),
                          hostAncestors                  = hostAncestors[[i]],
                          hostTipAncestors               = hostAncestors[[i]][1:NHostTips, ],
+                         hostNodeHeights                = nhRel[[i]],
                          edgeToBin                      = edgeToBin[[i]],
                          NHostNodes                     = NHostNodes,
                          NTimeBins                      = NTimeBins,
