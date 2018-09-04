@@ -70,9 +70,9 @@ transformed parameters {
                / mean(microbeVarRaw * microbeTipAncestorsT[2:,]));
     logRelativeEvolRates
         = append_row(0,
-            cumulative_sum(timeBinMetaVar)
-                * metaScales[2]
-                * sqrt(hostMetaVarProps[1]));
+            timeBinMetaVar
+            * metaScales[2]
+            * sqrt(hostMetaVarProps[1]));
     hostVarRaw
         = rescaleOU(hostNodeHeights, OUAlpha)
           .* (edgeToBin * exp(logRelativeEvolRates))
