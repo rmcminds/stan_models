@@ -432,12 +432,12 @@ for(i in 1:NTrees) {
     relativeEvolRates <- exp(extract(fit[[i]], pars='logRelativeEvolRates')[[1]])
     colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - ',meanBoundariesRounded[4],' mya'), paste0(meanBoundariesRounded[4],' - present'))
 
-    pdf(file=file.path(currplotdir,'evolRatesRelToMRCA.pdf'), width=25, height=15)
-    boxplot(relativeEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to MRCA')
+    pdf(file=file.path(currplotdir,'evolRates.pdf'), width=25, height=15)
+    boxplot(relativeEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to Mean')
     graphics.off()
     
-    pdf(file=file.path(currplotdir,'logEvolRatesRelToMRCA.pdf'), width=25, height=15)
-    boxplot(log(relativeEvolRates), xlab='Time Period', ylab='Log Rate of Evolution Relative to MRCA')
+    pdf(file=file.path(currplotdir,'logEvolRates.pdf'), width=25, height=15)
+    boxplot(log(relativeEvolRates), xlab='Time Period', ylab='Log Rate of Evolution Relative to Mean')
     graphics.off()
 
 	save(relativeEvolRates,file=file.path(currdatadir,'relativeEvolRates.RData'))
@@ -553,12 +553,12 @@ save(stDProps,file=file.path(currdatadir,'stDProps.RData'))
 relativeEvolRates <- exp(extract(allfit, pars='logRelativeEvolRates')[[1]])
 colnames(relativeEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - ',meanBoundariesRounded[4],' mya'), paste0(meanBoundariesRounded[4],' - present'))
 
-pdf(file=file.path(currplotdir,'evolRatesRelToMRCA.pdf'), width=25, height=15)
-boxplot(relativeEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to MRCA')
+pdf(file=file.path(currplotdir,'evolRates.pdf'), width=25, height=15)
+boxplot(relativeEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to Mean')
 graphics.off()
 
-pdf(file=file.path(currplotdir,'logEvolRatesRelToMRCA.pdf'), width=25, height=15)
-boxplot(log(relativeEvolRates), xlab='Time Period', ylab='Log Rate of Evolution Relative to MRCA')
+pdf(file=file.path(currplotdir,'logEvolRates.pdf'), width=25, height=15)
+boxplot(log(relativeEvolRates), xlab='Time Period', ylab='Log Rate of Evolution Relative to Mean')
 graphics.off()
 
 save(relativeEvolRates,file=file.path(currdatadir,'relativeEvolRates.RData'))
