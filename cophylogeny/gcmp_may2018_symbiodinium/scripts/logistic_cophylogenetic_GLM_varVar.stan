@@ -83,7 +83,7 @@ transformed parameters {
     hostScales
         = scales[2 * NFactors + 1]
           * sqrt(hostVarRaw
-                  / mean(hostTipAncestors * hostVarRaw));
+                 / mean(hostTipAncestors * hostVarRaw));
 
     phyloVarRaw
         = exp(hostAncestors
