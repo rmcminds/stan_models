@@ -31,6 +31,8 @@ minSamps <- 1 # minimum number of samples that a sequence variant is present in 
 ## model options
 aveStDPriorExpect <- 1.0
 aveStDMetaPriorExpect <- 1.0
+hostOUAlphaPriorExpect <- 1.0
+microbeOUAlphaPriorExpect <- 1.0
 globalScale <- 50
 NTrees <- 2 ## number of random trees to sample and to fit the model to
 NSplits <- 15 ## desired number of nodes per host timeBin
@@ -166,6 +168,10 @@ for(node in 1:(NMicrobeNodes + 1)) {
 colnames(microbeAncestors) <- rownames(microbeAncestors) <- paste0('i',1:(NMicrobeNodes + 1))
 colnames(microbeAncestors)[1:NMicrobeTips] <- rownames(microbeAncestors)[1:NMicrobeTips] <- paste0('t',colnames(yb))
 microbeAncestors <- microbeAncestors[-(NMicrobeTips + 1), -(NMicrobeTips + 1)]
+microbeNHs <- nodeHeights(microbeTree.root.Y)
+microbeNHRel <- microbeNHs / max(microbeNHs)
+rownames(microbeNHRel) <- microbeTree.root.Y$edge[,2]
+microbeNHRel <- microbeNHRel[microbeEdgeOrder,]
 ##
 
 ## prepare data for the model matrix
@@ -345,11 +351,14 @@ for (i in 1:NTrees) {
                          hostAncestors                  = hostAncestors[[i]],
                          hostTipAncestors               = hostAncestors[[i]][1:NHostTips, ],
                          hostNodeHeights                = nhRel[[i]],
+                         microbeNodeHeights             = microbeNHRel,
                          edgeToBin                      = edgeToBin[[i]],
                          NHostNodes                     = NHostNodes,
                          NTimeBins                      = NTimeBins,
                          aveStDPriorExpect              = aveStDPriorExpect,
                          aveStDMetaPriorExpect          = aveStDMetaPriorExpect,
+                         hostOUAlphaPriorExpect         = hostOUAlphaPriorExpect,
+                         microbeOUAlphaPriorExpect      = microbeOUAlphaPriorExpect,
                          microbeEdges                   = microbeEdges,
                          globalScale                    = globalScale)
 }
@@ -441,7 +450,19 @@ for(i in 1:NTrees) {
     graphics.off()
 
 	save(relativeEvolRates,file=file.path(currdatadir,'relativeEvolRates.RData'))
+    ##
     
+    ## ornstein-uhlenbeck parameters
+    hostOUAlpha <- extract(fit[[i]], pars='hostOUAlpha')[[1]]
+    microbeOUAlpha <- extract(fit[[i]], pars='hostOUAlpha')[[1]]
+    OUAlphas <- cbind(hostOUAlpha, microbeOUAlpha)
+    colnames(OUAlphas) <- c('host', 'microbe')
+    
+    pdf(file=file.path(currplotdir,'OUAlphas.pdf'), width=25, height=15)
+    boxplot(OUAlphas, xlab='Host or microbe', ylab='alpha')
+    graphics.off()
+    
+    save(OUAlphas,file=file.path(currdatadir,'OUAlphas.RData'))
     ##
     
     ## summarize effects
@@ -562,6 +583,19 @@ boxplot(log(relativeEvolRates), xlab='Time Period', ylab='Log Rate of Evolution 
 graphics.off()
 
 save(relativeEvolRates,file=file.path(currdatadir,'relativeEvolRates.RData'))
+
+## ornstein-uhlenbeck parameters
+hostOUAlpha <- extract(allfit, pars='hostOUAlpha')[[1]]
+microbeOUAlpha <- extract(allfit, pars='hostOUAlpha')[[1]]
+OUAlphas <- cbind(hostOUAlpha, microbeOUAlpha)
+colnames(OUAlphas) <- c('host', 'microbe')
+
+pdf(file=file.path(currplotdir,'OUAlphas.pdf'), width=25, height=15)
+boxplot(OUAlphas, xlab='Host or microbe', ylab='alpha')
+graphics.off()
+
+save(OUAlphas,file=file.path(currdatadir,'OUAlphas.RData'))
+##
 
 ## summarize the mean branch lengths of the microbes
 sums <- summary(allfit, pars='microbeScales', probs=c(0.05,0.95), use_cache = F)

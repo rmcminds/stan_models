@@ -20,6 +20,8 @@ data {
     int microbeTipNames[NObs];
     real<lower=0> aveStDPriorExpect;
     real<lower=0> aveStDMetaPriorExpect;
+    real<lower=0> hostOUAlphaPriorExpect;
+    real<lower=0> microbeOUAlphaPriorExpect;
     matrix[NEffects, NFactors] factLevelMat;
     matrix[NSamples, NEffects + NHostNodes + 1] modelMat;
     matrix[NMicrobeNodes, NMicrobeNodes] microbeAncestorsT;
@@ -27,6 +29,7 @@ data {
     matrix[NHostNodes, NHostNodes] hostAncestors;
     matrix[NHostTips, NHostNodes] hostTipAncestors;
     matrix[NHostNodes, 2] hostNodeHeights;
+    matrix[NMicrobeNodes, 2] microbeNodeHeights;
     matrix<lower=0>[NHostNodes, NTimeBins] edgeToBin;
     row_vector<lower=0>[NMicrobeNodes] microbeEdges;
     real<lower=0> globalScale;
@@ -34,7 +37,8 @@ data {
 parameters {
     real<lower=0> aveStD;
     simplex[2 * NFactors + 3] stDProps;
-    real<lower=0> OUAlpha;
+    real<lower=0> hostOUAlpha;
+    real<lower=0> microbeOUAlpha;
     vector[NTimeBins - 1] timeBinMetaVar;
     real<lower=0> aveStDMeta;
     simplex[3] metaVarProps;
@@ -62,8 +66,9 @@ transformed parameters {
         = sqrt(3 * metaVarProps)
           * aveStDMeta;
     microbeVarRaw
-        = exp((phyloLogVarMultPrev * metaScales[1])
-              * microbeAncestorsT)
+        = rescaleOU(microbeNodeHeights, microbeOUAlpha)'
+          .* exp((phyloLogVarMultPrev * metaScales[1])
+                 * microbeAncestorsT)
           .* microbeEdges;
     microbeScales
         = sqrt(microbeVarRaw
@@ -74,7 +79,7 @@ transformed parameters {
             * metaScales[2]
             * sqrt(hostMetaVarProps[1]));
     hostVarRaw
-        = rescaleOU(hostNodeHeights, OUAlpha)
+        = rescaleOU(hostNodeHeights, hostOUAlpha)
           .* (edgeToBin * exp(logRelativeEvolRates))
           .* exp(hostAncestors
               * (phyloLogVarMultADiv
@@ -115,7 +120,8 @@ model {
     vector[NObs] logit_ratios;
     aveStD ~ exponential(1.0 / aveStDPriorExpect);
     stDProps ~ dirichlet(rep_vector(1, 2 * NFactors + 3));
-    OUAlpha ~ exponential(1.0 / aveStDMetaPriorExpect);
+    hostOUAlpha ~ exponential(1.0 / hostOUAlphaPriorExpect);
+    microbeOUAlpha ~ exponential(1.0 / microbeOUAlphaPriorExpect);
     timeBinMetaVar ~ normal(0,1);
     aveStDMeta ~ exponential(1.0 / aveStDMetaPriorExpect);
     metaVarProps ~ dirichlet(rep_vector(1, 3));
