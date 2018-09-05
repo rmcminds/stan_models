@@ -72,7 +72,7 @@ transformed parameters {
     logRelativeMicrobeEvolRates[2:]
         = microbeTimeBinMetaVar
           * metaScales[1]
-          * sqrt(microbeMetaVarProps[1]));
+          * sqrt(microbeMetaVarProps[1]);
     logRelativeMicrobeEvolRates[1]
         = -sum(logRelativeMicrobeEvolRates[2:]);
     microbeVarRaw
@@ -88,7 +88,7 @@ transformed parameters {
     logRelativeHostEvolRates[2:]
         = hostTimeBinMetaVar
           * metaScales[2]
-          * sqrt(hostMetaVarProps[1]));
+          * sqrt(hostMetaVarProps[1]);
     logRelativeHostEvolRates[1]
         = -sum(logRelativeHostEvolRates[2:]);
     hostVarRaw
