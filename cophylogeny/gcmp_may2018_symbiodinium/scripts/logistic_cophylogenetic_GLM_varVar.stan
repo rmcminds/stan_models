@@ -10,11 +10,12 @@ data {
     int NObs;
     int NMicrobeNodes;
     int NMicrobeTips;
+    int NMicrobeTimeBins;
     int NFactors;
     int NEffects;
     int NHostNodes;
     int NHostTips;
-    int NTimeBins;
+    int NHostTimeBins;
     int present[NObs];
     int sampleNames[NObs];
     int microbeTipNames[NObs];
@@ -30,7 +31,8 @@ data {
     matrix[NHostTips, NHostNodes] hostTipAncestors;
     matrix[NHostNodes, 2] hostNodeHeights;
     matrix[NMicrobeNodes, 2] microbeNodeHeights;
-    matrix<lower=0>[NHostNodes, NTimeBins] edgeToBin;
+    matrix<lower=0>[NHostNodes, NHostTimeBins] hostEdgeToBin;
+    matrix<lower=0>[NMicrobeNodes, NMicrobeTimeBins] microbeEdgeToBin;
     row_vector<lower=0>[NMicrobeNodes] microbeEdges;
     real<lower=0> globalScale;
 }
@@ -39,10 +41,12 @@ parameters {
     simplex[2 * NFactors + 3] stDProps;
     real<lower=0> hostOUAlpha;
     real<lower=0> microbeOUAlpha;
-    vector[NTimeBins - 1] timeBinMetaVar;
+    vector[NMicrobeTimeBins - 1] microbeTimeBinMetaVar;
+    vector[NHostTimeBins - 1] hostTimeBinMetaVar;
     real<lower=0> aveStDMeta;
     simplex[3] metaVarProps;
     simplex[2] hostMetaVarProps;
+    simplex[2] microbeMetaVarProps;
     row_vector[NMicrobeNodes] phyloLogVarMultPrev;
     vector[NHostNodes] phyloLogVarMultADiv;
     matrix[NHostNodes, NMicrobeNodes] phyloLogVarMultRaw;
@@ -53,7 +57,8 @@ transformed parameters {
     vector<lower=0>[3] metaScales;
     row_vector<lower=0>[NMicrobeNodes] microbeVarRaw;
     row_vector<lower=0>[NMicrobeNodes] microbeScales;
-    vector[NTimeBins] logRelativeEvolRates;
+    vector[NMicrobeTimeBins] logRelativeMicrobeEvolRates;
+    vector[NHostTimeBins] logRelativeHostEvolRates;
     vector<lower=0>[NHostNodes] hostVarRaw;
     vector<lower=0>[NHostNodes] hostScales;
     matrix<lower=0>[NHostNodes, NMicrobeNodes] phyloVarRaw;
@@ -65,22 +70,29 @@ transformed parameters {
     metaScales
         = sqrt(3 * metaVarProps)
           * aveStDMeta;
+    logRelativeMicrobeEvolRates
+        = append_row(0,
+            microbeTimeBinMetaVar
+            * metaScales[1]
+            * sqrt(microbeMetaVarProps[1]));
     microbeVarRaw
         = rescaleOU(microbeNodeHeights, microbeOUAlpha)'
-          .* exp((phyloLogVarMultPrev * metaScales[1])
-                 * microbeAncestorsT)
-          .* microbeEdges;
+          .* (microbeEdgeToBin * exp(logRelativeMicrobeEvolRates))
+          .* exp((phyloLogVarMultPrev
+                  * metaScales[1]
+                  * sqrt(microbeMetaVarProps[2]))
+                 * microbeAncestorsT);
     microbeScales
         = sqrt(microbeVarRaw
                / mean(microbeVarRaw * microbeTipAncestorsT[2:,]));
-    logRelativeEvolRates
+    logRelativeHostEvolRates
         = append_row(0,
-            timeBinMetaVar
+            hostTimeBinMetaVar
             * metaScales[2]
             * sqrt(hostMetaVarProps[1]));
     hostVarRaw
         = rescaleOU(hostNodeHeights, hostOUAlpha)
-          .* (edgeToBin * exp(logRelativeEvolRates))
+          .* (hostEdgeToBin * exp(logRelativeHostEvolRates))
           .* exp(hostAncestors
               * (phyloLogVarMultADiv
                  * metaScales[2]
@@ -122,10 +134,12 @@ model {
     stDProps ~ dirichlet(rep_vector(1, 2 * NFactors + 3));
     hostOUAlpha ~ exponential(1.0 / hostOUAlphaPriorExpect);
     microbeOUAlpha ~ exponential(1.0 / microbeOUAlphaPriorExpect);
-    timeBinMetaVar ~ normal(0,1);
+    hostTimeBinMetaVar ~ normal(0,1);
+    microbeTimeBinMetaVar ~ normal(0,1);
     aveStDMeta ~ exponential(1.0 / aveStDMetaPriorExpect);
     metaVarProps ~ dirichlet(rep_vector(1, 3));
     hostMetaVarProps ~ dirichlet(rep_vector(1, 2));
+    microbeMetaVarProps ~ dirichlet(rep_vector(1, 2));
     phyloLogVarMultPrev ~ normal(0,1);
     phyloLogVarMultADiv ~ normal(0,1);
     to_vector(phyloLogVarMultRaw) ~ normal(0,1);
