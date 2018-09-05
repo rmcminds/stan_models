@@ -134,7 +134,57 @@ NIntMicrobeNodes <- microbeTree.root.Y$Nnode
 NMicrobeNodes <- NMicrobeTips + NIntMicrobeNodes - 1
 microbeEdgeOrder <- order(microbeTree.root.Y$edge[,2])
 microbeEdges <- microbeTree.root.Y$edge.length[microbeEdgeOrder]
+NMicrobeTimeBins <- ceiling(NIntMicrobeNodes / NSplits)
+microbeNHs <- nodeHeights(microbeTree.root.Y)
+maxMicrobeNHs <- max(microbeNHs)
 ##
+
+#divide total evolutionary time into chunks that contain approximately equal numbers of splits
+lttMicrobeTree <- ltt(microbeTree.root.Y, log.lineages=F, plot=F)
+temp <- maxMicrobeNHs - lttMicrobeTree$times[-length(lttMicrobeTree$times)]
+microbeSplitTimes <- split(temp, ceiling(seq_along(temp) / NSplits))
+if(length(microbeSplitTimes[[NMicrobeTimeBins]]) < NSplits/2) {
+    microbeSplitTimes[[NMicrobeTimeBins - 1]] <- c(microbeSplitTimes[[NMicrobeTimeBins - 1]], microbeSplitTimes[[NMicrobeTimeBins]])
+    microbeSplitTimes[[NMicrobeTimeBins]] <- NULL
+}
+
+#cut points in each phylogeny that would result in approximately equal numbers of splits per bin of time
+microbeBoundaries <- sapply(2:NMicrobeTimeBins, function(x) max(microbeSplitTimes[[x]]))
+microbeBoundariesRounded <- round(microbeBoundaries, 1)
+
+microbeTimeBinSizes <- sapply(2:(length(microbeBoundaries)+2), function(x) c(maxMicrobeNHs, microbeBoundaries, 0)[x-1] - c(maxMicrobeNHs, microbeBoundaries, 0)[x]) #size of each bin
+relativeMicrobeTimeBinSizes <- microbeTimeBinSizes / sum(microbeTimeBinSizes) #proportion of total tree height belonging to each bin (differs for each replicate due to the varying sizes of the oldest bin)
+ndMicrobe <- maxMicrobeNHs - microbeNHs
+microbeEdgeToBin <- matrix(NA, ncol = NMicrobeTimeBins, nrow = nrow(microbeTree.root.Y$edge)) #create a matrix for each replicate that describes the proportion of each time bin that each branch exists for
+for(j in 1:NMicrobeTimeBins) {
+    if(j == 1) {
+        allin <- which(ndMicrobe[,2] >= microbeBoundaries[j])
+        allout <- which(ndMicrobe[,1] <= microbeBoundaries[j])
+        cedge <- which((ndMicrobe[,1] > microbeBoundaries[j]) & (ndMicrobe[,2] < microbeBoundaries[j]))
+        microbeEdgeToBin[cedge,j] <- ndMicrobe[cedge,1] - microbeBoundaries[j]
+    } else if(j == NHostTimeBins) {
+        allin <- which(ndMicrobe[,1] <= microbeBoundaries[j-1])
+        allout <- which(ndMicrobe[,2] >= microbeBoundaries[j-1])
+        cedge <- which((ndMicrobe[,1] > microbeBoundaries[j-1]) & (ndMicrobe[,2] < microbeBoundaries[j-1]))
+        microbeEdgeToBin[cedge,j] <- microbeBoundaries[j-1] - ndMicrobe[cedge,2]
+    } else {
+        allin <- which((ndMicrobe[,1] <= microbeBoundaries[j-1]) & (ndMicrobe[,2] >= microbeBoundaries[j]))
+        allout <- which((ndMicrobe[,1] <= microbeBoundaries[j]) | (ndMicrobe[,2] >= microbeBoundaries[j-1]))
+        cedge1 <- which((ndMicrobe[,1] < microbeBoundaries[j-1]) & (ndMicrobe[,1] > microbeBoundaries[j]) & (ndMicrobe[,2] < microbeBoundaries[j]))
+        microbeEdgeToBin[cedge1,j] <- ndMicrobe[cedge1,1] - microbeBoundaries[j]
+        cedge2 <- which((ndMicrobe[,1] > microbeBoundaries[j-1]) & (ndMicrobe[,2] < microbeBoundaries[j-1]) & (ndMicrobe[,2] > microbeBoundaries[j]))
+        microbeEdgeToBin[cedge2,j] <- microbeBoundaries[j-1] - ndMicrobe[cedge2,2]
+        cedge3 <- which((ndMicrobe[,1] > microbeBoundaries[j-1]) & (ndMicrobe[,2] < microbeBoundaries[j]))
+        microbeEdgeToBin[cedge3,j] <- microbeBoundaries[j-1] - microbeBoundaries[j]
+    }
+    microbeEdgeToBin[allin,j] <- microbeTree.root.Y$edge.length[allin]
+    microbeEdgeToBin[allout,j] <- 0
+
+}
+microbeEdgeToBin <- microbeEdgeToBin / maxMicrobeNHs
+rownames(microbeEdgeToBin) <- microbeTree.root.Y$edge[,2]
+microbeEdgeToBin <- microbeEdgeToBin[microbeEdgeOrder,]
+
 
 ## melt the data into long format to feed to model, and generate summary numbers about samples
 senddat <- melt(yb, varnames=c('sample','tip'), value.name='present')
@@ -163,8 +213,7 @@ for(node in 1:(NMicrobeNodes + 1)) {
 colnames(microbeAncestors) <- rownames(microbeAncestors) <- paste0('i',1:(NMicrobeNodes + 1))
 colnames(microbeAncestors)[1:NMicrobeTips] <- rownames(microbeAncestors)[1:NMicrobeTips] <- paste0('t',colnames(yb))
 microbeAncestors <- microbeAncestors[-(NMicrobeTips + 1), -(NMicrobeTips + 1)]
-microbeNHs <- nodeHeights(microbeTree.root.Y)
-microbeNHRel <- microbeNHs / max(microbeNHs)
+microbeNHRel <- microbeNHs / maxMicrobeNHs
 rownames(microbeNHRel) <- microbeTree.root.Y$edge[,2]
 microbeNHRel <- microbeNHRel[microbeEdgeOrder,]
 ##
@@ -221,8 +270,8 @@ generaOfUnknowns <- sapply(study.species.missing, function(x) strsplit(x, '_')[[
 NHostTimeBins <- ceiling(length(levels(newermap[,sampleTipKey])) / NSplits)
 sampleMap <- list()
 hostTreesSampled <- list()
-splittimes <- list()
-boundaries <- matrix(NA,nrow=NTrees, ncol=NHostTimeBins-1)
+hostSplitTimes <- list()
+hostBoundaries <- matrix(NA,nrow=NTrees, ncol=NHostTimeBins-1)
 for(i in 1:NTrees) {
     sampleMap[[i]] <- newermap
     levels(sampleMap[[i]][,sampleTipKey])[levels(sampleMap[[i]][,sampleTipKey]) == 'Fungid_sp'] <- sample(grep(paste0(paste(possibleFungidGenera,collapse='|'),'_'), attr(hostTree, "TipLabel"), value=T), 1) ##assign unidentified Fungids to a random member of the group independently for each tree
@@ -237,26 +286,26 @@ for(i in 1:NTrees) {
 	#divide total evolutionary time into chunks that contain approximately equal numbers of splits
 	lttHostTreesSampled <- ltt(hostTreesSampled[[i]],log.lineages=F,plot=F)
 	temp <- max(nodeHeights(hostTreesSampled[[i]])) - lttHostTreesSampled$times[-length(lttHostTreesSampled$times)]
-	splittimes[[i]] <- split(temp, ceiling(seq_along(temp)/NSplits))
-    if(length(splittimes[[i]][[NHostTimeBins]]) < NSplits/2) {
-        splittimes[[i]][[NHostTimeBins - 1]] <- c(splittimes[[i]][[NHostTimeBins - 1]], splittimes[[i]][[NHostTimeBins]])
-        splittimes[[i]][[NHostTimeBins]] <- NULL
+	hostSplitTimes[[i]] <- split(temp, ceiling(seq_along(temp)/NSplits))
+    if(length(hostSplitTimes[[i]][[NHostTimeBins]]) < NSplits/2) {
+        hostSplitTimes[[i]][[NHostTimeBins - 1]] <- c(hostSplitTimes[[i]][[NHostTimeBins - 1]], hostSplitTimes[[i]][[NHostTimeBins]])
+        hostSplitTimes[[i]][[NHostTimeBins]] <- NULL
     }
     
     #cut points in each phylogeny that would result in approximately equal numbers of splits per bin of time
-    boundaries[i,] <- sapply(2:NHostTimeBins, function(x) max(splittimes[[i]][[x]]))
+    hostBoundaries[i,] <- sapply(2:NHostTimeBins, function(x) max(hostSplitTimes[[i]][[x]]))
 
 }
 ##
 
 ## average cut points among all the trees so the bins of time are consistent across replicates
-meanBoundaries <- apply(boundaries,2,mean)
-meanBoundariesRounded <- round(meanBoundaries,1)
+meanHostBoundaries <- apply(hostBoundaries,2,mean)
+meanHostBoundariesRounded <- round(meanHostBoundaries,1)
 ##
 
 ## create matrices that relate the portion of each host branch that belongs to each time bin
-timeBinSizes <- list()
-relativeTimeBinSizes <- list()
+hostTimeBinSizes <- list()
+relativeHostTimeBinSizes <- list()
 hostEdgeToBin <- list()
 hostEdgeOrder <- list()
 nh <- list()
@@ -265,35 +314,35 @@ nhRel <- list()
 for(i in 1:NTrees) {
     nh[[i]] <- nodeHeights(hostTreesSampled[[i]])
     maxNH[[i]] <- max(nh[[i]])
-    timeBinSizes[[i]] <- sapply(2:(length(meanBoundaries)+2),function(x) c(maxNH[[i]],meanBoundaries,0)[x-1] - c(maxNH[[i]],meanBoundaries,0)[x]) #size in millions of years of each bin (consistent across replicates /except/ for the oldest bin
-    relativeTimeBinSizes[[i]] <- timeBinSizes[[i]] / sum(timeBinSizes[[i]]) #proportion of total tree height belonging to each bin (differs for each replicate due to the varying sizes of the oldest bin)
+    hostTimeBinSizes[[i]] <- sapply(2:(length(meanHostBoundaries)+2),function(x) c(maxNH[[i]],meanHostBoundaries,0)[x-1] - c(maxNH[[i]],meanHostBoundaries,0)[x]) #size in millions of years of each bin (consistent across replicates /except/ for the oldest bin
+    relativeHostTimeBinSizes[[i]] <- hostTimeBinSizes[[i]] / sum(hostTimeBinSizes[[i]]) #proportion of total tree height belonging to each bin (differs for each replicate due to the varying sizes of the oldest bin)
     nd <- maxNH[[i]] - nh[[i]]
     hostEdgeToBin[[i]] <- matrix(NA,ncol=NHostTimeBins,nrow=nrow(hostTreesSampled[[i]]$edge)) #create a matrix for each replicate that describes the proportion of each time bin that each branch exists for
     for(j in 1:NHostTimeBins) {
         if(j == 1) {
-            allin <- which(nd[,2] >= meanBoundaries[j])
-			allout <- which(nd[,1] <= meanBoundaries[j])
-            cedge <- which((nd[,1] > meanBoundaries[j]) & (nd[,2] < meanBoundaries[j]))
-            hostEdgeToBin[[i]][cedge,j] <- nd[cedge,1] - meanBoundaries[j]
+            allin <- which(nd[,2] >= meanHostBoundaries[j])
+			allout <- which(nd[,1] <= meanHostBoundaries[j])
+            cedge <- which((nd[,1] > meanHostBoundaries[j]) & (nd[,2] < meanHostBoundaries[j]))
+            hostEdgeToBin[[i]][cedge,j] <- nd[cedge,1] - meanHostBoundaries[j]
         } else if(j == NHostTimeBins) {
-            allin <- which(nd[,1] <= meanBoundaries[j-1])
-            allout <- which(nd[,2] >= meanBoundaries[j-1])
-            cedge <- which((nd[,1] > meanBoundaries[j-1]) & (nd[,2] < meanBoundaries[j-1]))
-            hostEdgeToBin[[i]][cedge,j] <- meanBoundaries[j-1] - nd[cedge,2]
+            allin <- which(nd[,1] <= meanHostBoundaries[j-1])
+            allout <- which(nd[,2] >= meanHostBoundaries[j-1])
+            cedge <- which((nd[,1] > meanHostBoundaries[j-1]) & (nd[,2] < meanHostBoundaries[j-1]))
+            hostEdgeToBin[[i]][cedge,j] <- meanHostBoundaries[j-1] - nd[cedge,2]
         } else {
-            allin <- which((nd[,1] <= meanBoundaries[j-1]) & (nd[,2] >= meanBoundaries[j]))
-            allout <- which((nd[,1] <= meanBoundaries[j]) | (nd[,2] >= meanBoundaries[j-1]))
-            cedge1 <- which((nd[,1] < meanBoundaries[j-1]) & (nd[,1] > meanBoundaries[j]) & (nd[,2] < meanBoundaries[j]))
-            hostEdgeToBin[[i]][cedge1,j] <- nd[cedge1,1] - meanBoundaries[j]
-            cedge2 <- which((nd[,1] > meanBoundaries[j-1]) & (nd[,2] < meanBoundaries[j-1]) & (nd[,2] > meanBoundaries[j]))
-            hostEdgeToBin[[i]][cedge2,j] <- meanBoundaries[j-1] - nd[cedge2,2]
-            cedge3 <- which((nd[,1] > meanBoundaries[j-1]) & (nd[,2] < meanBoundaries[j]))
-            hostEdgeToBin[[i]][cedge3,j] <- meanBoundaries[j-1] - meanBoundaries[j]
+            allin <- which((nd[,1] <= meanHostBoundaries[j-1]) & (nd[,2] >= meanHostBoundaries[j]))
+            allout <- which((nd[,1] <= meanHostBoundaries[j]) | (nd[,2] >= meanHostBoundaries[j-1]))
+            cedge1 <- which((nd[,1] < meanHostBoundaries[j-1]) & (nd[,1] > meanHostBoundaries[j]) & (nd[,2] < meanHostBoundaries[j]))
+            hostEdgeToBin[[i]][cedge1,j] <- nd[cedge1,1] - meanHostBoundaries[j]
+            cedge2 <- which((nd[,1] > meanHostBoundaries[j-1]) & (nd[,2] < meanHostBoundaries[j-1]) & (nd[,2] > meanHostBoundaries[j]))
+            hostEdgeToBin[[i]][cedge2,j] <- meanHostBoundaries[j-1] - nd[cedge2,2]
+            cedge3 <- which((nd[,1] > meanHostBoundaries[j-1]) & (nd[,2] < meanHostBoundaries[j]))
+            hostEdgeToBin[[i]][cedge3,j] <- meanHostBoundaries[j-1] - meanHostBoundaries[j]
         }
         hostEdgeToBin[[i]][allin,j] <- hostTreesSampled[[i]]$edge.length[allin]
         hostEdgeToBin[[i]][allout,j] <- 0
 
-		#hostEdgeToBin[[i]][,j] <- hostEdgeToBin[[i]][,j] / timeBinSizes[[i]][j]
+		#hostEdgeToBin[[i]][,j] <- hostEdgeToBin[[i]][,j] / hostTimeBinSizes[[i]][j]
     }
     hostEdgeToBin[[i]] <- hostEdgeToBin[[i]] / maxNH[[i]] #this replaces the commented line above
 
@@ -369,11 +418,11 @@ warmup <- floor(NMCSamples / 2)
 dir.create(outdir, recursive=T)
 save.image(file.path(outdir,'setup.RData'))
 save(microbeAncestors,file=file.path(outdir,'microbeAncestors.RData'))
-save(meanBoundaries,file=file.path(outdir,'meanBoundaries.RData'))
+save(meanHostBoundaries,file=file.path(outdir,'meanHostBoundaries.RData'))
 save(hostAncestors,file=file.path(outdir,'hostAncestors.RData'))
 save(hostAncestorsExpanded,file=file.path(outdir,'hostAncestorsExpanded.RData'))
 save(hostTreesSampled,file=file.path(outdir,'hostTreesSampled.RData'))
-save(timeBinSizes,file=file.path(outdir,'timeBinSizes.RData'))
+save(hostTimeBinSizes,file=file.path(outdir,'hostTimeBinSizes.RData'))
 ##
 
 ## run the model!
@@ -408,7 +457,7 @@ for(i in 1:NTrees) {
     ## plot the sampled tree with the time bins marked
     pdf(file=file.path(currplotdir,'sampledTree.pdf'), width=25, height=15)
     plot(hostTreesSampled[[i]],cex=0.75)
-    for(age in max(nodeHeights(hostTreesSampled[[i]])) - meanBoundaries) {
+    for(age in max(nodeHeights(hostTreesSampled[[i]])) - meanHostBoundaries) {
         lines(x = c(age, age), y = c(1, length(hostTreesSampled[[i]]$tip.label)), lwd=1)
     }
     graphics.off()
@@ -436,7 +485,7 @@ for(i in 1:NTrees) {
     
     ## compare rates of host evolution in each time bin
     relativeHostEvolRates <- exp(extract(fit[[i]], pars='logRelativeHostEvolRates')[[1]])
-    colnames(relativeHostEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - ',meanBoundariesRounded[4],' mya'), paste0(meanBoundariesRounded[4],' - present'))
+    colnames(relativeHostEvolRates) <- c(paste0('before ',meanHostBoundariesRounded[1],' mya'), paste0(meanHostBoundariesRounded[1],' - ',meanHostBoundariesRounded[2],' mya'), paste0(meanHostBoundariesRounded[2],' - ',meanHostBoundariesRounded[3],' mya'), paste0(meanHostBoundariesRounded[3],' - ',meanHostBoundariesRounded[4],' mya'), paste0(meanHostBoundariesRounded[4],' - present'))
 
     pdf(file=file.path(currplotdir,'evolRatesHost.pdf'), width=25, height=15)
     boxplot(relativeHostEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to Mean')
@@ -447,6 +496,20 @@ for(i in 1:NTrees) {
     graphics.off()
 
 	save(relativeHostEvolRates,file=file.path(currdatadir,'relativeHostEvolRates.RData'))
+    ##
+    
+    ## compare rates of microbe evolution in each time bin
+    relativeMicrobeEvolRates <- exp(extract(fit[[i]], pars='logRelativeMicrobeEvolRates')[[1]])
+    
+    pdf(file=file.path(currplotdir,'evolRatesMicrobe.pdf'), width=25, height=15)
+    boxplot(relativeMicrobeEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to Mean')
+    graphics.off()
+    
+    pdf(file=file.path(currplotdir,'logEvolRatesMicrobe.pdf'), width=25, height=15)
+    boxplot(log(relativeMicrobeEvolRates), xlab='Time Period', ylab='Log Rate of Evolution Relative to Mean')
+    graphics.off()
+    
+    save(relativeMicrobeEvolRates,file=file.path(currdatadir,'relativeMicrobeEvolRates.RData'))
     ##
     
     ## ornstein-uhlenbeck parameters
@@ -569,7 +632,7 @@ graphics.off()
 save(stDProps,file=file.path(currdatadir,'stDProps.RData'))
 
 relativeHostEvolRates <- exp(extract(allfit, pars='logRelativeHostEvolRates')[[1]])
-colnames(relativeHostEvolRates) <- c(paste0('before ',meanBoundariesRounded[1],' mya'), paste0(meanBoundariesRounded[1],' - ',meanBoundariesRounded[2],' mya'), paste0(meanBoundariesRounded[2],' - ',meanBoundariesRounded[3],' mya'), paste0(meanBoundariesRounded[3],' - ',meanBoundariesRounded[4],' mya'), paste0(meanBoundariesRounded[4],' - present'))
+colnames(relativeHostEvolRates) <- c(paste0('before ',meanHostBoundariesRounded[1],' mya'), paste0(meanHostBoundariesRounded[1],' - ',meanHostBoundariesRounded[2],' mya'), paste0(meanHostBoundariesRounded[2],' - ',meanHostBoundariesRounded[3],' mya'), paste0(meanHostBoundariesRounded[3],' - ',meanHostBoundariesRounded[4],' mya'), paste0(meanHostBoundariesRounded[4],' - present'))
 
 pdf(file=file.path(currplotdir,'evolRatesHost.pdf'), width=25, height=15)
 boxplot(relativeHostEvolRates, xlab='Time Period', ylab='Rate of Evolution Relative to Mean')
