@@ -69,11 +69,12 @@ transformed parameters {
     metaScales
         = sqrt(3 * metaVarProps)
           * aveStDMeta;
-    logRelativeMicrobeEvolRates
-        = append_col(0,
-            microbeTimeBinMetaVar
-            * metaScales[1]
-            * sqrt(microbeMetaVarProps[1]));
+    logRelativeMicrobeEvolRates[2:]
+        = microbeTimeBinMetaVar
+          * metaScales[1]
+          * sqrt(microbeMetaVarProps[1]));
+    logRelativeMicrobeEvolRates[1]
+        = -sum(logRelativeMicrobeEvolRates[2:]);
     microbeVarRaw
         = rescaleOU(microbeNodeHeights, microbeOUAlpha)'
           .* (exp(logRelativeMicrobeEvolRates) * microbeEdgeToBin)
@@ -84,11 +85,12 @@ transformed parameters {
     microbeScales
         = sqrt(microbeVarRaw
                / mean(microbeVarRaw * microbeTipAncestorsT[2:,]));
-    logRelativeHostEvolRates
-        = append_row(0,
-            hostTimeBinMetaVar
-            * metaScales[2]
-            * sqrt(hostMetaVarProps[1]));
+    logRelativeHostEvolRates[2:]
+        = hostTimeBinMetaVar
+          * metaScales[2]
+          * sqrt(hostMetaVarProps[1]));
+    logRelativeHostEvolRates[1]
+        = -sum(logRelativeHostEvolRates[2:]);
     hostVarRaw
         = rescaleOU(hostNodeHeights, hostOUAlpha)
           .* (hostEdgeToBin * exp(logRelativeHostEvolRates))
