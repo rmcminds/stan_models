@@ -32,8 +32,7 @@ data {
     matrix[NHostNodes, 2] hostNodeHeights;
     matrix[NMicrobeNodes, 2] microbeNodeHeights;
     matrix<lower=0>[NHostNodes, NHostTimeBins] hostEdgeToBin;
-    matrix<lower=0>[NMicrobeNodes, NMicrobeTimeBins] microbeEdgeToBin;
-    row_vector<lower=0>[NMicrobeNodes] microbeEdges;
+    matrix<lower=0>[NMicrobeTimeBins, NMicrobeNodes] microbeEdgeToBin;
     real<lower=0> globalScale;
 }
 parameters {
@@ -41,7 +40,7 @@ parameters {
     simplex[2 * NFactors + 3] stDProps;
     real<lower=0> hostOUAlpha;
     real<lower=0> microbeOUAlpha;
-    vector[NMicrobeTimeBins - 1] microbeTimeBinMetaVar;
+    row_vector[NMicrobeTimeBins - 1] microbeTimeBinMetaVar;
     vector[NHostTimeBins - 1] hostTimeBinMetaVar;
     real<lower=0> aveStDMeta;
     simplex[3] metaVarProps;
@@ -57,7 +56,7 @@ transformed parameters {
     vector<lower=0>[3] metaScales;
     row_vector<lower=0>[NMicrobeNodes] microbeVarRaw;
     row_vector<lower=0>[NMicrobeNodes] microbeScales;
-    vector[NMicrobeTimeBins] logRelativeMicrobeEvolRates;
+    row_vector[NMicrobeTimeBins] logRelativeMicrobeEvolRates;
     vector[NHostTimeBins] logRelativeHostEvolRates;
     vector<lower=0>[NHostNodes] hostVarRaw;
     vector<lower=0>[NHostNodes] hostScales;
@@ -71,13 +70,13 @@ transformed parameters {
         = sqrt(3 * metaVarProps)
           * aveStDMeta;
     logRelativeMicrobeEvolRates
-        = append_row(0,
+        = append_col(0,
             microbeTimeBinMetaVar
             * metaScales[1]
             * sqrt(microbeMetaVarProps[1]));
     microbeVarRaw
         = rescaleOU(microbeNodeHeights, microbeOUAlpha)'
-          .* (microbeEdgeToBin * exp(logRelativeMicrobeEvolRates))
+          .* (exp(logRelativeMicrobeEvolRates) * microbeEdgeToBin)
           .* exp((phyloLogVarMultPrev
                   * metaScales[1]
                   * sqrt(microbeMetaVarProps[2]))

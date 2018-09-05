@@ -162,7 +162,7 @@ for(j in 1:NMicrobeTimeBins) {
         allout <- which(ndMicrobe[,1] <= microbeBoundaries[j])
         cedge <- which((ndMicrobe[,1] > microbeBoundaries[j]) & (ndMicrobe[,2] < microbeBoundaries[j]))
         microbeEdgeToBin[cedge,j] <- ndMicrobe[cedge,1] - microbeBoundaries[j]
-    } else if(j == NHostTimeBins) {
+    } else if(j == NMicrobeTimeBins) {
         allin <- which(ndMicrobe[,1] <= microbeBoundaries[j-1])
         allout <- which(ndMicrobe[,2] >= microbeBoundaries[j-1])
         cedge <- which((ndMicrobe[,1] > microbeBoundaries[j-1]) & (ndMicrobe[,2] < microbeBoundaries[j-1]))
@@ -170,16 +170,15 @@ for(j in 1:NMicrobeTimeBins) {
     } else {
         allin <- which((ndMicrobe[,1] <= microbeBoundaries[j-1]) & (ndMicrobe[,2] >= microbeBoundaries[j]))
         allout <- which((ndMicrobe[,1] <= microbeBoundaries[j]) | (ndMicrobe[,2] >= microbeBoundaries[j-1]))
-        cedge1 <- which((ndMicrobe[,1] < microbeBoundaries[j-1]) & (ndMicrobe[,1] > microbeBoundaries[j]) & (ndMicrobe[,2] < microbeBoundaries[j]))
+        cedge1 <- which((ndMicrobe[,1] <= microbeBoundaries[j-1]) & (ndMicrobe[,1] > microbeBoundaries[j]) & (ndMicrobe[,2] < microbeBoundaries[j]))
         microbeEdgeToBin[cedge1,j] <- ndMicrobe[cedge1,1] - microbeBoundaries[j]
-        cedge2 <- which((ndMicrobe[,1] > microbeBoundaries[j-1]) & (ndMicrobe[,2] < microbeBoundaries[j-1]) & (ndMicrobe[,2] > microbeBoundaries[j]))
+        cedge2 <- which((ndMicrobe[,1] > microbeBoundaries[j-1]) & (ndMicrobe[,2] < microbeBoundaries[j-1]) & (ndMicrobe[,2] >= microbeBoundaries[j]))
         microbeEdgeToBin[cedge2,j] <- microbeBoundaries[j-1] - ndMicrobe[cedge2,2]
         cedge3 <- which((ndMicrobe[,1] > microbeBoundaries[j-1]) & (ndMicrobe[,2] < microbeBoundaries[j]))
         microbeEdgeToBin[cedge3,j] <- microbeBoundaries[j-1] - microbeBoundaries[j]
     }
     microbeEdgeToBin[allin,j] <- microbeTree.root.Y$edge.length[allin]
     microbeEdgeToBin[allout,j] <- 0
-
 }
 microbeEdgeToBin <- microbeEdgeToBin / maxMicrobeNHs
 rownames(microbeEdgeToBin) <- microbeTree.root.Y$edge[,2]
@@ -332,9 +331,9 @@ for(i in 1:NTrees) {
         } else {
             allin <- which((nd[,1] <= meanHostBoundaries[j-1]) & (nd[,2] >= meanHostBoundaries[j]))
             allout <- which((nd[,1] <= meanHostBoundaries[j]) | (nd[,2] >= meanHostBoundaries[j-1]))
-            cedge1 <- which((nd[,1] < meanHostBoundaries[j-1]) & (nd[,1] > meanHostBoundaries[j]) & (nd[,2] < meanHostBoundaries[j]))
+            cedge1 <- which((nd[,1] <= meanHostBoundaries[j-1]) & (nd[,1] > meanHostBoundaries[j]) & (nd[,2] < meanHostBoundaries[j]))
             hostEdgeToBin[[i]][cedge1,j] <- nd[cedge1,1] - meanHostBoundaries[j]
-            cedge2 <- which((nd[,1] > meanHostBoundaries[j-1]) & (nd[,2] < meanHostBoundaries[j-1]) & (nd[,2] > meanHostBoundaries[j]))
+            cedge2 <- which((nd[,1] > meanHostBoundaries[j-1]) & (nd[,2] < meanHostBoundaries[j-1]) & (nd[,2] >= meanHostBoundaries[j]))
             hostEdgeToBin[[i]][cedge2,j] <- meanHostBoundaries[j-1] - nd[cedge2,2]
             cedge3 <- which((nd[,1] > meanHostBoundaries[j-1]) & (nd[,2] < meanHostBoundaries[j]))
             hostEdgeToBin[[i]][cedge3,j] <- meanHostBoundaries[j-1] - meanHostBoundaries[j]
@@ -396,7 +395,7 @@ for (i in 1:NTrees) {
                          hostTipAncestors               = hostAncestors[[i]][1:NHostTips, ],
                          hostNodeHeights                = nhRel[[i]],
                          microbeNodeHeights             = microbeNHRel,
-                         microbeEdgeToBin               = microbeEdgeToBin,
+                         microbeEdgeToBin               = t(microbeEdgeToBin),
                          NMicrobeTimeBins               = NMicrobeTimeBins,
                          hostEdgeToBin                  = hostEdgeToBin[[i]],
                          NHostNodes                     = NHostNodes,
