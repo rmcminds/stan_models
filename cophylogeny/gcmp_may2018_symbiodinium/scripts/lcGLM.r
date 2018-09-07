@@ -521,7 +521,7 @@ for(i in 1:NTrees) {
     
     ## ornstein-uhlenbeck parameters
     hostOUAlpha <- extract(fit[[i]], pars = 'hostOUAlpha')[[1]]
-    microbeOUAlpha <- extract(fit[[i]], pars = 'hostOUAlpha')[[1]]
+    microbeOUAlpha <- extract(fit[[i]], pars = 'microbeOUAlpha')[[1]]
     OUAlphas <- cbind(hostOUAlpha, microbeOUAlpha)
     colnames(OUAlphas) <- c('host', 'microbe')
     
@@ -705,7 +705,7 @@ save(relativeHostEvolRates, file = file.path(currdatadir, 'relativeHostEvolRates
 
 ## ornstein-uhlenbeck parameters
 hostOUAlpha <- extract(allfit, pars = 'hostOUAlpha')[[1]]
-microbeOUAlpha <- extract(allfit, pars = 'hostOUAlpha')[[1]]
+microbeOUAlpha <- extract(allfit, pars = 'microbeOUAlpha')[[1]]
 OUAlphas <- cbind(hostOUAlpha, microbeOUAlpha)
 colnames(OUAlphas) <- c('host', 'microbe')
 
