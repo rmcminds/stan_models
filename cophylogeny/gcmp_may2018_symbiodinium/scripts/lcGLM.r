@@ -454,10 +454,19 @@ for(i in 1:NTrees) {
     dir.create(currdatadir, recursive = T)
 
     ## plot the sampled tree with the time bins marked
-    pdf(file = file.path(currplotdir,'sampledTree.pdf'), width = 25, height = 15)
+    pdf(file = file.path(currplotdir,'sampledHostTree.pdf'), width = 25, height = 15)
     plot(hostTreesSampled[[i]],cex = 0.75)
     for(age in max(nodeHeights(hostTreesSampled[[i]])) - meanHostBoundaries) {
         lines(x = c(age, age), y = c(1, length(hostTreesSampled[[i]]$tip.label)), lwd = 1)
+    }
+    graphics.off()
+    ##
+    
+    ## plot the sampled tree with the time bins marked
+    pdf(file = file.path(currplotdir,'sampledMicrobeTree.pdf'), width = 25, height = 15)
+    plot(microbeTree.root.Y,cex = 0.75)
+    for(age in max(nodeHeights(microbeTree.root.Y)) - microbeBoundaries) {
+        lines(x = c(age, age), y = c(1, length(microbeTree.root.Y$tip.label)), lwd = 1)
     }
     graphics.off()
     ##
@@ -629,16 +638,15 @@ for(i in 1:NTrees) {
                 sep    = '\t',
                 quote  = F,
                 append = T)
-    }
     ##
     
     ## see if any pairs of clades have higher variance among their descendants (maybe suggesting codiversification)
     sums <- summary(fit[[i]], pars = 'phyloLogVarMultRaw', probs = c(0.05,0.95), use_cache = F)
     sums3d <- matrix(NA, nrow = NMicrobeNodes, ncol = ncol(sums$summary))
-    dimnames(sums3d) <- list(rownames(microbeAncestors), colnames(sums$summary))
     for(effect in 1:NHostNodes) {
         sums3d <- sums$summary[(effect - 1) * NMicrobeNodes + (1:NMicrobeNodes),]
-        
+        dimnames(sums3d) <- list(rownames(microbeAncestors), colnames(sums$summary))
+            
         cat('\t', file = file.path(currsubtabledir, paste0(colnames(hostAncestors[[i]])[[effect]], '.txt')))
         write.table(sums3d,
                     file   = file.path(currsubtabledir, paste0(colnames(hostAncestors[[i]])[[effect]], '.txt')),
@@ -648,6 +656,15 @@ for(i in 1:NTrees) {
     }
     ##
     
+    ## summarize the mean branch lengths of the microbes
+    sums <- summary(fit[[i]], pars = 'microbeScales', probs = c(0.05,0.95), use_cache = F)
+    newEdges <- sums$summary[,'mean']^2
+    microbeTree.root.Y$edge.length <- newEdges[order(microbeEdgeOrder)]
+    pdf(file = file.path(currplotdir, 'microbeTreeWEstimatedEdgeLengths.pdf'), width = 25, height = 15)
+    plot(microbeTree.root.Y, cex = 0.5)
+    graphics.off()
+    ##
+
     ## summarize the mean branch lengths of the hosts
     sums <- summary(fit[[i]], pars = 'hostScales', probs = c(0.05,0.95), use_cache = F)
     newEdges <- sums$summary[,'mean']^2
@@ -699,6 +716,20 @@ boxplot(log(relativeHostEvolRates), xlab = 'Time Period', ylab = 'Log Rate of Ev
 graphics.off()
 
 save(relativeHostEvolRates, file = file.path(currdatadir, 'relativeHostEvolRates.RData'))
+
+## compare rates of microbe evolution in each time bin
+relativeMicrobeEvolRates <- exp(extract(allfit, pars = 'logRelativeMicrobeEvolRates')[[1]])
+
+pdf(file = file.path(currplotdir, 'evolRatesMicrobe.pdf'), width = 25, height = 15)
+boxplot(relativeMicrobeEvolRates, xlab = 'Time Period', ylab = 'Rate of Evolution Relative to Mean')
+graphics.off()
+
+pdf(file = file.path(currplotdir, 'logEvolRatesMicrobe.pdf'), width = 25, height = 15)
+boxplot(log(relativeMicrobeEvolRates), xlab = 'Time Period', ylab = 'Log Rate of Evolution Relative to Mean')
+graphics.off()
+
+save(relativeMicrobeEvolRates, file = file.path(currdatadir, 'relativeMicrobeEvolRates.RData'))
+##
 
 ## ornstein-uhlenbeck parameters
 hostOUAlpha <- extract(allfit, pars = 'hostOUAlpha')[[1]]
@@ -795,7 +826,7 @@ for(i in 1:(NTrees + 1)) {
     currdiagnosticdir <- file.path(outdir, 'diagnostics', if(i <= NTrees) {paste0('tree_', i)} else {'allfit'})
     dir.create(currdiagnosticdir, recursive=T)
     
-    pars <- c('stDProps', 'hostMetaVarProps', 'timeBinMetaVar', 'metaVarProps', 'aveStD')
+    pars <- c('stDProps', 'hostMetaVarProps', 'metaVarProps', 'aveStD')
     
     pdf(file=file.path(currdiagnosticdir,'pairs_grabBag.pdf'), width=50, height=50)
     pairs(allfit[[i]], pars=pars)
