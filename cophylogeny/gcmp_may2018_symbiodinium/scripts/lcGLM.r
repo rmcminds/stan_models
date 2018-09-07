@@ -611,9 +611,9 @@ for(i in 1:NTrees) {
     sums <- summary(fit[[i]], pars = 'phyloLogVarMultADiv', probs = c(0.05,0.95), use_cache = F)
     rownames(sums$summary) <- colnames(hostAncestors[[i]])
     
-    cat('\t', file = file.path(currsubtabledir,'adivEffects.txt')))
+    cat('\t', file = file.path(currsubtabledir, 'adivEffects.txt'))
     write.table(sums$summary,
-                file   = file.path(currsubtabledir, 'adivEffects.txt')),
+                file   = file.path(currsubtabledir, 'adivEffects.txt'),
                 sep    = '\t',
                 quote  = F,
                 append = T)
@@ -623,9 +623,9 @@ for(i in 1:NTrees) {
     sums <- summary(fit[[i]], pars = 'phyloLogVarMultPrev', probs = c(0.05,0.95), use_cache = F)
     rownames(sums$summary) <- rownames(microbeAncestors)
     
-    cat('\t', file = file.path(currsubtabledir, 'prevalenceEffects.txt')))
+    cat('\t', file = file.path(currsubtabledir, 'prevalenceEffects.txt'))
     write.table(sums$summary,
-                file   = file.path(currsubtabledir, 'prevalenceEffects.txt')),
+                file   = file.path(currsubtabledir, 'prevalenceEffects.txt'),
                 sep    = '\t',
                 quote  = F,
                 append = T)
@@ -634,16 +634,13 @@ for(i in 1:NTrees) {
     
     ## see if any pairs of clades have higher variance among their descendants (maybe suggesting codiversification)
     sums <- summary(fit[[i]], pars = 'phyloLogVarMultRaw', probs = c(0.05,0.95), use_cache = F)
-
-    sums3d <- array(NA, dim=c(NHostNodes, NMicrobeNodes, ncol(sums$summary)))
+    sums3d <- matrix(NA, nrow = NMicrobeNodes, ncol = ncol(sums$summary))
+    dimnames(sums3d) <- list(rownames(microbeAncestors), colnames(sums$summary))
     for(effect in 1:NHostNodes) {
-        sums3d[effect,,] <- sums$summary[(effect-1) * NMicrobeNodes + (1:NMicrobeNodes),]
-    }
-    dimnames(sums3d) <- list(colnames(hostAncestors[[i]]), rownames(microbeAncestors), colnames(sums$summary))
-
-    for(effect in 1:NHostNodes) {
+        sums3d <- sums$summary[(effect - 1) * NMicrobeNodes + (1:NMicrobeNodes),]
+        
         cat('\t', file = file.path(currsubtabledir, paste0(colnames(hostAncestors[[i]])[[effect]], '.txt')))
-        write.table(sums3d[effect,,],
+        write.table(sums3d,
                     file   = file.path(currsubtabledir, paste0(colnames(hostAncestors[[i]])[[effect]], '.txt')),
                     sep    = '\t',
                     quote  = F,
