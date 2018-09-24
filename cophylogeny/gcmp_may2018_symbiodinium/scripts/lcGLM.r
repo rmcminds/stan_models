@@ -742,7 +742,7 @@ pdf(file = file.path(currplotdir,'OUAlphas.pdf'), width = 25, height = 15)
 boxplot(OUAlphas, xlab = 'Host or microbe', ylab = 'alpha')
 graphics.off()
 
-save(OUAlphas,file=file.path(currdatadir,'OUAlphas.RData'))
+save(OUAlphas, file = file.path(currdatadir, 'OUAlphas.RData'))
 ##
 
 ## summarize the mean branch lengths of the microbes
