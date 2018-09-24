@@ -659,9 +659,10 @@ for(i in 1:NTrees) {
     ## summarize the mean branch lengths of the microbes
     sums <- summary(fit[[i]], pars = 'microbeScales', probs = c(0.05,0.95), use_cache = F)
     newEdges <- sums$summary[,'mean']^2
-    microbeTree.root.Y$edge.length <- newEdges[order(microbeEdgeOrder)]
+    microbeTree.root.Y.newEdges <- microbeTree.root.Y
+    microbeTree.root.Y.newEdges$edge.length <- newEdges[order(microbeEdgeOrder)]
     pdf(file = file.path(currplotdir, 'microbeTreeWEstimatedEdgeLengths.pdf'), width = 25, height = 15)
-    plot(microbeTree.root.Y, cex = 0.5)
+    plot(microbeTree.root.Y.newEdges, cex = 0.5)
     graphics.off()
     ##
 
@@ -747,9 +748,10 @@ save(OUAlphas,file=file.path(currdatadir,'OUAlphas.RData'))
 ## summarize the mean branch lengths of the microbes
 sums <- summary(allfit, pars = 'microbeScales', probs = c(0.05,0.95), use_cache = F)
 newEdges <- sums$summary[,'mean']^2
-microbeTree.root.Y$edge.length <- newEdges[order(microbeEdgeOrder)]
+microbeTree.root.Y.newEdges <- microbeTree.root.Y
+microbeTree.root.Y.newEdges$edge.length <- newEdges[order(microbeEdgeOrder)]
 pdf(file = file.path(currplotdir, 'microbeTreeWEstimatedEdgeLengths.pdf'), width = 25, height = 15)
-plot(microbeTree.root.Y, cex = 0.5)
+plot(microbeTree.root.Y.newEdges, cex = 0.5)
 graphics.off()
 ##
 
