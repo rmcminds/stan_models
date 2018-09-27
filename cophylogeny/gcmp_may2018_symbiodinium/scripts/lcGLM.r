@@ -447,7 +447,7 @@ for(node in 1:(NMicrobeNodes + 1)) {
 }
 colnames(microbeParents) <- rownames(microbeParents) <- paste0('i',1:(NMicrobeNodes + 1))
 colnames(microbeParents)[1:NMicrobeTips] <- rownames(microbeParents)[1:NMicrobeTips] <- paste0('t',colnames(yb))
-microbeParentsT <- t(microbeParents[-(NMicrobeTips + 1), ])
+microbeParentsT <- t(cbind(1, microbeParents[-(NMicrobeTips + 1), -(NMicrobeTips + 1)]))
 
 hostParents <- list()
 microbeAncestorsT <- t(cbind(1, microbeAncestors))
@@ -608,7 +608,7 @@ for(i in 1:NTrees) {
     
     ## summarize posterior distibutions of base-level effects
     for(m in sumconts) {
-        yeah <- monitor(array(baseLevelEffects[,,m,],
+        temp <- monitor(array(baseLevelEffects[,,m,],
                               dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
                         warmup = warmup,
                         probs = c(0.05, 0.95))
@@ -739,7 +739,7 @@ for(i in 1:NTrees) {
     }
     colnames(hostParents[[i]]) <- rownames(hostParents[[i]]) <- paste0('i',1:(NHostNodes+1))
     colnames(hostParents[[i]])[1:NHostTips] <- rownames(hostParents[[i]])[1:NHostTips] <- hostTreesSampled[[i]]$tip.label
-    hostParents[[i]] <- hostParents[[i]][-(NHostTips + 1), ]
+    hostParents[[i]] <- cbind(1, hostParents[[i]][-(NHostTips + 1), -(NHostTips + 1)])
     
     for(j in 1:NMCSamples) {
         for(k in 1:NChains) {
