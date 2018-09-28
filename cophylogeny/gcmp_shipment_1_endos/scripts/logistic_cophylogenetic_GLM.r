@@ -36,7 +36,7 @@ hostOUAlphaPriorExpect <- 1.0
 microbeOUAlphaPriorExpect <- 1.0
 globalScale <- 50
 NTrees <- 1 ## number of random trees to sample and to fit the model to
-NSplits <- 10 ## desired number of nodes per host timeBin
+NSplits <- 25 ## desired number of nodes per host timeBin
 ##
 
 ## Stan options
@@ -144,10 +144,10 @@ if(is.rooted(microbeTree.Y)) {
 ## add edge lengths to microbial tree if they're missing, and make tips contemporary
 if(is.null(microbeTree.Y.root$edge.length)) {
     microbeTree.Y.root$edge.length <- rep(1, length(microbeTree.Y.root$edge))
-    microbeTree.Y.root <- chronos(microbeTree.Y.root, model = "discrete", control = chronos.control(nb.rate.cat = 1))
+    microbeTree.Y.root <- chronos(microbeTree.Y.root, control = chronos.control(tol = 1e-12)) #default tolerance of 1e-8 seems to lead to underflow and edge lengths of 0.
     class(microbeTree.Y.root) <- 'phylo'
 } else {
-    microbeTree.Y.root <- chronos(microbeTree.Y.root)
+    microbeTree.Y.root <- chronos(microbeTree.Y.root, control = chronos.control(tol = 1e-12))
     class(microbeTree.Y.root) <- 'phylo'
 }
 ##
@@ -183,12 +183,12 @@ NMicrobeNodes <- NMicrobeTips + NIntMicrobeNodes - 1
 microbeEdgeOrder <- order(microbeTree.Y.root$edge[,2])
 microbeEdges <- microbeTree.Y.root$edge.length[microbeEdgeOrder]
 NMicrobeTimeBins <- ceiling(NIntMicrobeNodes / NSplits)
-microbeNHs <- nodeHeights(microbeTree.root.Y)
+microbeNHs <- nodeHeights(microbeTree.Y.root)
 maxMicrobeNHs <- max(microbeNHs)
 ##
 
 #divide total evolutionary time into chunks that contain approximately equal numbers of splits
-lttMicrobeTree <- ltt(microbeTree.root.Y, log.lineages = F, plot = F)
+lttMicrobeTree <- ltt(microbeTree.Y.root, log.lineages = F, plot = F)
 temp <- maxMicrobeNHs - lttMicrobeTree$times[-length(lttMicrobeTree$times)]
 microbeSplitTimes <- split(temp, ceiling(seq_along(temp) / NSplits))
 if(length(microbeSplitTimes[[NMicrobeTimeBins]]) < NSplits/2) {
@@ -202,7 +202,7 @@ microbeBoundariesRounded <- round(microbeBoundaries, 1)
  microbeTimeBinSizes <- sapply(2:(length(microbeBoundaries)+2), function(x) c(maxMicrobeNHs, microbeBoundaries, 0)[x-1] - c(maxMicrobeNHs, microbeBoundaries, 0)[x]) #size of each bin
 relativeMicrobeTimeBinSizes <- microbeTimeBinSizes / sum(microbeTimeBinSizes) #proportion of total tree height belonging to each bin (differs for each replicate due to the varying sizes of the oldest bin)
 ndMicrobe <- maxMicrobeNHs - microbeNHs
-microbeEdgeToBin <- matrix(NA, ncol = NMicrobeTimeBins, nrow = nrow(microbeTree.root.Y$edge)) #create a matrix for each replicate that describes the proportion of each time bin that each branch exists for
+microbeEdgeToBin <- matrix(NA, ncol = NMicrobeTimeBins, nrow = nrow(microbeTree.Y.root$edge)) #create a matrix for each replicate that describes the proportion of each time bin that each branch exists for
 for(j in 1:NMicrobeTimeBins) {
     if(j == 1) {
         allin <- which(ndMicrobe[,2] >= microbeBoundaries[j])
@@ -216,7 +216,7 @@ for(j in 1:NMicrobeTimeBins) {
         microbeEdgeToBin[cedge,j] <- microbeBoundaries[j-1] - ndMicrobe[cedge,2]
     } else {
         allin <- which((ndMicrobe[,1] <= microbeBoundaries[j-1]) & (ndMicrobe[,2] >= microbeBoundaries[j]))
-        allout <- which((ndMicrobe[,1] <= microbeBoundaries[j]) | (ndMicrobe[,2] >= microbeBoundaries[j-1]))
+        allout <- which((ndMicrobe[,1] <= microbeBoundaries[j]) | (ndMicrobe[,2] >= microbeBoundaries[j-1])) ## I think there might be rare instances where this definition is too broad for some reason?? One run wound up with a row of all zeros and this seems the most likely point for that to have occurred
         cedge1 <- which((ndMicrobe[,1] <= microbeBoundaries[j-1]) & (ndMicrobe[,1] > microbeBoundaries[j]) & (ndMicrobe[,2] < microbeBoundaries[j]))
         microbeEdgeToBin[cedge1,j] <- ndMicrobe[cedge1,1] - microbeBoundaries[j]
         cedge2 <- which((ndMicrobe[,1] > microbeBoundaries[j-1]) & (ndMicrobe[,2] < microbeBoundaries[j-1]) & (ndMicrobe[,2] >= microbeBoundaries[j]))
@@ -224,11 +224,11 @@ for(j in 1:NMicrobeTimeBins) {
         cedge3 <- which((ndMicrobe[,1] > microbeBoundaries[j-1]) & (ndMicrobe[,2] < microbeBoundaries[j]))
         microbeEdgeToBin[cedge3,j] <- microbeBoundaries[j-1] - microbeBoundaries[j]
     }
-    microbeEdgeToBin[allin,j] <- microbeTree.root.Y$edge.length[allin]
+    microbeEdgeToBin[allin,j] <- microbeTree.Y.root$edge.length[allin]
     microbeEdgeToBin[allout,j] <- 0
  }
 microbeEdgeToBin <- microbeEdgeToBin / maxMicrobeNHs
-rownames(microbeEdgeToBin) <- microbeTree.root.Y$edge[,2]
+rownames(microbeEdgeToBin) <- microbeTree.Y.root$edge[,2]
 microbeEdgeToBin <- microbeEdgeToBin[microbeEdgeOrder,]
 
 allnodes <- unique(microbeTree.Y.root$edge[,1])
@@ -244,7 +244,7 @@ colnames(microbeAncestors)[1:NMicrobeTips] <- rownames(microbeAncestors)[1:NMicr
 
 microbeAncestors <- microbeAncestors[-(NMicrobeTips + 1), -(NMicrobeTips + 1)]
 microbeNHRel <- microbeNHs / maxMicrobeNHs
-rownames(microbeNHRel) <- microbeTree.root.Y$edge[,2]
+rownames(microbeNHRel) <- microbeTree.Y.root$edge[,2]
 microbeNHRel <- microbeNHRel[microbeEdgeOrder,]
 ##
 
@@ -521,9 +521,9 @@ for(i in 1:NTrees) {
     
     ## plot the sampled tree with the time bins marked
     pdf(file = file.path(currplotdir,'sampledMicrobeTree.pdf'), width = 25, height = 15)
-    plot(microbeTree.root.Y,cex = 0.75)
-    for(age in max(nodeHeights(microbeTree.root.Y)) - microbeBoundaries) {
-        lines(x = c(age, age), y = c(1, length(microbeTree.root.Y$tip.label)), lwd = 1)
+    plot(microbeTree.Y.root,cex = 0.75)
+    for(age in max(nodeHeights(microbeTree.Y.root)) - microbeBoundaries) {
+        lines(x = c(age, age), y = c(1, length(microbeTree.Y.root$tip.label)), lwd = 1)
     }
     graphics.off()
     ##
@@ -838,10 +838,10 @@ for(i in 1:NTrees) {
     ## summarize the mean branch lengths of the microbes
     sums <- summary(fit[[i]], pars = 'microbeScales', probs = c(0.05,0.95), use_cache = F)
     newEdges <- sums$summary[,'mean']^2
-    microbeTree.root.Y.newEdges <- microbeTree.root.Y
-    microbeTree.root.Y.newEdges$edge.length <- newEdges[order(microbeEdgeOrder)]
+    microbeTree.Y.root.newEdges <- microbeTree.Y.root
+    microbeTree.Y.root.newEdges$edge.length <- newEdges[order(microbeEdgeOrder)]
     pdf(file = file.path(currplotdir, 'microbeTreeWEstimatedEdgeLengths.pdf'), width = 25, height = 15)
-    plot(microbeTree.root.Y.newEdges, cex = 0.5)
+    plot(microbeTree.Y.root.newEdges, cex = 0.5)
     graphics.off()
     ##
 
@@ -931,10 +931,10 @@ if (NSuccessTrees > 1) {
     ## summarize the mean branch lengths of the microbes
     sums <- summary(allfit, pars = 'microbeScales', probs = c(0.05,0.95), use_cache = F)
     newEdges <- sums$summary[,'mean']^2
-    microbeTree.root.Y.newEdges <- microbeTree.root.Y
-    microbeTree.root.Y.newEdges$edge.length <- newEdges[order(microbeEdgeOrder)]
+    microbeTree.Y.root.newEdges <- microbeTree.Y.root
+    microbeTree.Y.root.newEdges$edge.length <- newEdges[order(microbeEdgeOrder)]
     pdf(file = file.path(currplotdir, 'microbeTreeWEstimatedEdgeLengths.pdf'), width = 25, height = 15)
-    plot(microbeTree.root.Y.newEdges, cex = 0.5)
+    plot(microbeTree.Y.root.newEdges, cex = 0.5)
     graphics.off()
     ##
 
