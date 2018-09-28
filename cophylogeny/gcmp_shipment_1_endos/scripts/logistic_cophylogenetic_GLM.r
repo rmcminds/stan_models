@@ -216,7 +216,7 @@ for(j in 1:NMicrobeTimeBins) {
         microbeEdgeToBin[cedge,j] <- microbeBoundaries[j-1] - ndMicrobe[cedge,2]
     } else {
         allin <- which((ndMicrobe[,1] <= microbeBoundaries[j-1]) & (ndMicrobe[,2] >= microbeBoundaries[j]))
-        allout <- which((ndMicrobe[,1] <= microbeBoundaries[j]) | (ndMicrobe[,2] >= microbeBoundaries[j-1])) ## I think there might be rare instances where this definition is too broad for some reason?? One run wound up with a row of all zeros and this seems the most likely point for that to have occurred
+        allout <- which((ndMicrobe[,1] <= microbeBoundaries[j]) | (ndMicrobe[,2] >= microbeBoundaries[j-1]))
         cedge1 <- which((ndMicrobe[,1] <= microbeBoundaries[j-1]) & (ndMicrobe[,1] > microbeBoundaries[j]) & (ndMicrobe[,2] < microbeBoundaries[j]))
         microbeEdgeToBin[cedge1,j] <- ndMicrobe[cedge1,1] - microbeBoundaries[j]
         cedge2 <- which((ndMicrobe[,1] > microbeBoundaries[j-1]) & (ndMicrobe[,2] < microbeBoundaries[j-1]) & (ndMicrobe[,2] >= microbeBoundaries[j]))
