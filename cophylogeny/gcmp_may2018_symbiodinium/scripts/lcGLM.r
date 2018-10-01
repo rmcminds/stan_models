@@ -115,7 +115,7 @@ newmap <- filterfunction(map)
 ## merge data and mapping file
 idx <- rownames(newtable)[rownames(newtable) %in% rownames(newmap) & rowSums(newtable) >= minCountSamp]
 y.old <- newtable[idx,colnames(newtable) %in% microbeTree.root$tip.label]
-newermap <- newmap[idx,]
+newermap <- droplevels(newmap[idx,])
 ##
 
 ## convert data to presence/absence
@@ -272,15 +272,14 @@ NHostTimeBins <- ceiling(length(levels(newermap[,sampleTipKey])) / NSplits)
 sampleMap <- list()
 hostTreesSampled <- list()
 hostSplitTimes <- list()
-hostBoundaries <- matrix(NA,nrow=NTrees, ncol=NHostTimeBins-1)
+hostBoundaries <- matrix(NA, nrow = NTrees, ncol = NHostTimeBins - 1)
 for(i in 1:NTrees) {
     sampleMap[[i]] <- newermap
-    levels(sampleMap[[i]][,sampleTipKey])[levels(sampleMap[[i]][,sampleTipKey]) == 'Fungid_sp'] <- sample(grep(paste0(paste(possibleFungidGenera,collapse='|'),'_'), attr(hostTree, "TipLabel"), value=T), 1) ##assign unidentified Fungids to a random member of the group independently for each tree
+    levels(sampleMap[[i]][,sampleTipKey])[levels(sampleMap[[i]][,sampleTipKey]) == 'Fungid_sp'] <- sample(grep(paste0(paste(possibleFungidGenera, collapse = '|'), '_'), attr(hostTree, "TipLabel"), value = T), 1) ##assign unidentified Fungids to a random member of the group independently for each tree
     for (j in unique(generaOfUnknowns)) {
         possibleGenera <- attr(hostTree, "TipLabel")[!attr(hostTree, "TipLabel") %in% levels(sampleMap[[i]][,sampleTipKey])]
-        levels(sampleMap[[i]][,sampleTipKey])[levels(sampleMap[[i]][,sampleTipKey]) %in% grep(paste0(j,'_'),study.species.missing,value=T)] <- sample(grep(paste0(j,'_'), possibleGenera, value=T), sum(generaOfUnknowns == j)) ## assign unidentified species to a random member of their genus independently for each tree
+        levels(sampleMap[[i]][,sampleTipKey])[levels(sampleMap[[i]][,sampleTipKey]) %in% grep(paste0(j, '_'),study.species.missing, value = T)] <- sample(grep(paste0(j, '_'), possibleGenera, value = T), sum(generaOfUnknowns == j)) ## assign unidentified species to a random member of their genus independently for each tree
     }
-    sampleMap[[i]] <- droplevels(sampleMap[[i]])
 
 	#filter the tree only contain the sampled (or assigned) species
 	hostTreesSampled[[i]] <- ladderize(drop.tip(hostTree[[i]], hostTree[[i]]$tip.label[!hostTree[[i]]$tip.label %in% levels(sampleMap[[i]][,sampleTipKey])]))
@@ -365,11 +364,11 @@ NHostNodes <- NIntHostNodes + NHostTips - 1
 hostAncestors <- list()
 hostAncestorsExpanded <- list()
 for (i in 1:NTrees) {
-	hostAncestors[[i]] <- matrix(NA, NHostNodes+1, NHostNodes+1)
-	for(node in 1:(NHostNodes+1)) {
-	    hostAncestors[[i]][node, ] <- as.numeric(1:(NHostNodes+1) %in% c(Ancestors(hostTreesSampled[[i]], node), node))
+	hostAncestors[[i]] <- matrix(NA, NHostNodes + 1, NHostNodes + 1)
+	for(node in 1:(NHostNodes + 1)) {
+	    hostAncestors[[i]][node, ] <- as.numeric(1:(NHostNodes + 1) %in% c(Ancestors(hostTreesSampled[[i]], node), node))
 	}
-    colnames(hostAncestors[[i]]) <- rownames(hostAncestors[[i]]) <- paste0('i',1:(NHostNodes+1))
+    colnames(hostAncestors[[i]]) <- rownames(hostAncestors[[i]]) <- paste0('i', 1:(NHostNodes+1))
     colnames(hostAncestors[[i]])[1:NHostTips] <- rownames(hostAncestors[[i]])[1:NHostTips] <- hostTreesSampled[[i]]$tip.label
     hostAncestors[[i]] <- hostAncestors[[i]][-(NHostTips + 1), -(NHostTips + 1)]
     hostAncestorsExpanded[[i]] <- hostAncestors[[i]][as.character(sampleMap[[i]][,sampleTipKey]),]
@@ -456,16 +455,16 @@ hostParents <- list()
 microbeAncestorsT <- t(cbind(1, microbeAncestors))
 
 colorpal <- colorRampPalette(brewer.pal(9,'Blues'))
-plotcolors <- c('white',colorpal(100),'black')
+plotcolors <- c('white', colorpal(100),'black')
 
 ## summarize the results separately for each sampled host tree
 for(i in 1:NTrees) {
     
     check_hmc_diagnostics(fit[[i]])
 
-    currplotdir <- file.path(outdir, paste0('tree_',i), 'plots')
-    currtabledir <- file.path(outdir, paste0('tree_',i), 'tables')
-    currdatadir <- file.path(outdir, paste0('tree_',i), 'data')
+    currplotdir <- file.path(outdir, paste0('tree_', i), 'plots')
+    currtabledir <- file.path(outdir, paste0('tree_', i), 'tables')
+    currdatadir <- file.path(outdir, paste0('tree_', i), 'data')
 
     dir.create(currplotdir, recursive = T)
     dir.create(currtabledir, recursive = T)

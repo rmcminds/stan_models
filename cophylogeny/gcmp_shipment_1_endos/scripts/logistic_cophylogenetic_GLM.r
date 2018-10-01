@@ -91,7 +91,7 @@ newmap <- filterfunction(map)
 fulltable <- t(read.table(fulltablePath, header=T, sep='\t', skip=1, comment.char='', row.names=1, check.names=F))
 idx <- rownames(fulltable)[rownames(fulltable) %in% rownames(newmap) & rowSums(fulltable) >= minCountSamp]
 y.old <- fulltable[idx, ]
-newermap <- newmap[idx,]
+newermap <- droplevels(newmap[idx,])
 ##
 
 y.old.filt <- t(apply(y.old,1,function(x) {
@@ -313,7 +313,7 @@ for(i in 1:NTrees) {
         }
         levels(sampleMap[[i]][,sampleTipKey])[levels(sampleMap[[i]][,sampleTipKey]) %in% grep(paste0(j,'_'),study.species.missing,value=T)] <- sample(grep(paste0(j,'_'), possibleGenera, value=T), sum(generaOfUnknowns == j)) ## assign unidentified species to a random member of their genus independently for each tree
     }
-    
+
     #filter the tree only contain the sampled (or assigned) species
     hostTreesSampled[[i]] <- ladderize(drop.tip(hostTree[[i]],hostTree[[i]]$tip.label[!hostTree[[i]]$tip.label %in% levels(sampleMap[[i]][,sampleTipKey])]))
     
