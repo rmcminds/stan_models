@@ -9,6 +9,8 @@ library(nlme)
 library(reshape2)
 library(paleotree)
 library(parallel)
+library(ggplot2)
+library(RColorBrewer)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
@@ -278,9 +280,10 @@ for(i in 1:NTrees) {
         possibleGenera <- attr(hostTree, "TipLabel")[!attr(hostTree, "TipLabel") %in% levels(sampleMap[[i]][,sampleTipKey])]
         levels(sampleMap[[i]][,sampleTipKey])[levels(sampleMap[[i]][,sampleTipKey]) %in% grep(paste0(j,'_'),study.species.missing,value=T)] <- sample(grep(paste0(j,'_'), possibleGenera, value=T), sum(generaOfUnknowns == j)) ## assign unidentified species to a random member of their genus independently for each tree
     }
+    sampleMap[[i]] <- droplevels(sampleMap[[i]])
 
 	#filter the tree only contain the sampled (or assigned) species
-	hostTreesSampled[[i]] <- ladderize(drop.tip(hostTree[[i]],hostTree[[i]]$tip.label[!hostTree[[i]]$tip.label %in% levels(sampleMap[[i]][,sampleTipKey])]))
+	hostTreesSampled[[i]] <- ladderize(drop.tip(hostTree[[i]], hostTree[[i]]$tip.label[!hostTree[[i]]$tip.label %in% levels(sampleMap[[i]][,sampleTipKey])]))
 
 	#divide total evolutionary time into chunks that contain approximately equal numbers of splits
 	lttHostTreesSampled <- ltt(hostTreesSampled[[i]],log.lineages=F,plot=F)
@@ -316,7 +319,7 @@ for(i in 1:NTrees) {
     hostTimeBinSizes[[i]] <- sapply(2:(length(meanHostBoundaries)+2),function(x) c(maxNH[[i]],meanHostBoundaries,0)[x-1] - c(maxNH[[i]],meanHostBoundaries,0)[x]) #size in millions of years of each bin (consistent across replicates /except/ for the oldest bin
     relativeHostTimeBinSizes[[i]] <- hostTimeBinSizes[[i]] / sum(hostTimeBinSizes[[i]]) #proportion of total tree height belonging to each bin (differs for each replicate due to the varying sizes of the oldest bin)
     nd <- maxNH[[i]] - nh[[i]]
-    hostEdgeToBin[[i]] <- matrix(NA,ncol=NHostTimeBins,nrow=nrow(hostTreesSampled[[i]]$edge)) #create a matrix for each replicate that describes the proportion of each time bin that each branch exists for
+    hostEdgeToBin[[i]] <- matrix(NA, ncol = NHostTimeBins, nrow = nrow(hostTreesSampled[[i]]$edge)) #create a matrix for each replicate that describes the proportion of each time bin that each branch exists for
     for(j in 1:NHostTimeBins) {
         if(j == 1) {
             allin <- which(nd[,2] >= meanHostBoundaries[j])
@@ -451,6 +454,9 @@ microbeParentsT <- t(cbind(1, microbeParents[-(NMicrobeTips + 1), -(NMicrobeTips
 
 hostParents <- list()
 microbeAncestorsT <- t(cbind(1, microbeAncestors))
+
+colorpal <- colorRampPalette(brewer.pal(9,'Blues'))
+plotcolors <- c('white',colorpal(100),'black')
 
 ## summarize the results separately for each sampled host tree
 for(i in 1:NTrees) {
@@ -807,6 +813,41 @@ for(i in 1:NTrees) {
     pdf(file = file.path(currplotdir,'hostTreeWEstimatedEdgeLengths.pdf'), width = 25, height = 15)
     plot(hostTreesSampled[[i]], cex = 0.5)
     graphics.off()
+    ##
+    
+    ## plot heatmap of cophylogenetic patterns
+    plotmicrobetree <- ladderize(multi2di(microbeTree.root.Y))
+    hclmicrobetree <- as.hclust(plotmicrobetree)
+    # for each sample in the data, assign its mitotype to a vector
+    hostvect <- sampleMap[[i]]$host_scientific_name
+    # name the vector with the sample IDs
+    names(hostvect) <- sampleMap[[i]][,'#SampleID']
+    # sort the samples in the vector
+    temp <- sampleMap[[i]][order(sampleMap[[i]]$concatenated_date),]
+    temp <- temp[order(temp$daily_replicate),]
+    temp <- temp[order(temp$reef_name),]
+    temp <- temp[order(temp$host_scientific_name),]
+    for(comp in c('T', 'S', 'M')) {
+        temp2 <- temp[temp$tissue_compartment == comp,]
+        hostvectTemp <- hostvect[rownames(temp2)]
+        # expand the tips (which are defined by mitotypes) into polytomies containing a tip for each sample within that mitotype
+        hosttree <- expandTaxonTree(hostTreesSampled[[i]], hostvectTemp, keepBrLen = T)
+        hosttree <- drop.tip(hosttree, hosttree$tip.label[!hosttree$tip.label %in% names(hostvectTemp)])
+        # convert polytomies into randomly-split, binary subtrees with 0-length branches, and ladderize the whole tree
+        hosttree.dichotomous <- ladderize(multi2di(hosttree, random = F), right = F)
+        # convert the phylogenetic tree into an hclust object
+        hclhosttree <- as.hclust(hosttree.dichotomous)
+        plotFilt <- as.matrix(t(yb)[plotmicrobetree$tip.label, hosttree.dichotomous$tip.label])
+        pdf(file = file.path(currplotdir, paste0('cophylogeny_heatmap_',comp,'.pdf')), width = 10, height = 10)
+        heatmap(plotFilt,
+                Rowv   = as.dendrogram(hclmicrobetree),
+                Colv   = as.dendrogram(hclhosttree),
+                col    = plotcolors,
+                cexCol = 0.2,
+                cexRow = 0.1,
+                scale  = 'none')
+        graphics.off()
+    }
     ##
 }
 ##
