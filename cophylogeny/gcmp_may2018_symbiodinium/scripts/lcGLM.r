@@ -1005,21 +1005,6 @@ write.table(allRes,
             append = T)
 ##
 
-## match host node effects
-hostIntersect <- treeDiffs <- hostTreesSampled[[1]]$tip.label
-for(i in 2:NTrees) {
-    hostIntersect <- intersect(hostIntersect, hostTreesSampled[[i]]$tip.label)
-    treeDiffs <- union(treeDiffs, hostTreesSampled[[i]]$tip.label)
-}
-treeDiffs <- setdiff(treeDiffs, hostIntersect)
-
-#consider the effects of nodes from different trees 'the same' if all of their descendants are the same AND all the descendants of its sister node are the same. The exception is if any of the differences are due to taxa that are completely absent from one of the trees (and the exception to the exception is if none of the descendants of the sister node exist in all trees).
-treeDiffs <- setdiff(union(tree1$tip.label, tree2$tip.label), intersect(tree1$tip.label, tree2$tip.label))
-nodeDiffs <- setdiff(union(Descendants(node1), Descendants(node2)), intersect(Descendants(node1), Descendants(node2)))
-sisterDiffs <- setdiff(union(Descendants(Sister(node1)), Descendants(Sister(node2))), intersect(Descendants(Sister(node1)), Descendants(Sister(node2))))
-if()
-##
-
 allfit <- c(fit, allfit)
 
 ## make some diagnostic plots

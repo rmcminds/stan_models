@@ -60,16 +60,17 @@ sampleTipKey <- 'host_scientific_name'
 filterfunction <- function(dfin) {
     levels(dfin[,sampleTipKey]) <- gsub(' ','_',levels(dfin[,sampleTipKey]))
     df2 <- droplevels(dfin[(dfin$tissue_compartment=='T' | dfin$tissue_compartment=='S' | dfin$tissue_compartment=='M') & !grepl(paste(c('Unknown|Missing',taxaToExclude),collapse='|'),dfin[,sampleTipKey],ignore.case=T) ,])
+    return(df2)
+}
+    
+contrastfunction <- function(dfin) {
+    df2 <- dfin
     contrasts(df2$ocean) <- 'contr.sum'
-    contrasts(df2$complex_robust) <- 'contr.sum'
+    contrasts(df2$ocean_area) <- 'contr.sum'
     contrasts(df2$host_scientific_name) <- 'contr.sum'
     contrasts(df2$tissue_compartment) <- 'contr.sum'
     contrasts(df2$reef_name) <- 'contr.sum'
     contrasts(df2$colony_name) <- 'contr.sum'
-    contrasts(df2$host_genus) <- 'contr.sum'
-    contrasts(df2$host_clade_sensu_fukami) <- 'contr.sum'
-    df2$longitude <- as.numeric(as.character(df2$longitude))
-    df2$latitude <- as.numeric(as.character(df2$latitude))
     levels(df2[,sampleTipKey])[levels(df2[,sampleTipKey]) == 'Homophyllia_hillae'] <- "Homophyllia_bowerbanki"
     levels(df2[,sampleTipKey])[levels(df2[,sampleTipKey]) == 'Pocillopora_eydouxi'] <- "Pocillopora_grandis"
     levels(df2[,sampleTipKey])[levels(df2[,sampleTipKey]) == 'Pseudosiderastrea_tayami'] <- "Pseudosiderastrea_tayamai"
@@ -91,7 +92,11 @@ newmap <- filterfunction(map)
 fulltable <- t(read.table(fulltablePath, header=T, sep='\t', skip=1, comment.char='', row.names=1, check.names=F))
 idx <- rownames(fulltable)[rownames(fulltable) %in% rownames(newmap) & rowSums(fulltable) >= minCountSamp]
 y.old <- fulltable[idx, ]
-newermap <- droplevels(newmap[idx,])
+newermaptemp <- droplevels(newmap[idx,])
+##
+
+## define contrasts
+newermap <- contrastfunction(newermaptemp)
 ##
 
 y.old.filt <- t(apply(y.old,1,function(x) {
@@ -254,7 +259,7 @@ newermap$log_sequencing_depth_scaled <- scale(newermap$log_sequencing_depth)
 
 
 
-modelform <- ~ ocean + reef_name + log_sequencing_depth_scaled + tissue_compartment + colony_name
+modelform <- ~ ocean + ocean_area + reef_name + log_sequencing_depth_scaled + tissue_compartment + colony_name
 allfactors <- attr(terms.formula(modelform), "term.labels")
 NFactors <- length(allfactors)
 allfactorder <- sapply(allfactors, function(x) sum(gregexpr(':', x, fixed=TRUE)[[1]] > 0))
@@ -263,7 +268,7 @@ modelMat <- model.matrix(modelform, model.frame(newermap,na.action=NULL))
 modelMat[is.na(modelMat)] <- 0
 sumconts <- names(attr(modelMat, "contrasts")[attr(modelMat, "contrasts")=='contr.sum'])
 for(j in sumconts) {
-    colnames(modelMat)[grep(j,colnames(modelMat))] <- paste0(j,levels(newermap[,j])[-nlevels(newermap[,j])]) ##this will not work when there are interaction effects!!!
+    colnames(modelMat)[grep(j, colnames(modelMat))] <- paste0(j, levels(newermap[,j])[-nlevels(newermap[,j])]) ##this will not work when there are interaction effects!!!
 }
 modelMat <- modelMat[,-1]
 NEffects <- ncol(modelMat)
@@ -611,7 +616,7 @@ for(i in 1:NTrees) {
                                                       chain   = NULL,
                                                       effect  = c('microbePrevalence',
                                                                   colnames(modelMat)[1:NEffects],
-                                                                  colnames(hostAncestors[[i]])),
+                                                                  paste0('host', colnames(hostAncestors[[i]]))),
                                                       taxnode = c('alphaDiversity', colnames(microbeAncestors))))
                                                     
     save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
@@ -948,7 +953,7 @@ if (NSuccessTrees > 1) {
                                                       chain   = NULL,
                                                       effect  = c('microbePrevalence',
                                                                   colnames(modelMat)[1:NEffects],
-                                                                  colnames(hostAncestors[[i]])),
+                                                                  paste0('host', colnames(hostAncestors[[i]]))),
                                                       taxnode = c('alphaDiversity', colnames(microbeAncestors))))
                                                     
     save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
