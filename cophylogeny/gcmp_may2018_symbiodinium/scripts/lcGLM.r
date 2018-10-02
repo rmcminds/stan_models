@@ -55,21 +55,22 @@ possibleFungidGenera <- c('Fungia_','Danafungia_','Cycloseris_','Pleuractis_')
 sampleTipKey <- 'host_scientific_name'
 
 filterfunction <- function(dfin) {
-    levels(dfin[,sampleTipKey]) <- gsub(' ','_',levels(dfin[,sampleTipKey]))
-    undupsamps <- levels(dfin$physical_sample_name)[sapply(levels(dfin$physical_sample_name), function(x) sum(x==dfin$physical_sample_name) == 1)]
+    levels(dfin[,sampleTipKey]) <- gsub(' ', '_', levels(dfin[,sampleTipKey]))
+    undupsamps <- levels(dfin$physical_sample_name)[sapply(levels(dfin$physical_sample_name), function(x) sum(x == dfin$physical_sample_name) == 1)]
     df1 <- droplevels(dfin[dfin$physical_sample_name %in% undupsamps,])
     df2 <- droplevels(df1[df1$tissue_compartment=='T' | df1$tissue_compartment=='S' | df1$tissue_compartment=='M' & df1[,sampleTipKey] != 'Unknown',])
+    return(df2)
+}
+
+contrastfunction <- function(dfin) {
+    df2 <- dfin
     df2$tissue_compartment <- relevel(df2$tissue_compartment, 'T')
     contrasts(df2$ocean) <- 'contr.sum'
-    contrasts(df2$complex_robust) <- 'contr.sum'
+    contrasts(df2$ocean_area) <- 'contr.sum'
     contrasts(df2$host_scientific_name) <- 'contr.sum'
     contrasts(df2$tissue_compartment) <- 'contr.sum'
     contrasts(df2$reef_name) <- 'contr.sum'
     contrasts(df2$colony_name) <- 'contr.sum'
-    contrasts(df2$host_genus) <- 'contr.sum'
-	contrasts(df2$host_clade_sensu_fukami) <- 'contr.sum'
-	df2$longitude <- as.numeric(as.character(df2$longitude))
-    df2$latitude <- as.numeric(as.character(df2$latitude))
     levels(df2[,sampleTipKey])[levels(df2[,sampleTipKey]) == 'Homophyllia_hillae'] <- "Homophyllia_bowerbanki"
     levels(df2[,sampleTipKey])[levels(df2[,sampleTipKey]) == 'Pocillopora_eydouxi'] <- "Pocillopora_grandis"
     return(df2)
@@ -114,8 +115,12 @@ newmap <- filterfunction(map)
 
 ## merge data and mapping file
 idx <- rownames(newtable)[rownames(newtable) %in% rownames(newmap) & rowSums(newtable) >= minCountSamp]
-y.old <- newtable[idx,colnames(newtable) %in% microbeTree.root$tip.label]
-newermap <- droplevels(newmap[idx,])
+y.old <- newtable[idx, colnames(newtable) %in% microbeTree.root$tip.label]
+newermaptemp <- droplevels(newmap[idx,])
+##
+
+## define contrasts
+newermap <- contrastfunction(newermaptemp)
 ##
 
 ## convert data to presence/absence
@@ -220,18 +225,18 @@ microbeNHRel <- microbeNHRel[microbeEdgeOrder,]
 ##
 
 ## prepare data for the model matrix
-modelform <- ~ ocean + reef_name + colony_name + tissue_compartment + log_sequencing_depth_scaled
+modelform <- ~ ocean + ocean_area + reef_name + colony_name + tissue_compartment + log_sequencing_depth_scaled
 allfactors <- attr(terms.formula(modelform), "term.labels")
 NFactors <- length(allfactors)
-allfactorder <- sapply(allfactors, function(x) sum(gregexpr(':', x, fixed=TRUE)[[1]] > 0))
-modelMat <- model.matrix(modelform, model.frame(newermap,na.action=NULL))
+allfactorder <- sapply(allfactors, function(x) sum(gregexpr(':', x, fixed = TRUE)[[1]] > 0))
+modelMat <- model.matrix(modelform, model.frame(newermap, na.action = NULL))
 modelMat[is.na(modelMat)] <- 0
 ##
 
 ## rename factors that have 'sum contrasts' because by default they get arbitrary names
-sumconts <- names(attr(modelMat, "contrasts")[attr(modelMat, "contrasts")=='contr.sum'])
+sumconts <- names(attr(modelMat, "contrasts")[attr(modelMat, "contrasts") == 'contr.sum'])
 for(j in sumconts) {
-    colnames(modelMat)[grep(j,colnames(modelMat))] <- paste0(j,levels(newermap[,j])[-nlevels(newermap[,j])]) ##this will not work if there are 'interaction effects' specified in the model formula!!!
+    colnames(modelMat)[grep(j, colnames(modelMat))] <- paste0(j, levels(newermap[,j])[-nlevels(newermap[,j])]) ##this will not work if there are 'interaction effects' specified in the model formula!!!
 }
 ##
 
@@ -448,7 +453,7 @@ for(node in 1:(NMicrobeNodes + 1)) {
     microbeParents[node, ] <- as.numeric(1:(NMicrobeNodes + 1) %in% c(Ancestors(microbeTree.root.Y, node, 'parent'), node))
 }
 colnames(microbeParents) <- rownames(microbeParents) <- paste0('i',1:(NMicrobeNodes + 1))
-colnames(microbeParents)[1:NMicrobeTips] <- rownames(microbeParents)[1:NMicrobeTips] <- paste0('t',colnames(yb))
+colnames(microbeParents)[1:NMicrobeTips] <- rownames(microbeParents)[1:NMicrobeTips] <- paste0('t', colnames(yb))
 microbeParentsT <- t(cbind(1, microbeParents[-(NMicrobeTips + 1), -(NMicrobeTips + 1)]))
 
 hostParents <- list()
@@ -571,7 +576,7 @@ for(i in 1:NTrees) {
                                                       chain   = NULL,
                                                       effect  = c('microbePrevalence',
                                                                   colnames(modelMat)[1:NEffects],
-                                                                  colnames(hostAncestors[[i]])),
+                                                                  paste0('host_', colnames(hostAncestors[[i]]))),
                                                       taxnode = c('alphaDiversity', colnames(microbeAncestors))))
                                                     
     save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
@@ -590,7 +595,7 @@ for(i in 1:NTrees) {
     for(j in 1:NMCSamples) {
         for(k in 1:NChains) {
             for(m in sumconts) {
-                baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j,k,rownames(factLevelMat)[factLevelMat[,m]==1],])
+                baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j, k, rownames(factLevelMat)[factLevelMat[,m] == 1],])
             }
         }
     }
@@ -835,7 +840,7 @@ for(i in 1:NTrees) {
         # convert polytomies into randomly-split, binary subtrees with 0-length branches, and ladderize the whole tree
         hosttree.dichotomous <- ladderize(multi2di(hosttree, random = F), right = F)
         # convert the phylogenetic tree into an hclust object
-        hclhosttree <- as.hclust(hosttree.dichotomous)
+        hclhosttree <- as.hclust(force.ultrametric(hosttree.dichotomous))
         plotFilt <- as.matrix(t(yb)[plotmicrobetree$tip.label, hosttree.dichotomous$tip.label])
         pdf(file = file.path(currplotdir, paste0('cophylogeny_heatmap_',comp,'.pdf')), width = 10, height = 10)
         heatmap(plotFilt,
@@ -939,7 +944,7 @@ scaledMicrobeNodeEffects <- array(extract(allfit, pars='scaledMicrobeNodeEffects
                                                   chain   = NULL,
                                                   effect  = c('microbePrevalence',
                                                               colnames(modelMat)[1:NEffects],
-                                                              colnames(hostAncestors[[i]])),
+                                                              paste0('host', colnames(hostAncestors[[i]]))),
                                                   taxnode = c('alphaDiversity', colnames(microbeAncestors))))
                                                 
 save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
@@ -998,6 +1003,21 @@ write.table(allRes,
             sep    = '\t',
             quote  = F,
             append = T)
+##
+
+## match host node effects
+hostIntersect <- treeDiffs <- hostTreesSampled[[1]]$tip.label
+for(i in 2:NTrees) {
+    hostIntersect <- intersect(hostIntersect, hostTreesSampled[[i]]$tip.label)
+    treeDiffs <- union(treeDiffs, hostTreesSampled[[i]]$tip.label)
+}
+treeDiffs <- setdiff(treeDiffs, hostIntersect)
+
+#consider the effects of nodes from different trees 'the same' if all of their descendants are the same AND all the descendants of its sister node are the same. The exception is if any of the differences are due to taxa that are completely absent from one of the trees (and the exception to the exception is if none of the descendants of the sister node exist in all trees).
+treeDiffs <- setdiff(union(tree1$tip.label, tree2$tip.label), intersect(tree1$tip.label, tree2$tip.label))
+nodeDiffs <- setdiff(union(Descendants(node1), Descendants(node2)), intersect(Descendants(node1), Descendants(node2)))
+sisterDiffs <- setdiff(union(Descendants(Sister(node1)), Descendants(Sister(node2))), intersect(Descendants(Sister(node1)), Descendants(Sister(node2))))
+if()
 ##
 
 allfit <- c(fit, allfit)
