@@ -268,7 +268,7 @@ modelMat <- model.matrix(modelform, model.frame(newermap,na.action=NULL))
 modelMat[is.na(modelMat)] <- 0
 sumconts <- names(attr(modelMat, "contrasts")[attr(modelMat, "contrasts")=='contr.sum'])
 for(j in sumconts) {
-    colnames(modelMat)[grep(j, colnames(modelMat))] <- paste0(j, levels(newermap[,j])[-nlevels(newermap[,j])]) ##this will not work when there are interaction effects!!!
+    colnames(modelMat)[grep(paste0(j, 1:(nlevels(newermap[,j]) - 1), collapse = '|'), colnames(modelMat))] <- paste0(j, levels(newermap[,j])[-nlevels(newermap[,j])]) ##this will not work when there are interaction effects!!!
 }
 modelMat <- modelMat[,-1]
 NEffects <- ncol(modelMat)

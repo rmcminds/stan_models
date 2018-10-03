@@ -236,7 +236,7 @@ modelMat[is.na(modelMat)] <- 0
 ## rename factors that have 'sum contrasts' because by default they get arbitrary names
 sumconts <- names(attr(modelMat, "contrasts")[attr(modelMat, "contrasts") == 'contr.sum'])
 for(j in sumconts) {
-    colnames(modelMat)[grep(j, colnames(modelMat))] <- paste0(j, levels(newermap[,j])[-nlevels(newermap[,j])]) ##this will not work if there are 'interaction effects' specified in the model formula!!!
+    colnames(modelMat)[grep(paste0(j, 1:(nlevels(newermap[,j]) - 1), collapse = '|'), colnames(modelMat))] <- paste0(j, levels(newermap[,j])[-nlevels(newermap[,j])]) ##this will not work if there are 'interaction effects' specified in the model formula!!!
 }
 ##
 
