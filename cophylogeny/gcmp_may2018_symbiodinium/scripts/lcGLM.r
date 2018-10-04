@@ -67,8 +67,8 @@ contrastfunction <- function(dfin) {
     contrasts(df2$ocean) <- 'contr.sum'
     contrasts(df2$ocean_area) <- 'contr.sum'
     contrasts(df2$host_scientific_name) <- 'contr.sum'
-    contrasts(df2$tissue_compartment) <- 'contr.sum'
     df2$tissue_compartment <- factor(df2$tissue_compartment, levels = c(levels(df2$tissue_compartment)[levels(df2$tissue_compartment) != 'T'], 'T'))
+    contrasts(df2$tissue_compartment) <- 'contr.sum'
     contrasts(df2$reef_name) <- 'contr.sum'
     contrasts(df2$colony_name) <- 'contr.sum'
     levels(df2[,sampleTipKey])[levels(df2[,sampleTipKey]) == 'Homophyllia_hillae'] <- "Homophyllia_bowerbanki"
