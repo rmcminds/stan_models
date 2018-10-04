@@ -64,11 +64,11 @@ filterfunction <- function(dfin) {
 
 contrastfunction <- function(dfin) {
     df2 <- dfin
-    df2$tissue_compartment <- relevel(df2$tissue_compartment, 'T')
     contrasts(df2$ocean) <- 'contr.sum'
     contrasts(df2$ocean_area) <- 'contr.sum'
     contrasts(df2$host_scientific_name) <- 'contr.sum'
     contrasts(df2$tissue_compartment) <- 'contr.sum'
+    df2$tissue_compartment <- factor(df2$tissue_compartment, levels = c(levels(df2$tissue_compartment)[levels(df2$tissue_compartment) != 'T'], 'T'))
     contrasts(df2$reef_name) <- 'contr.sum'
     contrasts(df2$colony_name) <- 'contr.sum'
     levels(df2[,sampleTipKey])[levels(df2[,sampleTipKey]) == 'Homophyllia_hillae'] <- "Homophyllia_bowerbanki"
@@ -231,35 +231,31 @@ NFactors <- length(allfactors)
 allfactorder <- sapply(allfactors, function(x) sum(gregexpr(':', x, fixed = TRUE)[[1]] > 0))
 modelMat <- model.matrix(modelform, model.frame(newermap, na.action = NULL))
 modelMat[is.na(modelMat)] <- 0
+sumconts <- names(attr(modelMat, "contrasts")[attr(modelMat, "contrasts") == 'contr.sum'])
 ##
 
-## rename factors that have 'sum contrasts' because by default they get arbitrary names
-sumconts <- names(attr(modelMat, "contrasts")[attr(modelMat, "contrasts") == 'contr.sum'])
-for(j in sumconts) {
-    colnames(modelMat)[grep(paste0(j, 1:(nlevels(newermap[,j]) - 1), collapse = '|'), colnames(modelMat))] <- paste0(j, levels(newermap[,j])[-nlevels(newermap[,j])]) ##this will not work if there are 'interaction effects' specified in the model formula!!!
-}
-##
+## create matrix relating each 'effect' (categorical and numeric) to the 'factor' that it belongs to
+factLevelMat <- sapply(1:length(allfactors), function (j) {
+    as.numeric(attr(modelMat, 'assign')[-1] == j)
+})
+colnames(factLevelMat) <- c(allfactors)
 
 ## ditch the intercept in this matrix because the 'global' intercept and 'main effects' of host and microbe are all estimated separately.
-modelMat <- modelMat[,-1]
+modelMat <- modelMat[, -1]
 ##
 
 ##
 NEffects <- ncol(modelMat)
 ##
 
-## create matrix relating each 'effect' (categorical and numeric) to the 'factor' that it belongs to
-factLevelMat <- matrix(NA, NEffects, NFactors)
-colnames(factLevelMat) <- c(allfactors)
-rownames(factLevelMat) <- colnames(modelMat)
-remainder <- colnames(modelMat)
-for(fact in names(sort(allfactorder,decreasing=T))) {
-    matches <- remainder
-    for(y in strsplit(fact,':')[[1]]) {
-        matches <- grep(y,matches,value=T)
+## rename factors that have 'sum contrasts' because by default they get arbitrary names (careful with interpretation of interactions... probably better to add them as separate 'main effects' produced by concatenation)
+for(j in sumconts) {
+    searchTerms <- paste0('^', j, 1:(nlevels(newermap[,j]) - 1), '$')
+    replacementTerms <- paste0(j, levels(newermap[,j])[-nlevels(newermap[,j])])
+    for(k in 1:length(searchTerms)) {
+        colnames(modelMat) <- sub(searchTerms[[k]], replacementTerms[[k]], colnames(modelMat))
     }
-    factLevelMat[,fact] <- as.numeric(colnames(modelMat) %in% matches)
-    remainder <- remainder[!remainder %in% matches]
+    rownames(factLevelMat) <- colnames(modelMat)
 }
 ##
 
