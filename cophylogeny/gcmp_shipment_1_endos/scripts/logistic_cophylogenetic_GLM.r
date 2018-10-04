@@ -267,27 +267,25 @@ allfactorder <- sapply(allfactors, function(x) sum(gregexpr(':', x, fixed=TRUE)[
 modelMat <- model.matrix(modelform, model.frame(newermap,na.action=NULL))
 modelMat[is.na(modelMat)] <- 0
 sumconts <- names(attr(modelMat, "contrasts")[attr(modelMat, "contrasts")=='contr.sum'])
-for(j in sumconts) {
-    colnames(modelMat)[grep(paste0(j, 1:(nlevels(newermap[,j]) - 1), collapse = '|'), colnames(modelMat))] <- paste0(j, levels(newermap[,j])[-nlevels(newermap[,j])]) ##this will not work when there are interaction effects!!!
-}
+
+## create matrix relating each 'effect' (categorical and numeric) to the 'factor' that it belongs to
+factLevelMat <- sapply(1:length(allfactors), function (j) {
+    as.numeric(attr(modelMat, 'assign')[-1] == j)
+})
+colnames(factLevelMat) <- c(allfactors)
+
 modelMat <- modelMat[,-1]
 NEffects <- ncol(modelMat)
 
-
-factLevelMat <- matrix(NA, NEffects, NFactors)
-colnames(factLevelMat) <- c(allfactors)
-rownames(factLevelMat) <- colnames(modelMat)
-
-
-remainder <- colnames(modelMat)
-for(fact in names(sort(allfactorder,decreasing=T))) {
-    matches <- remainder
-    for(y in strsplit(fact,':')[[1]]) {
-        matches <- grep(y,matches,value=T)
+## rename factors that have 'sum contrasts' because by default they get arbitrary names (careful with interpretation of interactions... probably better to add them as separate 'main effects' produced by concatenation)
+for(j in sumconts) {
+    searchTerms <- paste0('^', j, 1:(nlevels(newermap[,j]) - 1), '$')
+    replacementTerms <- paste0(j, levels(newermap[,j])[-nlevels(newermap[,j])])
+    for(k in 1:length(searchTerms)) {
+        colnames(modelMat) <- sub(searchTerms[[k]], replacementTerms[[k]], colnames(modelMat))
     }
-    factLevelMat[,fact] <- as.numeric(colnames(modelMat) %in% matches)
-    remainder <- remainder[!remainder %in% matches]
 }
+rownames(factLevelMat) <- colnames(modelMat)
 
 NHostTimeBins <- ceiling(length(levels(newermap[,sampleTipKey])) / NSplits)
 

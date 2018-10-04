@@ -255,8 +255,8 @@ for(j in sumconts) {
     for(k in 1:length(searchTerms)) {
         colnames(modelMat) <- sub(searchTerms[[k]], replacementTerms[[k]], colnames(modelMat))
     }
-    rownames(factLevelMat) <- colnames(modelMat)
 }
+rownames(factLevelMat) <- colnames(modelMat)
 ##
 
 ## identify unique host species in the data, and replace spaces with underscores
