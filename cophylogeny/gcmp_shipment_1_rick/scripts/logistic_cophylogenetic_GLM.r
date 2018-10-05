@@ -9,7 +9,11 @@ library(nlme)
 library(reshape2)
 library(paleotree)
 library(parallel)
+library(ggplot2)
+library(RColorBrewer)
 rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
 
 
 microbeTreePath <- 'raw_data/gg_constrained_fastttree.tre' #ML microbial phylogeny
@@ -36,7 +40,7 @@ hostOUAlphaPriorExpect <- 1.0
 microbeOUAlphaPriorExpect <- 1.0
 globalScale <- 50
 NTrees <- 1 ## number of random trees to sample and to fit the model to
-NSplits <- 25 ## desired number of nodes per host timeBin
+NSplits <- 30 ## desired number of nodes per host timeBin
 ##
 
 ## Stan options
@@ -202,7 +206,9 @@ if(length(microbeSplitTimes[[NMicrobeTimeBins]]) < NSplits/2) {
     microbeSplitTimes[[NMicrobeTimeBins - 1]] <- c(microbeSplitTimes[[NMicrobeTimeBins - 1]],
                                                    microbeSplitTimes[[NMicrobeTimeBins]])
     microbeSplitTimes[[NMicrobeTimeBins]] <- NULL
+    NMicrobeTimeBins <- NMicrobeTimeBins - 1
 }
+
 #cut points in each phylogeny that would result in approximately equal numbers of splits per bin of time
 microbeBoundaries <- sapply(2:NMicrobeTimeBins, function(x) max(microbeSplitTimes[[x]]))
 microbeBoundariesRounded <- round(microbeBoundaries, 1)
@@ -499,6 +505,21 @@ save(fit, file = file.path(outdir,'fit.RData'))
 ##
 
 fitModes <- sapply(fit, function(x) x@mode)
+
+## create parental ancestry matrix for microbes (only sums effect of a given node and its direct parent, not all ancestors
+microbeParents <- matrix(0, NMicrobeNodes + 1, NMicrobeNodes + 1)
+for(node in 1:(NMicrobeNodes + 1)) {
+    microbeParents[node, ] <- as.numeric(1:(NMicrobeNodes + 1) %in% c(Ancestors(microbeTree.root.Y, node, 'parent'), node))
+}
+colnames(microbeParents) <- rownames(microbeParents) <- paste0('i',1:(NMicrobeNodes + 1))
+colnames(microbeParents)[1:NMicrobeTips] <- rownames(microbeParents)[1:NMicrobeTips] <- paste0('t', colnames(yb))
+microbeParentsT <- t(cbind(1, microbeParents[-(NMicrobeTips + 1), -(NMicrobeTips + 1)]))
+
+hostParents <- list()
+microbeAncestorsT <- t(cbind(1, microbeAncestors))
+
+colorpal <- colorRampPalette(brewer.pal(9,'Blues'))
+plotcolors <- c('white', colorpal(100),'black')
 
 ## summarize the results separately for each sampled host tree
 for(i in 1:NTrees) {
@@ -853,10 +874,50 @@ for(i in 1:NTrees) {
     ## summarize the mean branch lengths of the hosts
     sums <- summary(fit[[i]], pars = 'hostScales', probs = c(0.05,0.95), use_cache = F)
     newEdges <- sums$summary[,'mean']^2
-    hostTreesSampled[[i]]$edge.length <- newEdges[order(hostEdgeOrder[[i]])]
+    hostTreesSampled.newEdges <- hostTreesSampled[[i]]
+    hostTreesSampled.newEdges$edge.length <- newEdges[order(hostEdgeOrder[[i]])]
     pdf(file = file.path(currplotdir,'hostTreeWEstimatedEdgeLengths.pdf'), width = 25, height = 15)
-    plot(hostTreesSampled[[i]], cex = 0.5)
+    plot(hostTreesSampled.newEdges, cex = 0.5)
     graphics.off()
+    ##
+    
+    ## plot heatmap of cophylogenetic patterns
+    plotmicrobetree <- ladderize(multi2di(microbeTree.Y.root))
+    hclmicrobetree <- as.hclust(plotmicrobetree)
+    # for each sample in the data, assign its mitotype to a vector
+    hostvect <- sampleMap[[i]]$host_scientific_name
+    # name the vector with the sample IDs
+    names(hostvect) <- rownames(sampleMap[[i]])
+    # sort the samples in the vector
+    temp <- sampleMap[[i]][order(sampleMap[[i]]$concatenated_date),]
+    temp <- temp[order(temp$reef_name),]
+    temp <- temp[order(temp$host_scientific_name),]
+    for(comp in c('T', 'S', 'M')) {
+        temp2 <- temp[temp$tissue_compartment == comp,]
+        hostvectTemp <- hostvect[rownames(temp2)]
+        # expand the tips into polytomies containing a tip for each sample
+        hosttree <- expandTaxonTree(hostTreesSampled[[i]], hostvectTemp, keepBrLen = T)
+        hosttree <- drop.tip(hosttree, hosttree$tip.label[!hosttree$tip.label %in% names(hostvectTemp)])
+        # convert polytomies into randomly-split, binary subtrees with 0-length branches, and ladderize the whole tree
+        hosttree.dichotomous <- ladderize(multi2di(hosttree, random = F), right = F)
+        # convert the phylogenetic tree into an hclust object
+        hclhosttree <- as.hclust(force.ultrametric(hosttree.dichotomous))
+        plotFilt <- as.matrix(t(y)[plotmicrobetree$tip.label, hosttree.dichotomous$tip.label])
+        pdf(file   = file.path(currplotdir,
+                               paste0('cophylogeny_heatmap_',
+                                      comp,
+                                      '.pdf')),
+            width  = 10,
+            height = 10)
+        heatmap(plotFilt,
+                Rowv   = as.dendrogram(hclmicrobetree),
+                Colv   = as.dendrogram(hclhosttree),
+                col    = plotcolors,
+                cexCol = 0.2,
+                cexRow = 0.1,
+                scale  = 'none')
+        graphics.off()
+    }
     ##
 }
 ##

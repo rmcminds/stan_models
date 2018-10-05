@@ -150,9 +150,11 @@ maxMicrobeNHs <- max(microbeNHs)
 lttMicrobeTree <- ltt(microbeTree.root.Y, log.lineages=F, plot=F)
 temp <- maxMicrobeNHs - lttMicrobeTree$times[-length(lttMicrobeTree$times)]
 microbeSplitTimes <- split(temp, ceiling(seq_along(temp) / NSplits))
-if(length(microbeSplitTimes[[NMicrobeTimeBins]]) < NSplits/2) {
-    microbeSplitTimes[[NMicrobeTimeBins - 1]] <- c(microbeSplitTimes[[NMicrobeTimeBins - 1]], microbeSplitTimes[[NMicrobeTimeBins]])
+if(length(microbeSplitTimes[[NMicrobeTimeBins]]) < NSplits / 2) {
+    microbeSplitTimes[[NMicrobeTimeBins - 1]] <- c(microbeSplitTimes[[NMicrobeTimeBins - 1]],
+                                                   microbeSplitTimes[[NMicrobeTimeBins]])
     microbeSplitTimes[[NMicrobeTimeBins]] <- NULL
+    NMicrobeTimeBins <- NMicrobeTimeBins - 1
 }
 
 #cut points in each phylogeny that would result in approximately equal numbers of splits per bin of time
@@ -809,7 +811,7 @@ for(i in 1:NTrees) {
     ## summarize the mean branch lengths of the hosts
     sums <- summary(fit[[i]], pars = 'hostScales', probs = c(0.05,0.95), use_cache = F)
     newEdges <- sums$summary[,'mean']^2
-    hostTreesSampled.newEdges <- hostTreesSampled
+    hostTreesSampled.newEdges <- hostTreesSampled[[i]]
     hostTreesSampled.newEdges$edge.length <- newEdges[order(hostEdgeOrder[[i]])]
     pdf(file = file.path(currplotdir, 'hostTreeWEstimatedEdgeLengths.pdf'), width = 25, height = 15)
     plot(hostTreesSampled.newEdges, cex = 0.5)
