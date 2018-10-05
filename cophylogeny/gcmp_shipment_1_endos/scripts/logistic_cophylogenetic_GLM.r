@@ -74,6 +74,7 @@ contrastfunction <- function(dfin) {
     contrasts(df2$host_scientific_name) <- 'contr.sum'
     contrasts(df2$tissue_compartment) <- 'contr.sum'
     contrasts(df2$reef_name) <- 'contr.sum'
+    contrasts(df2$concatenated_date) <- 'contr.sum'
     contrasts(df2$colony_name) <- 'contr.sum'
     levels(df2[,sampleTipKey])[levels(df2[,sampleTipKey]) == 'Homophyllia_hillae'] <- "Homophyllia_bowerbanki"
     levels(df2[,sampleTipKey])[levels(df2[,sampleTipKey]) == 'Pocillopora_eydouxi'] <- "Pocillopora_grandis"
@@ -263,7 +264,7 @@ newermap$log_sequencing_depth_scaled <- scale(newermap$log_sequencing_depth)
 
 
 
-modelform <- ~ ocean + ocean_area + reef_name + log_sequencing_depth_scaled + tissue_compartment + colony_name
+modelform <- ~ ocean + ocean_area + reef_name + concatenated_date + colony_name + tissue_compartment + log_sequencing_depth_scaled
 allfactors <- attr(terms.formula(modelform), "term.labels")
 NFactors <- length(allfactors)
 allfactorder <- sapply(allfactors, function(x) sum(gregexpr(':', x, fixed=TRUE)[[1]] > 0))
@@ -505,10 +506,10 @@ fitModes <- sapply(fit, function(x) x@mode)
 ## create parental ancestry matrix for microbes (only sums effect of a given node and its direct parent, not all ancestors
 microbeParents <- matrix(0, NMicrobeNodes + 1, NMicrobeNodes + 1)
 for(node in 1:(NMicrobeNodes + 1)) {
-    microbeParents[node, ] <- as.numeric(1:(NMicrobeNodes + 1) %in% c(Ancestors(microbeTree.root.Y, node, 'parent'), node))
+    microbeParents[node, ] <- as.numeric(1:(NMicrobeNodes + 1) %in% c(Ancestors(microbeTree.Y.root, node, 'parent'), node))
 }
 colnames(microbeParents) <- rownames(microbeParents) <- paste0('i',1:(NMicrobeNodes + 1))
-colnames(microbeParents)[1:NMicrobeTips] <- rownames(microbeParents)[1:NMicrobeTips] <- paste0('t', colnames(yb))
+colnames(microbeParents)[1:NMicrobeTips] <- rownames(microbeParents)[1:NMicrobeTips] <- paste0('t', colnames(y))
 microbeParentsT <- t(cbind(1, microbeParents[-(NMicrobeTips + 1), -(NMicrobeTips + 1)]))
 
 hostParents <- list()
