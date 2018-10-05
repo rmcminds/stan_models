@@ -67,9 +67,9 @@ contrastfunction <- function(dfin) {
     contrasts(df2$ocean) <- 'contr.sum'
     contrasts(df2$ocean_area) <- 'contr.sum'
     contrasts(df2$host_scientific_name) <- 'contr.sum'
-    df2$tissue_compartment <- factor(df2$tissue_compartment, levels = c(levels(df2$tissue_compartment)[levels(df2$tissue_compartment) != 'T'], 'T'))
     contrasts(df2$tissue_compartment) <- 'contr.sum'
     contrasts(df2$reef_name) <- 'contr.sum'
+    contrasts(df2$concatenated_date) <- 'contr.sum'
     contrasts(df2$colony_name) <- 'contr.sum'
     levels(df2[,sampleTipKey])[levels(df2[,sampleTipKey]) == 'Homophyllia_hillae'] <- "Homophyllia_bowerbanki"
     levels(df2[,sampleTipKey])[levels(df2[,sampleTipKey]) == 'Pocillopora_eydouxi'] <- "Pocillopora_grandis"
@@ -225,7 +225,7 @@ microbeNHRel <- microbeNHRel[microbeEdgeOrder,]
 ##
 
 ## prepare data for the model matrix
-modelform <- ~ ocean + ocean_area + reef_name + colony_name + tissue_compartment + log_sequencing_depth_scaled
+modelform <- ~ ocean + ocean_area + reef_name + concatenated_date + colony_name + tissue_compartment + log_sequencing_depth_scaled
 allfactors <- attr(terms.formula(modelform), "term.labels")
 NFactors <- length(allfactors)
 allfactorder <- sapply(allfactors, function(x) sum(gregexpr(':', x, fixed = TRUE)[[1]] > 0))
@@ -473,7 +473,7 @@ for(i in 1:NTrees) {
 
     ## plot the sampled tree with the time bins marked
     pdf(file = file.path(currplotdir,'sampledHostTree.pdf'), width = 25, height = 15)
-    plot(hostTreesSampled[[i]],cex = 0.75)
+    plot(hostTreesSampled[[i]], cex = 0.75)
     for(age in max(nodeHeights(hostTreesSampled[[i]])) - meanHostBoundaries) {
         lines(x = c(age, age), y = c(1, length(hostTreesSampled[[i]]$tip.label)), lwd = 1)
     }
@@ -482,7 +482,7 @@ for(i in 1:NTrees) {
     
     ## plot the sampled tree with the time bins marked
     pdf(file = file.path(currplotdir,'sampledMicrobeTree.pdf'), width = 25, height = 15)
-    plot(microbeTree.root.Y,cex = 0.75)
+    plot(microbeTree.root.Y, cex = 0.75)
     for(age in max(nodeHeights(microbeTree.root.Y)) - microbeBoundaries) {
         lines(x = c(age, age), y = c(1, length(microbeTree.root.Y$tip.label)), lwd = 1)
     }
@@ -809,9 +809,10 @@ for(i in 1:NTrees) {
     ## summarize the mean branch lengths of the hosts
     sums <- summary(fit[[i]], pars = 'hostScales', probs = c(0.05,0.95), use_cache = F)
     newEdges <- sums$summary[,'mean']^2
-    hostTreesSampled[[i]]$edge.length <- newEdges[order(hostEdgeOrder[[i]])]
-    pdf(file = file.path(currplotdir,'hostTreeWEstimatedEdgeLengths.pdf'), width = 25, height = 15)
-    plot(hostTreesSampled[[i]], cex = 0.5)
+    hostTreesSampled.newEdges <- hostTreesSampled
+    hostTreesSampled.newEdges$edge.length <- newEdges[order(hostEdgeOrder[[i]])]
+    pdf(file = file.path(currplotdir, 'hostTreeWEstimatedEdgeLengths.pdf'), width = 25, height = 15)
+    plot(hostTreesSampled.newEdges, cex = 0.5)
     graphics.off()
     ##
     
@@ -821,16 +822,15 @@ for(i in 1:NTrees) {
     # for each sample in the data, assign its mitotype to a vector
     hostvect <- sampleMap[[i]]$host_scientific_name
     # name the vector with the sample IDs
-    names(hostvect) <- sampleMap[[i]][,'#SampleID']
+    names(hostvect) <- rownames(sampleMap[[i]])
     # sort the samples in the vector
     temp <- sampleMap[[i]][order(sampleMap[[i]]$concatenated_date),]
-    temp <- temp[order(temp$daily_replicate),]
     temp <- temp[order(temp$reef_name),]
     temp <- temp[order(temp$host_scientific_name),]
     for(comp in c('T', 'S', 'M')) {
         temp2 <- temp[temp$tissue_compartment == comp,]
         hostvectTemp <- hostvect[rownames(temp2)]
-        # expand the tips (which are defined by mitotypes) into polytomies containing a tip for each sample within that mitotype
+        # expand the tips into polytomies containing a tip for each sample
         hosttree <- expandTaxonTree(hostTreesSampled[[i]], hostvectTemp, keepBrLen = T)
         hosttree <- drop.tip(hosttree, hosttree$tip.label[!hosttree$tip.label %in% names(hostvectTemp)])
         # convert polytomies into randomly-split, binary subtrees with 0-length branches, and ladderize the whole tree
@@ -838,7 +838,12 @@ for(i in 1:NTrees) {
         # convert the phylogenetic tree into an hclust object
         hclhosttree <- as.hclust(force.ultrametric(hosttree.dichotomous))
         plotFilt <- as.matrix(t(yb)[plotmicrobetree$tip.label, hosttree.dichotomous$tip.label])
-        pdf(file = file.path(currplotdir, paste0('cophylogeny_heatmap_',comp,'.pdf')), width = 10, height = 10)
+        pdf(file   = file.path(currplotdir,
+                               paste0('cophylogeny_heatmap_',
+                                      comp,
+                                      '.pdf')),
+            width  = 10,
+            height = 10)
         heatmap(plotFilt,
                 Rowv   = as.dendrogram(hclmicrobetree),
                 Colv   = as.dendrogram(hclhosttree),
