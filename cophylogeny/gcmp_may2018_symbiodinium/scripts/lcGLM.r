@@ -1098,8 +1098,8 @@ write.table(allRes,
 ##
 effectNames <- c('microbePrevalence',
                  colnames(modelMat)[1:NEffects],
-                 colnames(hostAncestors[[1]]),
-                 sumconts)
+                 paste0('host_', colnames(hostAncestors[[1]])),
+                 sapply(sumconts, function(m) paste0(m, levels(newermap[,m])[nlevels(newermap[,m])])))
 
 matMult <- array(NA,
                  dim = c(NMCSamples,
