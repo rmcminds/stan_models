@@ -860,8 +860,8 @@ for(i in 1:NTrees) {
     ##
     effectNames <- c('microbePrevalence',
                      colnames(modelMat)[1:NEffects],
-                     colnames(hostAncestors[[i]]),
-                     sumconts)
+                     paste0('host_', colnames(hostAncestors[[i]])),
+                     sapply(sumconts, function(m) paste0(m, levels(newermap[,m])[nlevels(newermap[,m])])))
     
     matMult <- array(NA,
                      dim = c(NMCSamples,
