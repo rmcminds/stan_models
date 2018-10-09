@@ -205,6 +205,7 @@ if(length(microbeSplitTimes[[NMicrobeTimeBins]]) < NSplits/2) {
     microbeSplitTimes[[NMicrobeTimeBins - 1]] <- c(microbeSplitTimes[[NMicrobeTimeBins - 1]],
                                                    microbeSplitTimes[[NMicrobeTimeBins]])
     microbeSplitTimes[[NMicrobeTimeBins]] <- NULL
+    NMicrobeTimeBins <- NMicrobeTimeBins - 1
 }
 #cut points in each phylogeny that would result in approximately equal numbers of splits per bin of time
 microbeBoundaries <- sapply(2:NMicrobeTimeBins, function(x) max(microbeSplitTimes[[x]]))

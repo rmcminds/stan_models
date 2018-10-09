@@ -32,7 +32,7 @@ minSamps <- 1 # minimum number of samples that a sequence variant is present in 
 
 ## model options
 aveStDPriorExpect <- 1.0
-aveStDMetaPriorExpect <- 1.0
+aveStDMetaPriorExpect <- 0.1
 hostOUAlphaPriorExpect <- 1.0
 microbeOUAlphaPriorExpect <- 1.0
 globalScale <- 50
