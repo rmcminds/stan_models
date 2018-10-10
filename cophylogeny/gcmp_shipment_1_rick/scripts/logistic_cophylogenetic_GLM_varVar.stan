@@ -1,1 +1,1 @@
-/raid1/home/micro/mcmindsr/ryan/github_repos/stan_models/cophylogeny/gcmp_may2018_symbiodinium/scripts/logistic_cophylogenetic_GLM_varVar.stan
+../../gcmp_may2018_symbiodinium/scripts/logistic_cophylogenetic_GLM_varVar.stan
