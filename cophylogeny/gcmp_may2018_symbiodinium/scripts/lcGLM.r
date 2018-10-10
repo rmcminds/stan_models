@@ -230,7 +230,7 @@ rownames(factLevelMat) <- colnames(modelMat)
 ##
 
 ## extract all the possible species that 'fungid' could refer to
-possibleFungidSpecs <- grep(paste0(paste(possibleFungidGenera, collapse='|'), '_'), attr(hostTree, "TipLabel"), value = T)
+possibleFungidSpecs <- grep(paste0(paste(possibleFungidGenera, collapse = '|'), '_'), attr(hostTree, "TipLabel"), value = T)
 ##
 
 ## identify unique host species in the data, and replace spaces with underscores
@@ -241,7 +241,7 @@ study.species <- gsub(' ', '_', levels(newermap[,sampleTipKey]))
 study.species.missing <- study.species[!study.species %in% grep(paste(c(attr(hostTree, "TipLabel"),
                                                                         'Fungid',
                                                                         'not_applicable'),
-                                                                      collapse='|'),
+                                                                      collapse = '|'),
                                                                 study.species,
                                                                 ignore.case = T,
                                                                 value = T)]
@@ -289,7 +289,7 @@ for(i in 1:NTrees) {
 ##
 
 ## average cut points among all the trees so the bins of time are consistent across replicates
-meanHostBoundaries <- mean(sapply(hostCutPoints, function(x) x$boundaries))
+meanHostBoundaries <- apply(sapply(hostCutPoints, function(x) x$boundaries), 1, mean)
 meanHostBoundariesRounded <- round(meanHostBoundaries, 1)
 ##
 
