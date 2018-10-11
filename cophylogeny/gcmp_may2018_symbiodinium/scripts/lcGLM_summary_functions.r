@@ -61,8 +61,14 @@ summarizeLcGLM <- function(...) {
         ##
         
         ## summarize the mean branch lengths of the microbes
-        sums <- summary(fit[[i]], pars = 'microbeScales', probs = c(0.05,0.95), use_cache = F)
-        newEdges <- sums$summary[,'mean']^2
+        newEdges <- apply(array(extract(fit[[i]],
+                                        pars       = 'microbeScales',
+                                        permuted   = F),
+                                dim = c(NMCSamples - warmup,
+                                        NChains,
+                                        NMicrobeNodes))^2,
+                          3,
+                          mean)
         finalMicrobeTree.newEdges <- finalMicrobeTree
         finalMicrobeTree.newEdges$edge.length <- newEdges[order(microbeTreeDetails$edgeOrder)]
         pdf(file = file.path(currplotdir, 'microbeTreeWEstimatedEdgeLengths.pdf'), width = 25, height = 15)
@@ -71,8 +77,14 @@ summarizeLcGLM <- function(...) {
         ##
         
         ## summarize the mean branch lengths of the hosts
-        sums <- summary(fit[[i]], pars = 'hostScales', probs = c(0.05,0.95), use_cache = F)
-        newEdges <- sums$summary[,'mean']^2
+        newEdges <- apply(array(extract(fit[[i]],
+                                        pars       = 'hostScales',
+                                        permuted   = F),
+                                dim = c(NMCSamples - warmup,
+                                        NChains,
+                                        NHostNodes))^2,
+                          3,
+                          mean)
         hostTreesSampled.newEdges <- hostTreesSampled[[i]]
         hostTreesSampled.newEdges$edge.length <- newEdges[order(hostTreeDetails[[i]]$edgeOrder)]
         pdf(file = file.path(currplotdir, 'hostTreeWEstimatedEdgeLengths.pdf'), width = 25, height = 15)
@@ -84,13 +96,13 @@ summarizeLcGLM <- function(...) {
         plotmicrobetree <- ladderize(multi2di(finalMicrobeTree))
         hclmicrobetree <- as.hclust(plotmicrobetree)
         # for each sample in the data, assign its mitotype to a vector
-        hostvect <- sampleMap[[i]]$host_scientific_name
+        hostvect <- sampleMap[[i]][,sampleTipKey]
         # name the vector with the sample IDs
         names(hostvect) <- rownames(sampleMap[[i]])
         # sort the samples in the vector
         temp <- sampleMap[[i]][order(sampleMap[[i]]$concatenated_date),]
         temp <- temp[order(temp$reef_name),]
-        temp <- temp[order(temp$host_scientific_name),]
+        temp <- temp[order(temp[,sampleTipKey]),]
         for(comp in c('T', 'S', 'M')) {
             temp2 <- temp[temp$tissue_compartment == comp,]
             hostvectTemp <- hostvect[rownames(temp2)]
@@ -121,42 +133,89 @@ summarizeLcGLM <- function(...) {
         ##
 
         ## variance partitioning
-        stDProps <- extract(fit[[i]], pars = 'stDProps')[[1]]
-        colnames(stDProps) <- c(paste0('ADiv.', colnames(factLevelMat)),
-                                paste0('Specificity.', colnames(factLevelMat)),
-                                'ADiv.host',
-                                'host.specificity',
-                                'microbe.prevalence')
-
-        pdf(file = file.path(currplotdir,'scalesboxes.pdf'), width = 25, height = 15)
-        boxplot(stDProps, cex.axis = 0.5, las = 2)
-        graphics.off()
-
+        stDProps <- array(extract(fit[[i]],
+                                  pars = 'stDProps',
+                                  permuted = F,
+                                  inc_warmup = T),
+                          dim = c(NMCSamples,
+                                  NChains,
+                                  2 * NFactors + 3),
+                          dimnames = list(sample  = NULL,
+                                          chain   = NULL,
+                                          factor  = c(paste0('ADiv.', colnames(factLevelMat)),
+                                                      paste0('Specificity.', colnames(factLevelMat)),
+                                                      'ADiv.host',
+                                                      'host.specificity',
+                                                      'microbe.prevalence')))
         save(stDProps, file = file.path(currdatadir, 'stDProps.RData'))
+        
+        stDPropsPlot <- apply(stDProps[(warmup + 1):NMCSamples,,], 2, c)
+        colnames(stDPropsPlot) <- gsub('_',
+                                       ' ',
+                                       c(paste0(colnames(factLevelMat), ' (ADiv)'),
+                                         paste0(colnames(factLevelMat), ' (Specificity)'),
+                                         'Host (ADiv)',
+                                         'Host (Specificity)',
+                                         'Microbe prevalence'))
+                                
+        ADivInd <- c(1:NFactors, 2 * NFactors + 1)
+        specInd <- c((NFactors + 1):(2 * NFactors), 2 * NFactors + 2)
+        meds <- apply(stDPropsPlot, 2, median)
+        stDPropsPlot <- stDPropsPlot[, c(2 * NFactors + 3,
+                                         ADivInd[order(meds[ADivInd], decreasing = T)],
+                                         specInd[order(meds[specInd], decreasing = T)])]
+                                   
+        pdf(file = file.path(currplotdir,'stDProps_boxes.pdf'), width = 7, height = 7)
+        boxplot(stDPropsPlot,
+                at = c(1, 3:(NFactors + 3), (NFactors + 5):(2 * NFactors + 5)),
+                cex.axis = 0.5,
+                las = 2,
+                xlab = 'Factor',
+                ylab = 'Percent of total variance')
+        graphics.off()
         ##
         
-        ## proportion of variance explained by each time bin
-        metaVarProps <- extract(fit[[i]], pars = 'metaVarProps')[[1]]
-        colnames(metaVarProps) <- c('prevalence', 'adiv', 'specificty')
-        pdf(file = file.path(currplotdir, 'metaVarProps_boxes.pdf'), width = 25, height = 15)
-        boxplot(metaVarProps, cex.axis = 0.5, las = 2)
-        graphics.off()
-        save(metaVarProps, file = file.path(currdatadir, 'metaVarProps.RData'))
-        
-        metaScales <- array(extract(fit[[i]],
-                            pars = 'metaScales',
-                            permuted = F,
-                            inc_warmup = T),
-                    dim = c(NMCSamples,
-                            NChains,
-                            3))
+        ## meta-variance partitioning
+        metaVarProps <- array(extract(fit[[i]],
+                                      pars = 'metaVarProps',
+                                      permuted = F,
+                                      inc_warmup = T),
+                              dim = c(NMCSamples,
+                                      NChains,
+                                      3),
+                              dimnames = list(sample  = NULL,
+                                              chain   = NULL,
+                                              effect  = c('Prevalence',
+                                                          'ADiv',
+                                                          'Specificty')))
                             
-        pdf(file = file.path(currplotdir, 'metaScales_boxes.pdf'), width = 25, height = 15)
-        boxplot(t(apply(metaScales, c(1,3), rbind)), cex.axis = 0.5, las = 2)
+        pdf(file = file.path(currplotdir, 'metaVarProps_boxes.pdf'), width = 7, height = 7)
+        boxplot(apply(metaVarProps[(warmup + 1):NMCSamples,,], 2, c), cex.axis = 0.5, las = 2)
+        graphics.off()
+        
+        save(metaVarProps, file = file.path(currdatadir, 'metaVarProps.RData'))
+        ##
+        
+        ## actual scales of metavariance
+        metaScales <- array(extract(fit[[i]],
+                                    pars = 'metaScales',
+                                    permuted = F,
+                                    inc_warmup = T),
+                            dim = c(NMCSamples,
+                                    NChains,
+                                    3),
+                            dimnames = list(sample  = NULL,
+                                            chain   = NULL,
+                                            effect  = c('Prevalence',
+                                                        'ADiv',
+                                                        'Specificty')))
+                            
+        pdf(file = file.path(currplotdir, 'metaScales_boxes.pdf'), width = 7, height = 7)
+        boxplot(apply(metaScales[(warmup + 1):NMCSamples,,], 2, c), cex.axis = 0.5, las = 2)
         graphics.off()
                             
         save(metaScales, file = file.path(currdatadir, 'metaScales.RData'))
-        
+        ##
         
         ## compare rates of host evolution in each time bin
         relativeHostEvolRates <- exp(extract(fit[[i]], pars = 'logRelativeHostEvolRates')[[1]])
@@ -166,12 +225,12 @@ summarizeLcGLM <- function(...) {
                                                                      c(meanHostBoundariesRounded, 'present')[[x]],
                                                                      ' mya'))
 
-        pdf(file = file.path(currplotdir, 'evolRatesHost.pdf'), width = 25, height = 15)
-        boxplot(relativeHostEvolRates, xlab = 'Time Period', ylab = 'Rate of Evolution Relative to Mean')
+        pdf(file = file.path(currplotdir, 'evolRatesHost.pdf'), width = 7, height = 7)
+        boxplot(relativeHostEvolRates, xlab = 'Time Period', ylab = 'Rate of Evolution Relative to Mean', las = 2)
         graphics.off()
         
-        pdf(file = file.path(currplotdir, 'logEvolRatesHost.pdf'), width = 25, height = 15)
-        boxplot(log(relativeHostEvolRates), xlab = 'Time Period', ylab = 'Log Rate of Evolution Relative to Mean')
+        pdf(file = file.path(currplotdir, 'logEvolRatesHost.pdf'), width = 7, height = 7)
+        boxplot(log(relativeHostEvolRates), xlab = 'Time Period', ylab = 'Log Rate of Evolution Relative to Mean', las = 2)
         graphics.off()
 
         save(relativeHostEvolRates, file = file.path(currdatadir, 'relativeHostEvolRates.RData'))
@@ -180,12 +239,12 @@ summarizeLcGLM <- function(...) {
         ## compare rates of microbe evolution in each time bin
         relativeMicrobeEvolRates <- exp(extract(fit[[i]], pars = 'logRelativeMicrobeEvolRates')[[1]])
         
-        pdf(file = file.path(currplotdir, 'evolRatesMicrobe.pdf'), width = 25, height = 15)
-        boxplot(relativeMicrobeEvolRates, xlab = 'Time Period', ylab = 'Rate of Evolution Relative to Mean')
+        pdf(file = file.path(currplotdir, 'evolRatesMicrobe.pdf'), width = 7, height = 7)
+        boxplot(relativeMicrobeEvolRates, xlab = 'Time Period', ylab = 'Rate of Evolution Relative to Mean', las = 2)
         graphics.off()
         
-        pdf(file = file.path(currplotdir, 'logEvolRatesMicrobe.pdf'), width = 25, height = 15)
-        boxplot(log(relativeMicrobeEvolRates), xlab = 'Time Period', ylab = 'Log Rate of Evolution Relative to Mean')
+        pdf(file = file.path(currplotdir, 'logEvolRatesMicrobe.pdf'), width = 7, height = 7)
+        boxplot(log(relativeMicrobeEvolRates), xlab = 'Time Period', ylab = 'Log Rate of Evolution Relative to Mean', las = 2)
         graphics.off()
         
         save(relativeMicrobeEvolRates, file = file.path(currdatadir, 'relativeMicrobeEvolRates.RData'))
@@ -197,7 +256,7 @@ summarizeLcGLM <- function(...) {
         OUAlphas <- cbind(hostOUAlpha, microbeOUAlpha)
         colnames(OUAlphas) <- c('host', 'microbe')
         
-        pdf(file = file.path(currplotdir, 'OUAlphas.pdf'), width = 25, height = 15)
+        pdf(file = file.path(currplotdir, 'OUAlphas.pdf'), width = 7, height = 7)
         boxplot(OUAlphas, xlab = 'Host or microbe', ylab = 'alpha')
         graphics.off()
         
@@ -536,19 +595,91 @@ summarizeLcGLM <- function(...) {
 
         allfit <- sflist2stanfit(fit[fitModes == 0])
 
-        stDProps <- extract(allfit, pars = 'stDProps')[[1]]
-        colnames(stDProps) <- c(paste0('ADiv.', colnames(factLevelMat)),
-                                paste0('Specificity.', colnames(factLevelMat)),
-                                'ADiv.host',
-                                'host.specificity',
-                                'microbe.prevalence')
-
-        pdf(file = file.path(currplotdir, 'scalesboxes.pdf'), width = 25, height = 15)
-        boxplot(stDProps, cex.axis = 0.5, las = 2)
-        graphics.off()
-
+        ## variance partitioning
+        stDProps <- array(extract(allfit,
+                                  pars = 'stDProps',
+                                  permuted = F,
+                                  inc_warmup = T),
+                          dim = c(NMCSamples,
+                                  NSuccessTrees * NChains,
+                                  2 * NFactors + 3),
+                          dimnames = list(sample  = NULL,
+                                          chain   = NULL,
+                                          factor  = c(paste0('ADiv.', colnames(factLevelMat)),
+                                                      paste0('Specificity.', colnames(factLevelMat)),
+                                                      'ADiv.host',
+                                                      'host.specificity',
+                                                      'microbe.prevalence')))
         save(stDProps, file = file.path(currdatadir, 'stDProps.RData'))
-
+        
+        stDPropsPlot <- apply(stDProps[(warmup + 1):NMCSamples,,], 2, c)
+        colnames(stDPropsPlot) <- gsub('_',
+                                       ' ',
+                                       c(paste0(colnames(factLevelMat), ' (ADiv)'),
+                                         paste0(colnames(factLevelMat), ' (Specificity)'),
+                                         'Host (ADiv)',
+                                         'Host (Specificity)',
+                                         'Microbe prevalence'))
+                                
+        ADivInd <- c(1:NFactors, 2 * NFactors + 1)
+        specInd <- c((NFactors + 1):(2 * NFactors), 2 * NFactors + 2)
+        meds <- apply(stDPropsPlot, 2, median)
+        stDPropsPlot <- stDPropsPlot[, c(2 * NFactors + 3,
+                                         ADivInd[order(meds[ADivInd], decreasing = T)],
+                                         specInd[order(meds[specInd], decreasing = T)])]
+                                   
+        pdf(file = file.path(currplotdir,'stDProps_boxes.pdf'), width = 7, height = 7)
+        boxplot(stDPropsPlot,
+                at = c(1, 3:(NFactors + 3), (NFactors + 5):(2 * NFactors + 5)),
+                cex.axis = 0.5,
+                las = 2,
+                xlab = 'Factor',
+                ylab = 'Percent of total variance')
+        graphics.off()
+        ##
+        
+        ## meta-variance partitioning
+        metaVarProps <- array(extract(allfit,
+                                      pars = 'metaVarProps',
+                                      permuted = F,
+                                      inc_warmup = T),
+                              dim = c(NMCSamples,
+                                      NSuccessTrees * NChains,
+                                      3),
+                              dimnames = list(sample  = NULL,
+                                              chain   = NULL,
+                                              effect  = c('Prevalence',
+                                                          'ADiv',
+                                                          'Specificty')))
+                            
+        pdf(file = file.path(currplotdir, 'metaVarProps_boxes.pdf'), width = 7, height = 7)
+        boxplot(apply(metaVarProps[(warmup + 1):NMCSamples,,], 2, c), cex.axis = 0.5, las = 2)
+        graphics.off()
+        
+        save(metaVarProps, file = file.path(currdatadir, 'metaVarProps.RData'))
+        ##
+        
+        ## actual scales of metavariance
+        metaScales <- array(extract(allfit,
+                                    pars = 'metaScales',
+                                    permuted = F,
+                                    inc_warmup = T),
+                            dim = c(NMCSamples,
+                                    NSuccessTrees * NChains,
+                                    3),
+                            dimnames = list(sample  = NULL,
+                                            chain   = NULL,
+                                            effect  = c('Prevalence',
+                                                        'ADiv',
+                                                        'Specificty')))
+                            
+        pdf(file = file.path(currplotdir, 'metaScales_boxes.pdf'), width = 7, height = 7)
+        boxplot(apply(metaScales[(warmup + 1):NMCSamples,,], 2, c), cex.axis = 0.5, las = 2)
+        graphics.off()
+        
+        save(metaScales, file = file.path(currdatadir, 'metaScales.RData'))
+        ##
+        
         relativeHostEvolRates <- exp(extract(allfit, pars='logRelativeHostEvolRates')[[1]])
         colnames(relativeHostEvolRates) <- sapply(1:(length(meanHostBoundariesRounded) + 1),
                                                   function(x) paste0(c('before', meanHostBoundariesRounded)[[x]],
@@ -556,12 +687,12 @@ summarizeLcGLM <- function(...) {
                                                                      c(meanHostBoundariesRounded, 'present')[[x]],
                                                                      ' mya'))
 
-        pdf(file = file.path(currplotdir, 'evolRatesHost.pdf'), width = 25, height = 15)
-        boxplot(relativeHostEvolRates, xlab = 'Time Period', ylab = 'Rate of Evolution Relative to Mean')
+        pdf(file = file.path(currplotdir, 'evolRatesHost.pdf'), width = 7, height = 7)
+        boxplot(relativeHostEvolRates, xlab = 'Time Period', ylab = 'Rate of Evolution Relative to Mean', las = 2)
         graphics.off()
 
-        pdf(file = file.path(currplotdir, 'logEvolRatesHost.pdf'), width = 25, height = 15)
-        boxplot(log(relativeHostEvolRates), xlab = 'Time Period', ylab = 'Log Rate of Evolution Relative to Mean')
+        pdf(file = file.path(currplotdir, 'logEvolRatesHost.pdf'), width = 7, height = 7)
+        boxplot(log(relativeHostEvolRates), xlab = 'Time Period', ylab = 'Log Rate of Evolution Relative to Mean', las = 2)
         graphics.off()
 
         save(relativeHostEvolRates, file = file.path(currdatadir, 'relativeHostEvolRates.RData'))
@@ -569,12 +700,12 @@ summarizeLcGLM <- function(...) {
         ## compare rates of microbe evolution in each time bin
         relativeMicrobeEvolRates <- exp(extract(allfit, pars = 'logRelativeMicrobeEvolRates')[[1]])
 
-        pdf(file = file.path(currplotdir, 'evolRatesMicrobe.pdf'), width = 25, height = 15)
-        boxplot(relativeMicrobeEvolRates, xlab = 'Time Period', ylab = 'Rate of Evolution Relative to Mean')
+        pdf(file = file.path(currplotdir, 'evolRatesMicrobe.pdf'), width = 7, height = 7)
+        boxplot(relativeMicrobeEvolRates, xlab = 'Time Period', ylab = 'Rate of Evolution Relative to Mean', las = 2)
         graphics.off()
 
-        pdf(file = file.path(currplotdir, 'logEvolRatesMicrobe.pdf'), width = 25, height = 15)
-        boxplot(log(relativeMicrobeEvolRates), xlab = 'Time Period', ylab = 'Log Rate of Evolution Relative to Mean')
+        pdf(file = file.path(currplotdir, 'logEvolRatesMicrobe.pdf'), width = 7, height = 7)
+        boxplot(log(relativeMicrobeEvolRates), xlab = 'Time Period', ylab = 'Log Rate of Evolution Relative to Mean', las = 2)
         graphics.off()
 
         save(relativeMicrobeEvolRates, file = file.path(currdatadir, 'relativeMicrobeEvolRates.RData'))
@@ -586,7 +717,7 @@ summarizeLcGLM <- function(...) {
         OUAlphas <- cbind(hostOUAlpha, microbeOUAlpha)
         colnames(OUAlphas) <- c('host', 'microbe')
 
-        pdf(file = file.path(currplotdir,'OUAlphas.pdf'), width = 25, height = 15)
+        pdf(file = file.path(currplotdir,'OUAlphas.pdf'), width = 7, height = 7)
         boxplot(OUAlphas, xlab = 'Host or microbe', ylab = 'alpha')
         graphics.off()
 
@@ -594,8 +725,14 @@ summarizeLcGLM <- function(...) {
         ##
 
         ## summarize the mean branch lengths of the microbes
-        sums <- summary(allfit, pars = 'microbeScales', probs = c(0.05,0.95), use_cache = F)
-        newEdges <- sums$summary[,'mean']^2
+        newEdges <- apply(array(extract(allfit,
+                                        pars       = 'microbeScales',
+                                        permuted   = F),
+                                dim = c(NMCSamples - warmup,
+                                        NSuccessTrees * NChains,
+                                        NMicrobeNodes))^2,
+                          3,
+                          mean)
         finalMicrobeTree.newEdges <- finalMicrobeTree
         finalMicrobeTree.newEdges$edge.length <- newEdges[order(microbeTreeDetails$edgeOrder)]
         pdf(file = file.path(currplotdir, 'microbeTreeWEstimatedEdgeLengths.pdf'), width = 25, height = 15)
@@ -604,7 +741,10 @@ summarizeLcGLM <- function(...) {
         ##
 
         ## extract effects from model
-        scaledMicrobeNodeEffects <- array(extract(allfit, pars='scaledMicrobeNodeEffects', permuted=F, inc_warmup=T),
+        scaledMicrobeNodeEffects <- array(extract(allfit,
+                                                  pars = 'scaledMicrobeNodeEffects',
+                                                  permuted = F,
+                                                  inc_warmup = T),
                                           dim = c(NMCSamples,
                                                   NChains * NTrees,
                                                   NEffects + NHostNodes + 1,
@@ -758,13 +898,12 @@ summarizeLcGLM <- function(...) {
                     quote  = F,
                     append = T)
         ##
-
-        allfit <- c(fit, allfit)
-        
     }
 }
 
 makeDiagnosticPlots <- function(...) {
+    
+    allfit <- c(fit, allfit)
     
     ## make some diagnostic plots
     for(i in 1:(NTrees + 1)) {
@@ -790,4 +929,5 @@ makeDiagnosticPlots <- function(...) {
     }
     ##
 }
+
 ## fin

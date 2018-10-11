@@ -205,7 +205,7 @@ sumconts <- names(attr(modelMat, "contrasts")[attr(modelMat, "contrasts") == 'co
 ##
 
 ## create matrix relating each 'effect' (categorical and numeric) to the 'factor' that it belongs to
-factLevelMat <- sapply(1:length(allfactors), function (j) {
+factLevelMat <- sapply(1:NFactors, function (j) {
     as.numeric(attr(modelMat, 'assign')[-1] == j)
 })
 colnames(factLevelMat) <- c(allfactors)
