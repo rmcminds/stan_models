@@ -99,8 +99,10 @@ getTreeDetails <- function(tree) {
     NHRel <- NHs / maxNHs
     rownames(NHRel) <- tree$edge[,2]
     NHRel <- NHRel[edgeOrder,]
-    return(list(edgeOrder = edgeOrder,
-                NHs       = NHs,
-                maxNHs    = maxNHs,
-                NHRel     = NHRel))
+    edgeLengths <- tree$edge.length[edgeOrder]
+    return(list(edgeOrder   = edgeOrder,
+                NHs         = NHs,
+                maxNHs      = maxNHs,
+                NHRel       = NHRel,
+                edgeLengths = edgeLengths))
 }

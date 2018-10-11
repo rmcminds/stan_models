@@ -45,18 +45,12 @@ summarizeLcGLM <- function(...) {
         ## plot the sampled tree with the time bins marked
         pdf(file = file.path(currplotdir, 'sampledHostTree.pdf'), width = 25, height = 15)
         plot(hostTreesSampled[[i]], cex = 0.75)
-        for(age in hostTreeDetails[[i]]$maxNHs - meanHostBoundaries) {
-            lines(x = c(age, age), y = c(1, NHostTips), lwd = 1)
-        }
         graphics.off()
         ##
         
         ## plot the sampled tree with the time bins marked
         pdf(file = file.path(currplotdir, 'sampledMicrobeTree.pdf'), width = 25, height = 15)
         plot(finalMicrobeTree, cex = 0.75)
-        for(age in microbeTreeDetails$maxNHs - microbeCutPoints$boundaries) {
-            lines(x = c(age, age), y = c(1, NMicrobeTips), lwd = 1)
-        }
         graphics.off()
         ##
         
