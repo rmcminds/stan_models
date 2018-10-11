@@ -236,7 +236,6 @@ generaOfUnknowns <- sapply(study.species.missing, function(x) strsplit(x, '_')[[
 sampleMap <- list()
 hostTreesSampled <- list()
 hostTreeDetails <- list()
-hostEdges <- list()
 for(i in 1:NTrees) {
     sampleMap[[i]] <- newermap
     fungidSps <- grep('Fungid', levels(sampleMap[[i]][,sampleTipKey]))
