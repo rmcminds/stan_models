@@ -30,7 +30,14 @@ summarizeLcGLM <- function(...) {
     ## summarize the results separately for each sampled host tree
     for(i in 1:NTrees) {
         
-        if (fitModes[[i]] != 0) next
+        if (fitModes[[i]] != 0) {
+            cat(paste0('\nTree ', i, ' did not complete successfully\n')
+            cat(paste0(as.character(Sys.time()), '\n'))
+            next
+        }
+        
+        cat(paste0('\nTree ', i, '\n')
+        cat(paste0(as.character(Sys.time()), '\n'))
         
         check_hmc_diagnostics(fit[[i]])
 
@@ -126,6 +133,9 @@ summarizeLcGLM <- function(...) {
         }
         ##
 
+        cat('\nSummarizing raw variance estimates\n')
+        cat(paste0(as.character(Sys.time()), '\n'))
+        
         ## variance partitioning
         stDProps <- array(extract(fit[[i]],
                                   pars = 'stDProps',
@@ -143,7 +153,10 @@ summarizeLcGLM <- function(...) {
                                                       'microbe.prevalence')))
         save(stDProps, file = file.path(currdatadir, 'stDProps.RData'))
         
-        stDPropsPlot <- apply(stDProps[(warmup + 1):NMCSamples,,], 2, c)
+        stDPropsPlot <- NULL
+        for(i in 1:NChains) {
+            stDPropsPlot <- rbind(stDPropsPlot, stDProps[(warmup + 1):NMCSamples, i,])
+        }
         colnames(stDPropsPlot) <- gsub('_',
                                        ' ',
                                        c(paste0(colnames(factLevelMat), ' (ADiv)'),
@@ -169,6 +182,9 @@ summarizeLcGLM <- function(...) {
         graphics.off()
         ##
         
+        cat('\nSummarizing raw meta-variance estimates\n')
+        cat(paste0(as.character(Sys.time()), '\n'))
+        
         ## meta-variance partitioning
         metaVarProps <- array(extract(fit[[i]],
                                       pars = 'metaVarProps',
@@ -182,9 +198,12 @@ summarizeLcGLM <- function(...) {
                                               effect  = c('Prevalence',
                                                           'ADiv',
                                                           'Specificty')))
-                            
+        metaVarPropsPlot <- NULL
+        for(i in 1:NChains) {
+            metaVarPropsPlot <- rbind(metaVarPropsPlot, metaVarProps[(warmup + 1):NMCSamples, i,])
+        }
         pdf(file = file.path(currplotdir, 'metaVarProps_boxes.pdf'), width = 7, height = 7)
-        boxplot(apply(metaVarProps[(warmup + 1):NMCSamples,,], 2, c), cex.axis = 0.5, las = 2)
+        boxplot(metaVarPropsPlot, cex.axis = 0.5, las = 2)
         graphics.off()
         
         save(metaVarProps, file = file.path(currdatadir, 'metaVarProps.RData'))
@@ -203,45 +222,15 @@ summarizeLcGLM <- function(...) {
                                             effect  = c('Prevalence',
                                                         'ADiv',
                                                         'Specificty')))
-                            
+        metaScalesPlot <- NULL
+        for(i in 1:NChains) {
+            metaScalesPlot <- rbind(metaScalesPlot, metaScales[(warmup + 1):NMCSamples, i,])
+        }
         pdf(file = file.path(currplotdir, 'metaScales_boxes.pdf'), width = 7, height = 7)
-        boxplot(apply(metaScales[(warmup + 1):NMCSamples,,], 2, c), cex.axis = 0.5, las = 2)
+        boxplot(metaScalesPlot, cex.axis = 0.5, las = 2)
         graphics.off()
                             
         save(metaScales, file = file.path(currdatadir, 'metaScales.RData'))
-        ##
-        
-        ## compare rates of host evolution in each time bin
-        relativeHostEvolRates <- exp(extract(fit[[i]], pars = 'logRelativeHostEvolRates')[[1]])
-        colnames(relativeHostEvolRates) <- sapply(1:(length(meanHostBoundariesRounded) + 1),
-                                                  function(x) paste0(c('before', meanHostBoundariesRounded)[[x]],
-                                                                     ' - ',
-                                                                     c(meanHostBoundariesRounded, 'present')[[x]],
-                                                                     ' mya'))
-
-        pdf(file = file.path(currplotdir, 'evolRatesHost.pdf'), width = 7, height = 7)
-        boxplot(relativeHostEvolRates, xlab = 'Time Period', ylab = 'Rate of Evolution Relative to Mean', las = 2)
-        graphics.off()
-        
-        pdf(file = file.path(currplotdir, 'logEvolRatesHost.pdf'), width = 7, height = 7)
-        boxplot(log(relativeHostEvolRates), xlab = 'Time Period', ylab = 'Log Rate of Evolution Relative to Mean', las = 2)
-        graphics.off()
-
-        save(relativeHostEvolRates, file = file.path(currdatadir, 'relativeHostEvolRates.RData'))
-        ##
-        
-        ## compare rates of microbe evolution in each time bin
-        relativeMicrobeEvolRates <- exp(extract(fit[[i]], pars = 'logRelativeMicrobeEvolRates')[[1]])
-        
-        pdf(file = file.path(currplotdir, 'evolRatesMicrobe.pdf'), width = 7, height = 7)
-        boxplot(relativeMicrobeEvolRates, xlab = 'Time Period', ylab = 'Rate of Evolution Relative to Mean', las = 2)
-        graphics.off()
-        
-        pdf(file = file.path(currplotdir, 'logEvolRatesMicrobe.pdf'), width = 7, height = 7)
-        boxplot(log(relativeMicrobeEvolRates), xlab = 'Time Period', ylab = 'Log Rate of Evolution Relative to Mean', las = 2)
-        graphics.off()
-        
-        save(relativeMicrobeEvolRates, file = file.path(currdatadir, 'relativeMicrobeEvolRates.RData'))
         ##
         
         ## ornstein-uhlenbeck parameters
@@ -256,6 +245,9 @@ summarizeLcGLM <- function(...) {
         
         save(OUAlphas, file = file.path(currdatadir, 'OUAlphas.RData'))
         ##
+        
+        cat('\nSummarizing raw node effects\n')
+        cat(paste0(as.character(Sys.time()), '\n'))
         
         ## extract effects from model
         scaledMicrobeNodeEffects <- array(extract(fit[[i]],
@@ -331,6 +323,9 @@ summarizeLcGLM <- function(...) {
                     append = T)
         ##
         
+        cat('\nSummarizing raw variance modifiers\n')
+        cat(paste0(as.character(Sys.time()), '\n'))
+        
         ## extract variance modifier terms from the fit model
         phyloLogVarMultPrev <- array(extract(fit[[i]],
                                              pars = 'phyloLogVarMultPrev',
@@ -401,6 +396,9 @@ summarizeLcGLM <- function(...) {
                     append = T)
         ##
         
+        cat('\nSummarizing summed variance modifiers\n')
+        cat(paste0(as.character(Sys.time()), '\n'))
+        
         ## since the model has many degrees of freedom, it's possible that certain regions of the tree have 'significant' effects but that those effects are 'implemented' via different, nearby nodes in each iteration. We can sum the effects of all ancestral nodes to see if a given node is consistently influenced by all of itself plus its ancestral terms, even if all of those terms are individually inconsistent
         for(j in 1:NMCSamples) {
             for(k in 1:NChains) {
@@ -432,6 +430,9 @@ summarizeLcGLM <- function(...) {
                     quote  = F,
                     append = T)
         ##
+        
+        cat('\nSummarizing sums of node and parent node variance modifiers\n')
+        cat(paste0(as.character(Sys.time()), '\n'))
         
         ## we can also sum the effects of just a node and its parent, as a bit of a middle-ground approach to see whether a given node is significantly different from its grandparent instead of its parent or instead of the overall mean
         hostParents[[i]] <- makeParentMat(NHostNodes,
@@ -518,6 +519,9 @@ summarizeLcGLM <- function(...) {
         hostMat[(NEffects + NHostNodes + 2):(NEffects + NHostNodes + length(sumconts) + 1), (NEffects + NHostNodes + 2):(NEffects + NHostNodes + length(sumconts) + 1)] <- diag(1, nrow = length(sumconts))
         ##
         
+        cat('\nSummarizing summed node effects\n')
+        cat(paste0(as.character(Sys.time()), '\n'))
+        
         ## since the model has many degrees of freedom, it's possible that certain regions of the tree have 'significant' effects but that those effects are 'implemented' via different, nearby nodes in each iteration. We can sum the effects of all ancestral nodes to see if a given node is consistently influenced by all of itself plus its ancestral terms, even if all of those terms are individually inconsistent
         for(j in 1:NMCSamples) {
             for(k in 1:NChains) {
@@ -543,6 +547,9 @@ summarizeLcGLM <- function(...) {
                     quote  = F,
                     append = T)
         ##
+        
+        cat('\nSummarizing sums of node and parent node effects\n')
+        cat(paste0(as.character(Sys.time()), '\n'))
         
         ## we can also sum the effects of just a node and its parent, as a bit of a middle-ground approach to see whether a given node is significantly different from its grandparent instead of its parent or instead of the overall mean
         hostMat[(NEffects + 2):(NEffects + NHostNodes + 1), (NEffects + 2):(NEffects + NHostNodes + 1)] <- hostParents[[i]][,-1]
@@ -586,6 +593,9 @@ summarizeLcGLM <- function(...) {
     NSuccessTrees <- sum(fitModes == 0)
     
     if (NSuccessTrees > 1) {
+        
+        cat('\nSummarizing effects of all trees combined\n')
+        cat(paste0(as.character(Sys.time()), '\n'))
 
         allfit <- sflist2stanfit(fit[fitModes == 0])
 
@@ -606,7 +616,11 @@ summarizeLcGLM <- function(...) {
                                                       'microbe.prevalence')))
         save(stDProps, file = file.path(currdatadir, 'stDProps.RData'))
         
-        stDPropsPlot <- apply(stDProps[(warmup + 1):NMCSamples,,], 2, c)
+        stDPropsPlot <- NULL
+        for(i in 1:(NSuccessTrees * NChains)) {
+            stDPropsPlot <- rbind(stDPropsPlot, stDProps[(warmup + 1):NMCSamples, i,])
+        }
+        
         colnames(stDPropsPlot) <- gsub('_',
                                        ' ',
                                        c(paste0(colnames(factLevelMat), ' (ADiv)'),
@@ -645,9 +659,12 @@ summarizeLcGLM <- function(...) {
                                               effect  = c('Prevalence',
                                                           'ADiv',
                                                           'Specificty')))
-                            
+        metaVarPropsPlot <- NULL
+        for(i in 1:(NSuccessTrees * NChains)) {
+            metaVarPropsPlot <- rbind(metaVarPropsPlot, metaVarProps[(warmup + 1):NMCSamples, i,])
+        }
         pdf(file = file.path(currplotdir, 'metaVarProps_boxes.pdf'), width = 7, height = 7)
-        boxplot(apply(metaVarProps[(warmup + 1):NMCSamples,,], 2, c), cex.axis = 0.5, las = 2)
+        boxplot(metaVarPropsPlot, cex.axis = 0.5, las = 2)
         graphics.off()
         
         save(metaVarProps, file = file.path(currdatadir, 'metaVarProps.RData'))
@@ -666,45 +683,17 @@ summarizeLcGLM <- function(...) {
                                             effect  = c('Prevalence',
                                                         'ADiv',
                                                         'Specificty')))
-                            
+        metaScalesPlot <- NULL
+        for(i in 1:(NSuccessTrees * NChains)) {
+            metaScalesPlot <- rbind(metaScalesPlot, metaScales[(warmup + 1):NMCSamples, i,])
+        }
         pdf(file = file.path(currplotdir, 'metaScales_boxes.pdf'), width = 7, height = 7)
-        boxplot(apply(metaScales[(warmup + 1):NMCSamples,,], 2, c), cex.axis = 0.5, las = 2)
+        boxplot(metaScalesPlot, cex.axis = 0.5, las = 2)
         graphics.off()
         
         save(metaScales, file = file.path(currdatadir, 'metaScales.RData'))
         ##
         
-        relativeHostEvolRates <- exp(extract(allfit, pars='logRelativeHostEvolRates')[[1]])
-        colnames(relativeHostEvolRates) <- sapply(1:(length(meanHostBoundariesRounded) + 1),
-                                                  function(x) paste0(c('before', meanHostBoundariesRounded)[[x]],
-                                                                     ' - ',
-                                                                     c(meanHostBoundariesRounded, 'present')[[x]],
-                                                                     ' mya'))
-
-        pdf(file = file.path(currplotdir, 'evolRatesHost.pdf'), width = 7, height = 7)
-        boxplot(relativeHostEvolRates, xlab = 'Time Period', ylab = 'Rate of Evolution Relative to Mean', las = 2)
-        graphics.off()
-
-        pdf(file = file.path(currplotdir, 'logEvolRatesHost.pdf'), width = 7, height = 7)
-        boxplot(log(relativeHostEvolRates), xlab = 'Time Period', ylab = 'Log Rate of Evolution Relative to Mean', las = 2)
-        graphics.off()
-
-        save(relativeHostEvolRates, file = file.path(currdatadir, 'relativeHostEvolRates.RData'))
-
-        ## compare rates of microbe evolution in each time bin
-        relativeMicrobeEvolRates <- exp(extract(allfit, pars = 'logRelativeMicrobeEvolRates')[[1]])
-
-        pdf(file = file.path(currplotdir, 'evolRatesMicrobe.pdf'), width = 7, height = 7)
-        boxplot(relativeMicrobeEvolRates, xlab = 'Time Period', ylab = 'Rate of Evolution Relative to Mean', las = 2)
-        graphics.off()
-
-        pdf(file = file.path(currplotdir, 'logEvolRatesMicrobe.pdf'), width = 7, height = 7)
-        boxplot(log(relativeMicrobeEvolRates), xlab = 'Time Period', ylab = 'Log Rate of Evolution Relative to Mean', las = 2)
-        graphics.off()
-
-        save(relativeMicrobeEvolRates, file = file.path(currdatadir, 'relativeMicrobeEvolRates.RData'))
-        ##
-
         ## ornstein-uhlenbeck parameters
         hostOUAlpha <- extract(allfit, pars = 'hostOUAlpha')[[1]]
         microbeOUAlpha <- extract(allfit, pars = 'microbeOUAlpha')[[1]]
@@ -904,7 +893,7 @@ makeDiagnosticPlots <- function(...) {
         currdiagnosticdir <- file.path(outdir, 'diagnostics', if(i <= NTrees) {paste0('tree_', i)} else {'allfit'})
         dir.create(currdiagnosticdir, recursive = T)
         
-        pars <- c('stDProps', 'hostMetaVarProps', 'metaVarProps', 'aveStD')
+        pars <- c('stDProps', 'metaVarProps', 'aveStD')
         
         pdf(file=file.path(currdiagnosticdir,'pairs_grabBag.pdf'), width = 50, height = 50)
         pairs(allfit[[i]], pars = pars)
