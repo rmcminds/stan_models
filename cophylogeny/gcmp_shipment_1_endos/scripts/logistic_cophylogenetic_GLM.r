@@ -41,8 +41,6 @@ hostOUAlphaPriorExpect <- 1.0
 microbeOUAlphaPriorExpect <- 1.0
 globalScale <- 50
 NTrees <- 1 ## number of random trees to sample and to fit the model to
-NHostSplits <- 15 ## desired number of nodes per host timeBin
-NMicrobeSplits <- 50 ## desired number of nodes per host timeBin
 modelform <- ~ ocean + ocean_area + reef_name + concatenated_date + colony_name + tissue_compartment + log_sequencing_depth_scaled
 ##
 
@@ -190,7 +188,6 @@ NIntMicrobeNodes <- finalMicrobeTree$Nnode
 NMicrobeNodes <- NMicrobeTips + NIntMicrobeNodes - 1
 microbeTreeDetails <- getTreeDetails(finalMicrobeTree)
 microbeEdges <- finalMicrobeTree$edge.length[microbeTreeDetails$edgeOrder]
-NMicrobeTimeBinsEst <- ceiling(NIntMicrobeNodes / NMicrobeSplits)
 ##
 
 ## create ancestry matrix for microbes
@@ -200,18 +197,6 @@ microbeAncestors <- createAncestryMat(NMicrobeNodes,
                                       microbeTips)
 colnames(microbeAncestors)[1:NMicrobeTips] <- rownames(microbeAncestors)[1:NMicrobeTips] <- paste0('t', microbeTips)
 ##
-
-#divide total evolutionary time into chunks that contain approximately equal numbers of splits
-microbeCutPoints <- findCutPoints(finalMicrobeTree,
-                                  microbeTreeDetails$maxNHs,
-                                  NMicrobeSplits,
-                                  NMicrobeTimeBinsEst)
-
-microbeTimeBins <- createTimeBins(microbeCutPoints,
-                                  microbeTreeDetails$maxNHs,
-                                  microbeTreeDetails$NHs,
-                                  finalMicrobeTree,
-                                  microbeTreeDetails$edgeOrder)
 
 ## melt the data into long format to feed to model, and generate summary numbers about samples
 senddat <- melt(y, varnames=c('sample', 'tip'), value.name = 'present')
@@ -286,11 +271,9 @@ generaOfUnknowns <- sapply(study.species.missing, function(x) strsplit(x, '_')[[
 ##
 
 ### starting here, generate multiple random samples of the map and trees (later to be summarized to define the time Bins and also to be separately used for replicate runs of the model)
-NHostTimeBinsEst <- ceiling(length(levels(newermap[,sampleTipKey])) / NHostSplits)
 sampleMap <- list()
 hostTreesSampled <- list()
 hostTreeDetails <- list()
-hostCutPoints <- list()
 for(i in 1:NTrees) {
     sampleMap[[i]] <- newermap
     fungidSps <- grep('Fungid', levels(sampleMap[[i]][,sampleTipKey]))
@@ -316,30 +299,7 @@ for(i in 1:NTrees) {
     
     #get some tree stats for later use
     hostTreeDetails[[i]] <- getTreeDetails(hostTreesSampled[[i]])
-    
-    #divide total evolutionary time into chunks that contain approximately equal numbers of splits
-    hostCutPoints[[i]] <- findCutPoints(hostTreesSampled[[i]],
-                                        hostTreeDetails[[i]]$maxNHs,
-                                        NHostSplits,
-                                        NHostTimeBinsEst)
 }
-
-
-#average cut points among all the trees so the bins of time are consistent across replicates
-meanHostBoundaries <- apply(sapply(hostCutPoints, function(x) x$boundaries), 1, mean)
-meanHostBoundariesRounded <- round(meanHostBoundaries, 1)
-##
-
-## create matrices that relate the portion of each host branch that belongs to each time bin
-hostTimeBins <- list()
-for(i in 1:NTrees) {
-    hostTimeBins[[i]] <- createTimeBins(hostCutPoints[[i]],
-                                        hostTreeDetails[[i]]$maxNHs,
-                                        hostTreeDetails[[i]]$NHs,
-                                        hostTreesSampled[[i]],
-                                        hostTreeDetails[[i]]$edgeOrder)
-}
-##
 
 ## create ancestry matrices for each host tree
 NHostTips <- length(hostTreesSampled[[1]]$tip.label)
@@ -377,16 +337,13 @@ for (i in 1:NTrees) {
                          hostTipAncestors               = hostAncestors[[i]][1:NHostTips, ],
                          hostNodeHeights                = hostTreeDetails[[i]]$NHRel,
                          microbeNodeHeights             = microbeTreeDetails$NHRel,
-                         microbeEdgeToBin               = t(microbeTimeBins$edgeToBin),
-                         NMicrobeTimeBins               = microbeCutPoints$NTimeBins,
-                         hostEdgeToBin                  = hostTimeBins[[i]]$edgeToBin,
                          NHostNodes                     = NHostNodes,
-                         NHostTimeBins                  = hostCutPoints[[i]]$NTimeBins,
                          aveStDPriorExpect              = aveStDPriorExpect,
                          aveStDMetaPriorExpect          = aveStDMetaPriorExpect,
                          hostOUAlphaPriorExpect         = hostOUAlphaPriorExpect,
                          microbeOUAlphaPriorExpect      = microbeOUAlphaPriorExpect,
-                         microbeEdges                   = microbeEdges,
+                         microbeEdges                   = microbeTreeDetails$edgeLengths,
+                         hostEdges                      = hostTreeDetails[[i]]$edgeLengths,
                          globalScale                    = globalScale)
 }
 
@@ -399,7 +356,6 @@ warmup <- floor(NMCSamples / 2)
 dir.create(outdir, recursive = T)
 save.image(file.path(outdir,'setup.RData'))
 save(microbeAncestors, file = file.path(outdir, 'microbeAncestors.RData'))
-save(meanHostBoundaries, file = file.path(outdir, 'meanHostBoundaries.RData'))
 save(hostAncestors, file = file.path(outdir, 'hostAncestors.RData'))
 save(hostAncestorsExpanded, file = file.path(outdir, 'hostAncestorsExpanded.RData'))
 save(hostTreesSampled, file = file.path(outdir, 'hostTreesSampled.RData'))
