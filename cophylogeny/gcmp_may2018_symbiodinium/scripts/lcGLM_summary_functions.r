@@ -330,7 +330,7 @@ summarizeLcGLM <- function(...) {
                     append = T)
         ##
     }
-    dontdo <- function(...) {
+
     ## summarize the results separately for each sampled host tree
     for(i in 1:NTrees) {
         
@@ -913,7 +913,7 @@ makeDiagnosticPlots <- function(...) {
         
     }
     ##
-    }
+    
 }
 
 ## fin
