@@ -307,8 +307,6 @@ for (i in 1:NTrees) {
                          aveStDMetaPriorExpect          = aveStDMetaPriorExpect,
                          hostOUAlphaPriorExpect         = hostOUAlphaPriorExpect,
                          microbeOUAlphaPriorExpect      = microbeOUAlphaPriorExpect,
-                         microbeEdges                   = microbeTreeDetails$edgeLengths,
-                         hostEdges                      = hostTreeDetails[[i]]$edgeLengths,
                          globalScale                    = globalScale)
 }
 

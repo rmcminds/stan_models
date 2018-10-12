@@ -27,16 +27,318 @@ summarizeLcGLM <- function(...) {
     
     baseNames <- sapply(sumconts, function(m) paste0(m, levels(newermap[,m])[nlevels(newermap[,m])]))
 
+    ## summarize results for parameters that can be interpretted across all sampled host trees
+    currplotdir <- file.path(outdir,'alltrees', 'plots')
+    currtabledir <- file.path(outdir,'alltrees', 'tables')
+    currdatadir <- file.path(outdir,'alltrees', 'data')
+
+    dir.create(currplotdir, recursive = T)
+    dir.create(currtabledir, recursive = T)
+    dir.create(currdatadir, recursive = T)
+    
+    NSuccessTrees <- sum(fitModes == 0)
+    
+    if (NSuccessTrees > 1) {
+        
+        cat('\nSummarizing effects of all trees combined\n')
+        cat(paste0(as.character(Sys.time()), '\n'))
+
+        allfit <- sflist2stanfit(fit[fitModes == 0])
+
+        ## variance partitioning
+        stDProps <- array(extract(allfit,
+                                  pars = 'stDProps',
+                                  permuted = F,
+                                  inc_warmup = T),
+                          dim = c(NMCSamples,
+                                  NSuccessTrees * NChains,
+                                  2 * NFactors + 3),
+                          dimnames = list(sample  = NULL,
+                                          chain   = NULL,
+                                          factor  = c(paste0('ADiv.', colnames(factLevelMat)),
+                                                      paste0('Specificity.', colnames(factLevelMat)),
+                                                      'ADiv.host',
+                                                      'host.specificity',
+                                                      'microbe.prevalence')))
+        save(stDProps, file = file.path(currdatadir, 'stDProps.RData'))
+        
+        stDPropsPlot <- NULL
+        for(i in 1:(NSuccessTrees * NChains)) {
+            stDPropsPlot <- rbind(stDPropsPlot, stDProps[(warmup + 1):NMCSamples, i,])
+        }
+        
+        colnames(stDPropsPlot) <- gsub('_',
+                                       ' ',
+                                       c(paste0(colnames(factLevelMat), ' (ADiv)'),
+                                         paste0(colnames(factLevelMat), ' (Specificity)'),
+                                         'Host (ADiv)',
+                                         'Host (Specificity)',
+                                         'Microbe prevalence'))
+                                
+        ADivInd <- c(1:NFactors, 2 * NFactors + 1)
+        specInd <- c((NFactors + 1):(2 * NFactors), 2 * NFactors + 2)
+        meds <- apply(stDPropsPlot, 2, median)
+        stDPropsPlot <- stDPropsPlot[, c(2 * NFactors + 3,
+                                         ADivInd[order(meds[ADivInd], decreasing = T)],
+                                         specInd[order(meds[specInd], decreasing = T)])]
+                                   
+        pdf(file = file.path(currplotdir,'stDProps_boxes.pdf'), width = 7, height = 7)
+        boxplot(stDPropsPlot,
+                at = c(1, 3:(NFactors + 3), (NFactors + 5):(2 * NFactors + 5)),
+                cex.axis = 0.5,
+                las = 2,
+                xlab = 'Factor',
+                ylab = 'Percent of total variance')
+        graphics.off()
+        ##
+        
+        ## meta-variance partitioning
+        metaVarProps <- array(extract(allfit,
+                                      pars = 'metaVarProps',
+                                      permuted = F,
+                                      inc_warmup = T),
+                              dim = c(NMCSamples,
+                                      NSuccessTrees * NChains,
+                                      3),
+                              dimnames = list(sample  = NULL,
+                                              chain   = NULL,
+                                              effect  = c('Prevalence',
+                                                          'ADiv',
+                                                          'Specificty')))
+        metaVarPropsPlot <- NULL
+        for(i in 1:(NSuccessTrees * NChains)) {
+            metaVarPropsPlot <- rbind(metaVarPropsPlot, metaVarProps[(warmup + 1):NMCSamples, i,])
+        }
+        pdf(file = file.path(currplotdir, 'metaVarProps_boxes.pdf'), width = 7, height = 7)
+        boxplot(metaVarPropsPlot, cex.axis = 0.5, las = 2)
+        graphics.off()
+        
+        save(metaVarProps, file = file.path(currdatadir, 'metaVarProps.RData'))
+        ##
+        
+        ## actual scales of metavariance
+        metaScales <- array(extract(allfit,
+                                    pars = 'metaScales',
+                                    permuted = F,
+                                    inc_warmup = T),
+                            dim = c(NMCSamples,
+                                    NSuccessTrees * NChains,
+                                    3),
+                            dimnames = list(sample  = NULL,
+                                            chain   = NULL,
+                                            effect  = c('Prevalence',
+                                                        'ADiv',
+                                                        'Specificty')))
+        metaScalesPlot <- NULL
+        for(i in 1:(NSuccessTrees * NChains)) {
+            metaScalesPlot <- rbind(metaScalesPlot, metaScales[(warmup + 1):NMCSamples, i,])
+        }
+        pdf(file = file.path(currplotdir, 'metaScales_boxes.pdf'), width = 7, height = 7)
+        boxplot(metaScalesPlot, cex.axis = 0.5, las = 2)
+        graphics.off()
+        
+        save(metaScales, file = file.path(currdatadir, 'metaScales.RData'))
+        ##
+        
+        ## ornstein-uhlenbeck parameters
+        hostOUAlpha <- extract(allfit, pars = 'hostOUAlpha')[[1]]
+        microbeOUAlpha <- extract(allfit, pars = 'microbeOUAlpha')[[1]]
+        OUAlphas <- cbind(hostOUAlpha, microbeOUAlpha)
+        colnames(OUAlphas) <- c('host', 'microbe')
+
+        pdf(file = file.path(currplotdir,'OUAlphas.pdf'), width = 7, height = 7)
+        boxplot(OUAlphas, xlab = 'Host or microbe', ylab = 'alpha')
+        graphics.off()
+
+        save(OUAlphas, file = file.path(currdatadir, 'OUAlphas.RData'))
+        ##
+
+        ## summarize the mean branch lengths of the microbes
+        newEdges <- apply(array(extract(allfit,
+                                        pars       = 'microbeScales',
+                                        permuted   = F),
+                                dim = c(NMCSamples - warmup,
+                                        NSuccessTrees * NChains,
+                                        NMicrobeNodes))^2,
+                          3,
+                          mean)
+        finalMicrobeTree.newEdges <- finalMicrobeTree
+        finalMicrobeTree.newEdges$edge.length <- newEdges[order(microbeTreeDetails$edgeOrder)]
+        pdf(file = file.path(currplotdir, 'microbeTreeWEstimatedEdgeLengths.pdf'), width = 25, height = 15)
+        plot(finalMicrobeTree.newEdges, cex = 0.5)
+        graphics.off()
+        ##
+
+        ## extract effects from model
+        scaledMicrobeNodeEffects <- array(extract(allfit,
+                                                  pars = 'scaledMicrobeNodeEffects',
+                                                  permuted = F,
+                                                  inc_warmup = T),
+                                          dim = c(NMCSamples,
+                                                  NChains * NTrees,
+                                                  NEffects + NHostNodes + 1,
+                                                  NMicrobeNodes + 1),
+                                          dimnames = list(sample  = NULL,
+                                                          chain   = NULL,
+                                                          effect  = c('microbePrevalence',
+                                                                      colnames(modelMat)[1:NEffects],
+                                                                      paste0('host_', colnames(hostAncestors[[i]]))),
+                                                          taxnode = c('alphaDiversity', colnames(microbeAncestors))))
+                                                        
+        save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
+        ##
+
+        ## calculate base-level effects (negative sum of all others in category)
+        baseLevelEffects <- array(NA,
+                                  dim = c(NMCSamples,
+                                          NChains * NTrees,
+                                          length(sumconts),
+                                          NMicrobeNodes + 1),
+                                  dimnames = list(sample  = NULL,
+                                                  chain   = NULL,
+                                                  effect  = sumconts,
+                                                  taxnode = c('alphaDiversity', colnames(microbeAncestors))))
+        for(j in 1:NMCSamples) {
+            for(k in 1:(NChains * NTrees)) {
+                for(m in sumconts) {
+                    baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j, k, rownames(factLevelMat)[factLevelMat[,m] == 1],])
+                }
+            }
+        }
+
+        save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
+        ##
+
+        ## summarize posterior distributions of effects
+        allRes <- NULL
+        for(j in 1:(NEffects + NHostNodes + 1)) {
+            temp <- monitor(array(scaledMicrobeNodeEffects[,,j,],
+                                  dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes + 1)),
+                            warmup = warmup,
+                            probs  = c(0.05, 0.95))
+            temp <- cbind(effect = dimnames(scaledMicrobeNodeEffects)[[3]][j], temp)
+            rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
+            allRes <- rbind(allRes, temp)
+        }
+        ##
+
+        ## summarize posterior distibutions of base-level effects
+        for(m in sumconts) {
+            temp <- monitor(array(baseLevelEffects[,,m,],
+                                  dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes + 1)),
+                            warmup = warmup,
+                            probs  = c(0.05, 0.95))
+            temp <- cbind(effect = baseNames[[m]], temp)
+            rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
+            allRes <- rbind(allRes, temp)
+        }
+        ##
+
+        ## write posterior summaries of effects to file
+        cat('microbeNode\t', file = file.path(currtabledir, 'nodeEffects.txt'))
+        write.table(allRes,
+                    file   = file.path(currtabledir, 'nodeEffects.txt'),
+                    sep    = '\t',
+                    quote  = F,
+                    append = T)
+        ##
+
+        ##
+        effectNames <- c('microbePrevalence',
+                         colnames(modelMat)[1:NEffects],
+                         paste0('host_', colnames(hostAncestors[[1]])),
+                         baseNames)
+
+        matMult <- array(NA,
+                         dim = c(NMCSamples,
+                                 NChains,
+                                 NHostNodes + NEffects + length(sumconts) + 1,
+                                 NMicrobeNodes + 1),
+                         dimnames = list(sample = NULL,
+                                         chain = NULL,
+                                         hostnode = effectNames,
+                                         microbenode = c('alphaDiversity',
+                                                         colnames(microbeAncestors))))
+        ##
+
+        ## build a temporary model matrix
+        hostMat <- matrix(0, nrow = NHostNodes + NEffects + length(sumconts) + 1, ncol = NHostNodes + NEffects + length(sumconts) + 1)
+        hostMat[1:(NEffects + 1), 1:(NEffects + 1)] <- diag(1, nrow = NEffects + 1)
+        hostMat[(NEffects + 2):(NEffects + NHostNodes + 1), (NEffects + 2):(NEffects + NHostNodes + 1)] <- hostAncestors[[1]]
+        hostMat[(NEffects + NHostNodes + 2):(NEffects + NHostNodes + length(sumconts) + 1), (NEffects + NHostNodes + 2):(NEffects + NHostNodes + length(sumconts) + 1)] <- diag(1, nrow = length(sumconts))
+        ##
+
+        ## since the model has many degrees of freedom, it's possible that certain regions of the tree have 'significant' effects but that those effects are 'implemented' via different, nearby nodes in each iteration. We can sum the effects of all ancestral nodes to see if a given node is consistently influenced by all of itself plus its ancestral terms, even if all of those terms are individually inconsistent
+        for(j in 1:NMCSamples) {
+            for(k in 1:NChains) {
+                matMult[j,k,,] <- hostMat %*%
+                                  rbind(scaledMicrobeNodeEffects[j,k,,],
+                                        baseLevelEffects[j,k,,]) %*%
+                                  cbind(1, microbeAncestorsT)
+            }
+        }
+
+        allRes <- NULL
+        for(j in 1:(NHostNodes + NEffects + length(sumconts) + 1)) {
+            temp <- monitor(array(matMult[,,j,],
+                                  dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
+                            warmup = warmup,
+                            probs = c(0.05, 0.95))
+            temp <- cbind(hostEffect = effectNames[[j]], temp)
+            rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
+            allRes <- rbind(allRes, temp)
+        }
+
+        cat('microbeNode\t', file = file.path(currtabledir, 'allSummedNodeEffects.txt'))
+        write.table(allRes,
+                    file   = file.path(currtabledir, 'allSummedNodeEffects.txt'),
+                    sep    = '\t',
+                    quote  = F,
+                    append = T)
+        ##
+
+        ## we can also sum the effects of just a node and its parent, as a bit of a middle-ground approach to see whether a given node is significantly different from its grandparent instead of its parent or instead of the overall mean
+        hostMat[(NEffects + 2):(NEffects + NHostNodes + 1), (NEffects + 2):(NEffects + NHostNodes + 1)] <- hostParents[[1]][,-1]
+
+        for(j in 1:NMCSamples) {
+            for(k in 1:NChains) {
+                matMult[j,k,,] <- hostMat %*%
+                                  rbind(scaledMicrobeNodeEffects[j,k,,],
+                                        baseLevelEffects[j,k,,]) %*%
+                                  cbind(1, microbeParentsT)
+            }
+        }
+
+        allRes <- NULL
+        for(j in 1:(NHostNodes + NEffects + length(sumconts) + 1)) {
+            temp <- monitor(array(matMult[,,j,],
+                                  dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
+                            warmup = warmup,
+                            probs = c(0.05, 0.95))
+            temp <- cbind(hostNode = effectNames[[j]], temp)
+            rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
+            allRes <- rbind(allRes, temp)
+        }
+
+        cat('microbeNode\t', file = file.path(currtabledir, 'parentalSummedNodeEffects.txt'))
+        write.table(allRes,
+                    file   = file.path(currtabledir, 'parentalSummedNodeEffects.txt'),
+                    sep    = '\t',
+                    quote  = F,
+                    append = T)
+        ##
+    }
+    
     ## summarize the results separately for each sampled host tree
     for(i in 1:NTrees) {
         
         if (fitModes[[i]] != 0) {
-            cat(paste0('\nTree ', i, ' did not complete successfully\n')
+            cat(paste0('\nTree ', i, ' did not complete successfully\n'))
             cat(paste0(as.character(Sys.time()), '\n'))
             next
         }
         
-        cat(paste0('\nTree ', i, '\n')
+        cat(paste0('\nTree ', i, '\n'))
         cat(paste0(as.character(Sys.time()), '\n'))
         
         check_hmc_diagnostics(fit[[i]])
@@ -172,7 +474,7 @@ summarizeLcGLM <- function(...) {
                                          ADivInd[order(meds[ADivInd], decreasing = T)],
                                          specInd[order(meds[specInd], decreasing = T)])]
                                    
-        pdf(file = file.path(currplotdir,'stDProps_boxes.pdf'), width = 7, height = 7)
+        pdf(file = file.path(currplotdir, 'stDProps_boxes.pdf'), width = 7, height = 7)
         boxplot(stDPropsPlot,
                 at = c(1, 3:(NFactors + 3), (NFactors + 5):(2 * NFactors + 5)),
                 cex.axis = 0.5,
@@ -580,308 +882,6 @@ summarizeLcGLM <- function(...) {
         ##
     }
     ##
-
-    ## summarize results for parameters that can be interpretted across all sampled host trees
-    currplotdir <- file.path(outdir,'alltrees','plots')
-    currtabledir <- file.path(outdir,'alltrees','tables')
-    currdatadir <- file.path(outdir,'alltrees','data')
-
-    dir.create(currplotdir, recursive=T)
-    dir.create(currtabledir, recursive=T)
-    dir.create(currdatadir, recursive=T)
-    
-    NSuccessTrees <- sum(fitModes == 0)
-    
-    if (NSuccessTrees > 1) {
-        
-        cat('\nSummarizing effects of all trees combined\n')
-        cat(paste0(as.character(Sys.time()), '\n'))
-
-        allfit <- sflist2stanfit(fit[fitModes == 0])
-
-        ## variance partitioning
-        stDProps <- array(extract(allfit,
-                                  pars = 'stDProps',
-                                  permuted = F,
-                                  inc_warmup = T),
-                          dim = c(NMCSamples,
-                                  NSuccessTrees * NChains,
-                                  2 * NFactors + 3),
-                          dimnames = list(sample  = NULL,
-                                          chain   = NULL,
-                                          factor  = c(paste0('ADiv.', colnames(factLevelMat)),
-                                                      paste0('Specificity.', colnames(factLevelMat)),
-                                                      'ADiv.host',
-                                                      'host.specificity',
-                                                      'microbe.prevalence')))
-        save(stDProps, file = file.path(currdatadir, 'stDProps.RData'))
-        
-        stDPropsPlot <- NULL
-        for(i in 1:(NSuccessTrees * NChains)) {
-            stDPropsPlot <- rbind(stDPropsPlot, stDProps[(warmup + 1):NMCSamples, i,])
-        }
-        
-        colnames(stDPropsPlot) <- gsub('_',
-                                       ' ',
-                                       c(paste0(colnames(factLevelMat), ' (ADiv)'),
-                                         paste0(colnames(factLevelMat), ' (Specificity)'),
-                                         'Host (ADiv)',
-                                         'Host (Specificity)',
-                                         'Microbe prevalence'))
-                                
-        ADivInd <- c(1:NFactors, 2 * NFactors + 1)
-        specInd <- c((NFactors + 1):(2 * NFactors), 2 * NFactors + 2)
-        meds <- apply(stDPropsPlot, 2, median)
-        stDPropsPlot <- stDPropsPlot[, c(2 * NFactors + 3,
-                                         ADivInd[order(meds[ADivInd], decreasing = T)],
-                                         specInd[order(meds[specInd], decreasing = T)])]
-                                   
-        pdf(file = file.path(currplotdir,'stDProps_boxes.pdf'), width = 7, height = 7)
-        boxplot(stDPropsPlot,
-                at = c(1, 3:(NFactors + 3), (NFactors + 5):(2 * NFactors + 5)),
-                cex.axis = 0.5,
-                las = 2,
-                xlab = 'Factor',
-                ylab = 'Percent of total variance')
-        graphics.off()
-        ##
-        
-        ## meta-variance partitioning
-        metaVarProps <- array(extract(allfit,
-                                      pars = 'metaVarProps',
-                                      permuted = F,
-                                      inc_warmup = T),
-                              dim = c(NMCSamples,
-                                      NSuccessTrees * NChains,
-                                      3),
-                              dimnames = list(sample  = NULL,
-                                              chain   = NULL,
-                                              effect  = c('Prevalence',
-                                                          'ADiv',
-                                                          'Specificty')))
-        metaVarPropsPlot <- NULL
-        for(i in 1:(NSuccessTrees * NChains)) {
-            metaVarPropsPlot <- rbind(metaVarPropsPlot, metaVarProps[(warmup + 1):NMCSamples, i,])
-        }
-        pdf(file = file.path(currplotdir, 'metaVarProps_boxes.pdf'), width = 7, height = 7)
-        boxplot(metaVarPropsPlot, cex.axis = 0.5, las = 2)
-        graphics.off()
-        
-        save(metaVarProps, file = file.path(currdatadir, 'metaVarProps.RData'))
-        ##
-        
-        ## actual scales of metavariance
-        metaScales <- array(extract(allfit,
-                                    pars = 'metaScales',
-                                    permuted = F,
-                                    inc_warmup = T),
-                            dim = c(NMCSamples,
-                                    NSuccessTrees * NChains,
-                                    3),
-                            dimnames = list(sample  = NULL,
-                                            chain   = NULL,
-                                            effect  = c('Prevalence',
-                                                        'ADiv',
-                                                        'Specificty')))
-        metaScalesPlot <- NULL
-        for(i in 1:(NSuccessTrees * NChains)) {
-            metaScalesPlot <- rbind(metaScalesPlot, metaScales[(warmup + 1):NMCSamples, i,])
-        }
-        pdf(file = file.path(currplotdir, 'metaScales_boxes.pdf'), width = 7, height = 7)
-        boxplot(metaScalesPlot, cex.axis = 0.5, las = 2)
-        graphics.off()
-        
-        save(metaScales, file = file.path(currdatadir, 'metaScales.RData'))
-        ##
-        
-        ## ornstein-uhlenbeck parameters
-        hostOUAlpha <- extract(allfit, pars = 'hostOUAlpha')[[1]]
-        microbeOUAlpha <- extract(allfit, pars = 'microbeOUAlpha')[[1]]
-        OUAlphas <- cbind(hostOUAlpha, microbeOUAlpha)
-        colnames(OUAlphas) <- c('host', 'microbe')
-
-        pdf(file = file.path(currplotdir,'OUAlphas.pdf'), width = 7, height = 7)
-        boxplot(OUAlphas, xlab = 'Host or microbe', ylab = 'alpha')
-        graphics.off()
-
-        save(OUAlphas, file = file.path(currdatadir, 'OUAlphas.RData'))
-        ##
-
-        ## summarize the mean branch lengths of the microbes
-        newEdges <- apply(array(extract(allfit,
-                                        pars       = 'microbeScales',
-                                        permuted   = F),
-                                dim = c(NMCSamples - warmup,
-                                        NSuccessTrees * NChains,
-                                        NMicrobeNodes))^2,
-                          3,
-                          mean)
-        finalMicrobeTree.newEdges <- finalMicrobeTree
-        finalMicrobeTree.newEdges$edge.length <- newEdges[order(microbeTreeDetails$edgeOrder)]
-        pdf(file = file.path(currplotdir, 'microbeTreeWEstimatedEdgeLengths.pdf'), width = 25, height = 15)
-        plot(finalMicrobeTree.newEdges, cex = 0.5)
-        graphics.off()
-        ##
-
-        ## extract effects from model
-        scaledMicrobeNodeEffects <- array(extract(allfit,
-                                                  pars = 'scaledMicrobeNodeEffects',
-                                                  permuted = F,
-                                                  inc_warmup = T),
-                                          dim = c(NMCSamples,
-                                                  NChains * NTrees,
-                                                  NEffects + NHostNodes + 1,
-                                                  NMicrobeNodes + 1),
-                                          dimnames = list(sample  = NULL,
-                                                          chain   = NULL,
-                                                          effect  = c('microbePrevalence',
-                                                                      colnames(modelMat)[1:NEffects],
-                                                                      paste0('host_', colnames(hostAncestors[[i]]))),
-                                                          taxnode = c('alphaDiversity', colnames(microbeAncestors))))
-                                                        
-        save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
-        ##
-
-        ## calculate base-level effects (negative sum of all others in category)
-        baseLevelEffects <- array(NA,
-                                  dim = c(NMCSamples,
-                                          NChains * NTrees,
-                                          length(sumconts),
-                                          NMicrobeNodes + 1),
-                                  dimnames = list(sample  = NULL,
-                                                  chain   = NULL,
-                                                  effect  = sumconts,
-                                                  taxnode = c('alphaDiversity', colnames(microbeAncestors))))
-        for(j in 1:NMCSamples) {
-            for(k in 1:(NChains * NTrees)) {
-                for(m in sumconts) {
-                    baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j, k, rownames(factLevelMat)[factLevelMat[,m] == 1],])
-                }
-            }
-        }
-
-        save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
-        ##
-
-        ## summarize posterior distributions of effects
-        allRes <- NULL
-        for(j in 1:(NEffects + NHostNodes + 1)) {
-            temp <- monitor(array(scaledMicrobeNodeEffects[,,j,],
-                                  dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes + 1)),
-                            warmup = warmup,
-                            probs  = c(0.05, 0.95))
-            temp <- cbind(effect = dimnames(scaledMicrobeNodeEffects)[[3]][j], temp)
-            rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
-            allRes <- rbind(allRes, temp)
-        }
-        ##
-
-        ## summarize posterior distibutions of base-level effects
-        for(m in sumconts) {
-            temp <- monitor(array(baseLevelEffects[,,m,],
-                                  dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes + 1)),
-                            warmup = warmup,
-                            probs  = c(0.05, 0.95))
-            temp <- cbind(effect = baseNames[[m]], temp)
-            rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
-            allRes <- rbind(allRes, temp)
-        }
-        ##
-
-        ## write posterior summaries of effects to file
-        cat('microbeNode\t', file = file.path(currtabledir, 'nodeEffects.txt'))
-        write.table(allRes,
-                    file   = file.path(currtabledir, 'nodeEffects.txt'),
-                    sep    = '\t',
-                    quote  = F,
-                    append = T)
-        ##
-
-        ##
-        effectNames <- c('microbePrevalence',
-                         colnames(modelMat)[1:NEffects],
-                         paste0('host_', colnames(hostAncestors[[1]])),
-                         baseNames)
-
-        matMult <- array(NA,
-                         dim = c(NMCSamples,
-                                 NChains,
-                                 NHostNodes + NEffects + length(sumconts) + 1,
-                                 NMicrobeNodes + 1),
-                         dimnames = list(sample = NULL,
-                                         chain = NULL,
-                                         hostnode = effectNames,
-                                         microbenode = c('alphaDiversity',
-                                                         colnames(microbeAncestors))))
-        ##
-
-        ## build a temporary model matrix
-        hostMat <- matrix(0, nrow = NHostNodes + NEffects + length(sumconts) + 1, ncol = NHostNodes + NEffects + length(sumconts) + 1)
-        hostMat[1:(NEffects + 1), 1:(NEffects + 1)] <- diag(1, nrow = NEffects + 1)
-        hostMat[(NEffects + 2):(NEffects + NHostNodes + 1), (NEffects + 2):(NEffects + NHostNodes + 1)] <- hostAncestors[[1]]
-        hostMat[(NEffects + NHostNodes + 2):(NEffects + NHostNodes + length(sumconts) + 1), (NEffects + NHostNodes + 2):(NEffects + NHostNodes + length(sumconts) + 1)] <- diag(1, nrow = length(sumconts))
-        ##
-
-        ## since the model has many degrees of freedom, it's possible that certain regions of the tree have 'significant' effects but that those effects are 'implemented' via different, nearby nodes in each iteration. We can sum the effects of all ancestral nodes to see if a given node is consistently influenced by all of itself plus its ancestral terms, even if all of those terms are individually inconsistent
-        for(j in 1:NMCSamples) {
-            for(k in 1:NChains) {
-                matMult[j,k,,] <- hostMat %*%
-                                  rbind(scaledMicrobeNodeEffects[j,k,,],
-                                        baseLevelEffects[j,k,,]) %*%
-                                  cbind(1, microbeAncestorsT)
-            }
-        }
-
-        allRes <- NULL
-        for(j in 1:(NHostNodes + NEffects + length(sumconts) + 1)) {
-            temp <- monitor(array(matMult[,,j,],
-                                  dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
-                            warmup = warmup,
-                            probs = c(0.05, 0.95))
-            temp <- cbind(hostEffect = effectNames[[j]], temp)
-            rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
-            allRes <- rbind(allRes, temp)
-        }
-
-        cat('microbeNode\t', file = file.path(currtabledir, 'allSummedNodeEffects.txt'))
-        write.table(allRes,
-                    file   = file.path(currtabledir, 'allSummedNodeEffects.txt'),
-                    sep    = '\t',
-                    quote  = F,
-                    append = T)
-        ##
-
-        ## we can also sum the effects of just a node and its parent, as a bit of a middle-ground approach to see whether a given node is significantly different from its grandparent instead of its parent or instead of the overall mean
-        hostMat[(NEffects + 2):(NEffects + NHostNodes + 1), (NEffects + 2):(NEffects + NHostNodes + 1)] <- hostParents[[1]][,-1]
-
-        for(j in 1:NMCSamples) {
-            for(k in 1:NChains) {
-                matMult[j,k,,] <- hostMat %*%
-                                  rbind(scaledMicrobeNodeEffects[j,k,,],
-                                        baseLevelEffects[j,k,,]) %*%
-                                  cbind(1, microbeParentsT)
-            }
-        }
-
-        allRes <- NULL
-        for(j in 1:(NHostNodes + NEffects + length(sumconts) + 1)) {
-            temp <- monitor(array(matMult[,,j,],
-                                  dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
-                            warmup = warmup,
-                            probs = c(0.05, 0.95))
-            temp <- cbind(hostNode = effectNames[[j]], temp)
-            rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
-            allRes <- rbind(allRes, temp)
-        }
-
-        cat('microbeNode\t', file = file.path(currtabledir, 'parentalSummedNodeEffects.txt'))
-        write.table(allRes,
-                    file   = file.path(currtabledir, 'parentalSummedNodeEffects.txt'),
-                    sep    = '\t',
-                    quote  = F,
-                    append = T)
-        ##
-    }
 }
 
 makeDiagnosticPlots <- function(...) {

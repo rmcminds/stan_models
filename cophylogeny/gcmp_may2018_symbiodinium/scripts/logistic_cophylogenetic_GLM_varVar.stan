@@ -1,8 +1,7 @@
 functions {
     vector rescaleOU(matrix nhs, real alpha) {
         return (exp(-2.0 * alpha * (1 - nhs[,2]))
-                - exp(-2.0 * alpha * (1 - nhs[,1])))
-               ./ (nhs[,2] - nhs[,1]);
+                - exp(-2.0 * alpha * (1 - nhs[,1])));
     }
 }
 data {
@@ -29,8 +28,6 @@ data {
     matrix[NHostTips, NHostNodes] hostTipAncestors;
     matrix[NHostNodes, 2] hostNodeHeights;
     matrix[NMicrobeNodes, 2] microbeNodeHeights;
-    vector<lower=0>[NHostNodes] hostEdges;
-    row_vector<lower=0>[NMicrobeNodes] microbeEdges;
     real<lower=0> globalScale;
 }
 parameters {
@@ -63,7 +60,6 @@ transformed parameters {
           * aveStDMeta;
     microbeVarRaw
         = rescaleOU(microbeNodeHeights, microbeOUAlpha)'
-          .* microbeEdges
           .* exp((phyloLogVarMultPrev
                   * metaScales[1])
                  * microbeAncestorsT);
@@ -72,7 +68,6 @@ transformed parameters {
                / mean(microbeVarRaw * microbeTipAncestorsT[2:,]));
     hostVarRaw
         = rescaleOU(hostNodeHeights, hostOUAlpha)
-          .* hostEdges
           .* exp(hostAncestors
               * (phyloLogVarMultADiv
                  * metaScales[2]));
