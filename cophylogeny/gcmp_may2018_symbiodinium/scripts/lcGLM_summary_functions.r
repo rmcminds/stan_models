@@ -44,6 +44,8 @@ summarizeLcGLM <- function(...) {
         cat(paste0(as.character(Sys.time()), '\n'))
 
         allfit <- sflist2stanfit(fit[fitModes == 0])
+        
+        check_hmc_diagnostics(allfit)
 
         ## variance partitioning
         stDProps <- array(extract(allfit,
@@ -328,7 +330,7 @@ summarizeLcGLM <- function(...) {
                     append = T)
         ##
     }
-    
+    dontdo <- function(...) {
     ## summarize the results separately for each sampled host tree
     for(i in 1:NTrees) {
         
@@ -911,6 +913,7 @@ makeDiagnosticPlots <- function(...) {
         
     }
     ##
+    }
 }
 
 ## fin
