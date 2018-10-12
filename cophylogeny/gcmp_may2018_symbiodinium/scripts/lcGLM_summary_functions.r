@@ -203,7 +203,7 @@ summarizeLcGLM <- function(...) {
         for(j in 1:NMCSamples) {
             for(k in 1:(NChains * NTrees)) {
                 for(m in sumconts) {
-                    baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j, k, rownames(factLevelMat)[factLevelMat[,m] == 1],])
+                    baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j, k, rownames(factLevelMat)[factLevelMat[,m] == 1], ])
                 }
             }
         }
@@ -329,6 +329,9 @@ summarizeLcGLM <- function(...) {
                     quote  = F,
                     append = T)
         ##
+        
+        rm(allfit, verbose = F)
+        gc()
     }
 
     ## summarize the results separately for each sampled host tree
@@ -585,7 +588,7 @@ summarizeLcGLM <- function(...) {
         for(j in 1:NMCSamples) {
             for(k in 1:NChains) {
                 for(m in sumconts) {
-                    baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j, k, rownames(factLevelMat)[factLevelMat[,m] == 1],])
+                    baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j, k, rownames(factLevelMat)[factLevelMat[,m] == 1], ])
                 }
             }
         }
@@ -882,6 +885,9 @@ summarizeLcGLM <- function(...) {
                     quote  = F,
                     append = T)
         ##
+        
+        fit[[i]] <- NULL
+        gc()
     }
     ##
 }
