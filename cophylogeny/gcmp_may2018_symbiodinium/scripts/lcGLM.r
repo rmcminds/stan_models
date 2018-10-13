@@ -267,7 +267,7 @@ for(j in 1:NFactors) {
         if(attr(modelMat, "contrasts")[[colnames(factLevelMat)[[j]]]] == 'contr.sum') {
             ## if the contrast is a sum-to-zero ('effects') contrast, adjust the scale in preparation for making symmetrical marginal priors
             stDAdjust[[j]] <- 1 / sqrt(1 - 1 / (sum(newColumn) + 1))
-            baseLevelMat <- rbind(baseLevelMat, c(0, -newColumn, rep(0, NHostNodes)))
+            baseLevelMat <- rbind(baseLevelMat, -newColumn)
             factLevelMat[,j] <- newColumn * stDAdjust[[j]]
             NSumTo0 <- NSumTo0 + 1
         } else {

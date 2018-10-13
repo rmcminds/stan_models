@@ -23,7 +23,7 @@ data {
     matrix[NEffects, NFactors] factLevelMat;
     matrix[NSamples, NEffects + NHostNodes + 1] modelMat;
     int NSumTo0;
-    matrix[NSumTo0, NEffects + NHostNodes + 1] baseLevelMat;
+    matrix[NSumTo0, NEffects] baseLevelMat;
     matrix[NMicrobeNodes, NMicrobeNodes] microbeAncestorsT;
     matrix[NMicrobeNodes + 1, NMicrobeTips] microbeTipAncestorsT;
     matrix[NHostNodes, NHostNodes] hostAncestors;
@@ -116,7 +116,7 @@ model {
     phyloLogVarMultADiv ~ normal(0,1);
     to_vector(phyloLogVarMultRaw) ~ normal(0,1);
     to_vector(rawMicrobeNodeEffects) ~ normal(0,1);
-    to_vector(baseLevelMat * rawMicrobeNodeEffects) ~ normal(0,1);
+    to_vector(baseLevelMat * rawMicrobeNodeEffects[2:(NEffects + 1),]) ~ normal(0,1);
     sampleTipEffects = modelMat * (scaledMicrobeNodeEffects * microbeTipAncestorsT);
     for (n in 1:NObs)
         logit_ratios[n] = sampleTipEffects[sampleNames[n], microbeTipNames[n]];
@@ -124,5 +124,5 @@ model {
 }
 generated quantities {
     matrix[NSumTo0, NMicrobeNodes + 1] baseLevelEffects
-        = baseLevelMat * scaledMicrobeNodeEffects;
+        = baseLevelMat * scaledMicrobeNodeEffects[2:(NEffects + 1),];
 }

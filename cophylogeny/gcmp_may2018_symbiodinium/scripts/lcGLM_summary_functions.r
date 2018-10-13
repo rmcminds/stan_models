@@ -201,7 +201,7 @@ summarizeLcGLM <- function(...) {
                                           NMicrobeNodes + 1),
                                   dimnames = list(sample  = NULL,
                                                   chain   = NULL,
-                                                  effect  = sumconts,
+                                                  effect  = baseNames,
                                                   taxnode = c('alphaDiversity', colnames(microbeAncestors))))
 
         save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
@@ -582,7 +582,7 @@ summarizeLcGLM <- function(...) {
                                           NMicrobeNodes + 1),
                                   dimnames = list(sample  = NULL,
                                                   chain   = NULL,
-                                                  effect  = sumconts,
+                                                  effect  = baseNames,
                                                   taxnode = c('alphaDiversity', colnames(microbeAncestors))))
         
         save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
