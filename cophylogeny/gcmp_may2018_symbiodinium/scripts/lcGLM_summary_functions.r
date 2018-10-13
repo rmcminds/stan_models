@@ -192,7 +192,7 @@ summarizeLcGLM <- function(...) {
 
         ## calculate base-level effects (negative sum of all others in category)
         baseLevelEffects <- array(extract(allfit,
-                                          pars = 'baseLevelEffectsRaw',
+                                          pars = 'baseLevelEffects',
                                           permuted = F,
                                           inc_warmup = T),
                                   dim = c(NMCSamples,
@@ -203,11 +203,6 @@ summarizeLcGLM <- function(...) {
                                                   chain   = NULL,
                                                   effect  = sumconts,
                                                   taxnode = c('alphaDiversity', colnames(microbeAncestors))))
-        for(j in 1:NMCSamples) {
-            for(k in 1:(NChains * NTrees)) {
-                baseLevelEffects[j,k,,] <- diag(adjustment) %*% baseLevelEffects[j,k,,]
-            }
-        }
 
         save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
         ##
@@ -578,7 +573,7 @@ summarizeLcGLM <- function(...) {
         
         ## calculate base-level effects (negative sum of all others in category)
         baseLevelEffects <- array(extract(fit[[i]],
-                                          pars = 'baseLevelEffectsRaw',
+                                          pars = 'baseLevelEffects',
                                           permuted = F,
                                           inc_warmup = T),
                                   dim = c(NMCSamples,
@@ -589,11 +584,6 @@ summarizeLcGLM <- function(...) {
                                                   chain   = NULL,
                                                   effect  = sumconts,
                                                   taxnode = c('alphaDiversity', colnames(microbeAncestors))))
-        for(j in 1:NMCSamples) {
-            for(k in 1:NChains) {
-                baseLevelEffects[j,k,,] <- diag(adjustment) %*% baseLevelEffects[j,k,,]
-            }
-        }
         
         save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
         ##

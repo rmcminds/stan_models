@@ -293,7 +293,7 @@ sumconts <- names(attr(modelMat, "contrasts")[attr(modelMat, "contrasts") == 'co
 ##
 
 ## create matrix relating each 'effect' (categorical and numeric) to the 'factor' that it belongs to
-adjustment <- rep(1, NFactors)
+stDAdjust <- rep(1, NFactors)
 baseLevelMat <- NULL
 factLevelMat <- matrix(NA, nrow = ncol(modelMat) - 1, ncol = NFactors)
 colnames(factLevelMat) <- c(allfactors)
@@ -303,9 +303,9 @@ for(j in 1:NFactors) {
     if(colnames(factLevelMat)[[j]] %in% names(attr(modelMat, "contrasts"))) {
         if(attr(modelMat, "contrasts")[[colnames(factLevelMat)[[j]]]] == 'contr.sum') {
             ## if the contrast is a sum-to-zero ('effects') contrast, adjust the scale in preparation for making symmetrical marginal priors
-            adjustment[[j]] <- 1 / sqrt(1 - 1 / (sum(newColumn) + 1))
-            baseLevelMat <- rbind(baseLevelMat, c(0, newColumn, rep(0, NHostNodes))) / adjustment[[j]]
-            factLevelMat[,j] <- newColumn * adjustment[[j]]
+            stDAdjust[[j]] <- 1 / sqrt(1 - 1 / (sum(newColumn) + 1))
+            baseLevelMat <- rbind(baseLevelMat, c(0, -newColumn, rep(0, NHostNodes)))
+            factLevelMat[,j] <- newColumn * stDAdjust[[j]]
             NSumTo0 <- NSumTo0 + 1
         } else {
             factLevelMat[,j] <- newColumn
