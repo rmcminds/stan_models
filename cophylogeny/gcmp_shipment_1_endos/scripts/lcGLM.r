@@ -96,13 +96,13 @@ hostTree <- .compressTipLabel(hostTree)
 ##
 
 ## import mapping file
-map <- read.table(mapfilePath,header=T,sep='\t',comment.char='',check.names=F)
+map <- read.table(mapfilePath, header = T, sep = '\t', comment.char = '', check.names = F)
 rownames(map) <- map[,'#SampleID']
 newmap <- filterfunction(map)
 ##
 
 ## import data; merge data and mapping file
-fulltable <- t(read.table(fulltablePath, header=T, sep='\t', skip=1, comment.char='', row.names=1, check.names=F))
+fulltable <- t(read.table(fulltablePath, header = T, sep = '\t', skip = 1, comment.char = '', row.names = 1, check.names = F))
 idx <- rownames(fulltable)[rownames(fulltable) %in% rownames(newmap) & rowSums(fulltable) >= minCountSamp]
 y.old <- fulltable[idx, ]
 newermaptemp <- droplevels(newmap[idx,])
@@ -122,19 +122,19 @@ mode(y.old.binary) <- 'numeric'
 y.binary.filtered <- y.old.binary[,colSums(y.old.filt) >= minSamps]
 
 
-taxdat <- read.table(taxAssignmentPath,sep='\t',stringsAsFactors=F, row.names=1)
-x <- strsplit(taxdat[,1],'; ')
-most <- max(sapply(x,length))
-parsedtax <- lapply(x,function(x) {length(x) <- most; return(x)})
-tax <- do.call('rbind',parsedtax)
+taxdat <- read.table(taxAssignmentPath, sep = '\t',stringsAsFactors = F, row.names = 1)
+x <- strsplit(taxdat[, 1], '; ')
+most <- max(sapply(x, length))
+parsedtax <- lapply(x, function(x) {length(x) <- most; return(x)})
+tax <- do.call('rbind', parsedtax)
 rownames(tax) <- rownames(taxdat)
-colnames(tax) <- c('Kingdom','Phylum','Class','Order','Family','Genus','Species')
+colnames(tax) <- c('Kingdom', 'Phylum', 'Class', 'Order', 'Family', 'Genus', 'Species')
 
 
-endos <- rownames(tax[tax[,'Family']=='f__Endozoicimonaceae' & !is.na(tax[,'Family']),])
+endos <- rownames(tax[tax[,'Family'] == 'f__Endozoicimonaceae' & !is.na(tax[,'Family']),])
 myEndos <- colnames(y.binary.filtered)[colnames(y.binary.filtered) %in% endos]
 
-oceanos <- rownames(tax[tax[,'Order']=='o__Oceanospirillales' & !is.na(tax[,'Order']),])
+oceanos <- rownames(tax[tax[,'Order'] == 'o__Oceanospirillales' & !is.na(tax[,'Order']),])
 myOceanos <- colnames(y.binary.filtered)[colnames(y.binary.filtered) %in% oceanos]
 myOceanosSampled <- sample(myOceanos[!myOceanos %in% myEndos], ceiling(length(myEndos) / 20))
 
@@ -153,9 +153,9 @@ microbeTree.Y <- drop.tip(microbeTree, microbeTree$tip.label[!microbeTree$tip.la
 
 ## root the tree if it's unrooted
 if(is.rooted(microbeTree.Y)) {
-    finalMicrobeTree <- reorder(microbeTree.Y, order='pruningwise')
+    finalMicrobeTree <- reorder(microbeTree.Y, order = 'pruningwise')
 } else {
-    finalMicrobeTree <- reorder(midpoint.root(microbeTree.Y), order='pruningwise')
+    finalMicrobeTree <- reorder(midpoint.root(microbeTree.Y), order = 'pruningwise')
 }
 ##
 
@@ -199,7 +199,7 @@ colnames(microbeAncestors)[1:NMicrobeTips] <- rownames(microbeAncestors)[1:NMicr
 ##
 
 ## melt the data into long format to feed to model, and generate summary numbers about samples
-senddat <- melt(y, varnames=c('sample', 'tip'), value.name = 'present')
+senddat <- melt(y, varnames = c('sample', 'tip'), value.name = 'present')
 sampleNames <- as.numeric(factor(senddat[,1]))
 microbeTipNames <- as.numeric(factor(senddat[,2], levels = microbeTips))
 present <- senddat[,3]
@@ -215,40 +215,6 @@ newermap <- newermap[levels(factor(senddat[,1])),]
 newermap$sequencing_depth <- rowSums(y.old[,microbeTips])
 newermap$log_sequencing_depth <- log(newermap$sequencing_depth)
 newermap$log_sequencing_depth_scaled <- scale(newermap$log_sequencing_depth)
-##
-
-## prepare data for the model matrix
-allfactors <- attr(terms.formula(modelform), "term.labels")
-NFactors <- length(allfactors)
-allfactorder <- sapply(allfactors, function(x) sum(gregexpr(':', x, fixed = TRUE)[[1]] > 0))
-modelMat <- model.matrix(modelform, model.frame(newermap, na.action = NULL))
-modelMat[is.na(modelMat)] <- 0
-sumconts <- names(attr(modelMat, "contrasts")[attr(modelMat, "contrasts") == 'contr.sum'])
-##
-
-## create matrix relating each 'effect' (categorical and numeric) to the 'factor' that it belongs to
-factLevelMat <- sapply(1:length(allfactors), function (j) {
-    as.numeric(attr(modelMat, 'assign')[-1] == j)
-})
-colnames(factLevelMat) <- c(allfactors)
-
-## ditch the intercept in this matrix because the 'global' intercept and 'main effects' of host and microbe are all estimated separately.
-modelMat <- modelMat[,-1]
-##
-
-##
-NEffects <- ncol(modelMat)
-##
-
-## rename factors that have 'sum contrasts' because by default they get arbitrary names (careful with interpretation of interactions... probably better to add them as separate 'main effects' produced by concatenation)
-for(j in sumconts) {
-    searchTerms <- paste0('^', j, 1:(nlevels(newermap[,j]) - 1), '$')
-    replacementTerms <- paste0(j, levels(newermap[,j])[-nlevels(newermap[,j])])
-    for(k in 1:length(searchTerms)) {
-        colnames(modelMat) <- sub(searchTerms[[k]], replacementTerms[[k]], colnames(modelMat))
-    }
-}
-rownames(factLevelMat) <- colnames(modelMat)
 ##
 
 ## extract all the possible species that 'fungid' could refer to
@@ -317,6 +283,54 @@ for (i in 1:NTrees) {
 }
 ##
 
+## prepare data for the model matrix
+allfactors <- attr(terms.formula(modelform), "term.labels")
+NFactors <- length(allfactors)
+allfactorder <- sapply(allfactors, function(x) sum(gregexpr(':', x, fixed = TRUE)[[1]] > 0))
+modelMat <- model.matrix(modelform, model.frame(newermap, na.action = NULL))
+modelMat[is.na(modelMat)] <- 0
+sumconts <- names(attr(modelMat, "contrasts")[attr(modelMat, "contrasts") == 'contr.sum'])
+##
+
+## create matrix relating each 'effect' (categorical and numeric) to the 'factor' that it belongs to
+adjustment <- rep(1, NFactors)
+baseLevelMat <- NULL
+factLevelMat <- matrix(NA, nrow = ncol(modelMat) - 1, ncol = NFactors)
+colnames(factLevelMat) <- c(allfactors)
+NSumTo0 <- 0
+for(j in 1:NFactors) {
+    newColumn <- as.numeric(attr(modelMat, 'assign')[-1] == j)
+    if(colnames(factLevelMat)[[j]] %in% names(attr(modelMat, "contrasts"))) {
+        if(attr(modelMat, "contrasts")[[colnames(factLevelMat)[[j]]]] == 'contr.sum') {
+            ## if the contrast is a sum-to-zero ('effects') contrast, adjust the scale in preparation for making symmetrical marginal priors
+            adjustment[[j]] <- 1 / sqrt(1 - 1 / (sum(newColumn) + 1))
+            baseLevelMat <- rbind(baseLevelMat, c(0, newColumn, rep(0, NHostNodes))) / adjustment[[j]]
+            factLevelMat[,j] <- newColumn * adjustment[[j]]
+            NSumTo0 <- NSumTo0 + 1
+        } else {
+            factLevelMat[,j] <- newColumn
+        }
+    } else {
+        factLevelMat[,j] <- newColumn
+    }
+}
+
+##
+NEffects <- ncol(modelMat) - 1
+##
+
+
+## rename factors that have 'sum contrasts' because by default they get arbitrary names (careful with interpretation of interactions... probably better to add them as separate 'main effects' produced by concatenation)
+for(j in sumconts) {
+    searchTerms <- paste0('^', j, 1:(nlevels(newermap[,j]) - 1), '$')
+    replacementTerms <- paste0(j, levels(newermap[,j])[-nlevels(newermap[,j])])
+    for(k in 1:length(searchTerms)) {
+        colnames(modelMat) <- sub(searchTerms[[k]], replacementTerms[[k]], colnames(modelMat))
+    }
+}
+rownames(factLevelMat) <- colnames(modelMat)[2:ncol(modelMat)]
+##
+
 ## collect data to feed to stan
 standat <- list()
 for (i in 1:NTrees) {
@@ -331,6 +345,8 @@ for (i in 1:NTrees) {
                          microbeTipNames                = microbeTipNames,
                          factLevelMat                   = factLevelMat,
                          modelMat                       = cbind(cbind(1, modelMat), hostAncestorsExpanded[[i]]),
+                         NSumTo0                        = NSumTo0,
+                         baseLevelMat                   = baseLevelMat,
                          microbeAncestorsT              = t(microbeAncestors),
                          microbeTipAncestorsT           = t(cbind(1, microbeAncestors[1:NMicrobeTips, ])),
                          hostAncestors                  = hostAncestors[[i]],
