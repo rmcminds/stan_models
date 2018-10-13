@@ -183,7 +183,7 @@ summarizeLcGLM <- function(...) {
                                           dimnames = list(sample  = NULL,
                                                           chain   = NULL,
                                                           effect  = c('microbePrevalence',
-                                                                      colnames(modelMat)[1:NEffects],
+                                                                      colnames(modelMat)[2:(NEffects + 1)],
                                                                       paste0('host_', colnames(hostAncestors[[i]]))),
                                                           taxnode = c('alphaDiversity', colnames(microbeAncestors))))
                                                         
@@ -191,10 +191,13 @@ summarizeLcGLM <- function(...) {
         ##
 
         ## calculate base-level effects (negative sum of all others in category)
-        baseLevelEffects <- array(NA,
+        baseLevelEffects <- array(extract(allfit,
+                                          pars = 'baseLevelEffectsRaw',
+                                          permuted = F,
+                                          inc_warmup = T),
                                   dim = c(NMCSamples,
                                           NChains * NTrees,
-                                          length(sumconts),
+                                          NSumTo0,
                                           NMicrobeNodes + 1),
                                   dimnames = list(sample  = NULL,
                                                   chain   = NULL,
@@ -202,9 +205,7 @@ summarizeLcGLM <- function(...) {
                                                   taxnode = c('alphaDiversity', colnames(microbeAncestors))))
         for(j in 1:NMCSamples) {
             for(k in 1:(NChains * NTrees)) {
-                for(m in sumconts) {
-                    baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j, k, rownames(factLevelMat)[factLevelMat[,m] == 1], ])
-                }
+                baseLevelEffects[j,k,,] <- diag(adjustment) %*% baseLevelEffects[j,k,,]
             }
         }
 
@@ -247,14 +248,14 @@ summarizeLcGLM <- function(...) {
 
         ##
         effectNames <- c('microbePrevalence',
-                         colnames(modelMat)[1:NEffects],
+                         colnames(modelMat)[2:(NEffects + 1)],
                          paste0('host_', colnames(hostAncestors[[1]])),
                          baseNames)
 
         matMult <- array(NA,
                          dim = c(NMCSamples,
                                  NChains,
-                                 NHostNodes + NEffects + length(sumconts) + 1,
+                                 NHostNodes + NEffects + NSumTo0 + 1,
                                  NMicrobeNodes + 1),
                          dimnames = list(sample = NULL,
                                          chain = NULL,
@@ -264,10 +265,10 @@ summarizeLcGLM <- function(...) {
         ##
 
         ## build a temporary model matrix
-        hostMat <- matrix(0, nrow = NHostNodes + NEffects + length(sumconts) + 1, ncol = NHostNodes + NEffects + length(sumconts) + 1)
+        hostMat <- matrix(0, nrow = NHostNodes + NEffects + NSumTo0 + 1, ncol = NHostNodes + NEffects + NSumTo0 + 1)
         hostMat[1:(NEffects + 1), 1:(NEffects + 1)] <- diag(1, nrow = NEffects + 1)
         hostMat[(NEffects + 2):(NEffects + NHostNodes + 1), (NEffects + 2):(NEffects + NHostNodes + 1)] <- hostAncestors[[1]]
-        hostMat[(NEffects + NHostNodes + 2):(NEffects + NHostNodes + length(sumconts) + 1), (NEffects + NHostNodes + 2):(NEffects + NHostNodes + length(sumconts) + 1)] <- diag(1, nrow = length(sumconts))
+        hostMat[(NEffects + NHostNodes + 2):(NEffects + NHostNodes + NSumTo0 + 1), (NEffects + NHostNodes + 2):(NEffects + NHostNodes + NSumTo0 + 1)] <- diag(1, nrow = NSumTo0)
         ##
 
         ## since the model has many degrees of freedom, it's possible that certain regions of the tree have 'significant' effects but that those effects are 'implemented' via different, nearby nodes in each iteration. We can sum the effects of all ancestral nodes to see if a given node is consistently influenced by all of itself plus its ancestral terms, even if all of those terms are individually inconsistent
@@ -281,7 +282,7 @@ summarizeLcGLM <- function(...) {
         }
 
         allRes <- NULL
-        for(j in 1:(NHostNodes + NEffects + length(sumconts) + 1)) {
+        for(j in 1:(NHostNodes + NEffects + NSumTo0 + 1)) {
             temp <- monitor(array(matMult[,,j,],
                                   dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
                             warmup = warmup,
@@ -312,7 +313,7 @@ summarizeLcGLM <- function(...) {
         }
 
         allRes <- NULL
-        for(j in 1:(NHostNodes + NEffects + length(sumconts) + 1)) {
+        for(j in 1:(NHostNodes + NEffects + NSumTo0 + 1)) {
             temp <- monitor(array(matMult[,,j,],
                                   dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
                             warmup = warmup,
@@ -568,7 +569,7 @@ summarizeLcGLM <- function(...) {
                                           dimnames = list(sample  = NULL,
                                                           chain   = NULL,
                                                           effect  = c('microbePrevalence',
-                                                                      colnames(modelMat)[1:NEffects],
+                                                                      colnames(modelMat)[2:(NEffects + 1)],
                                                                       paste0('host_', colnames(hostAncestors[[i]]))),
                                                           taxnode = c('alphaDiversity', colnames(microbeAncestors))))
                                                         
@@ -576,10 +577,13 @@ summarizeLcGLM <- function(...) {
         ##
         
         ## calculate base-level effects (negative sum of all others in category)
-        baseLevelEffects <- array(NA,
+        baseLevelEffects <- array(extract(fit[[i]],
+                                          pars = 'baseLevelEffectsRaw',
+                                          permuted = F,
+                                          inc_warmup = T),
                                   dim = c(NMCSamples,
                                           NChains,
-                                          length(sumconts),
+                                          NSumTo0,
                                           NMicrobeNodes + 1),
                                   dimnames = list(sample  = NULL,
                                                   chain   = NULL,
@@ -587,9 +591,7 @@ summarizeLcGLM <- function(...) {
                                                   taxnode = c('alphaDiversity', colnames(microbeAncestors))))
         for(j in 1:NMCSamples) {
             for(k in 1:NChains) {
-                for(m in sumconts) {
-                    baseLevelEffects[j,k,m,] <- -colSums(scaledMicrobeNodeEffects[j, k, rownames(factLevelMat)[factLevelMat[,m] == 1], ])
-                }
+                baseLevelEffects[j,k,,] <- diag(adjustment) %*% baseLevelEffects[j,k,,]
             }
         }
         
@@ -803,14 +805,14 @@ summarizeLcGLM <- function(...) {
         
         ##
         effectNames <- c('microbePrevalence',
-                         colnames(modelMat)[1:NEffects],
+                         colnames(modelMat)[2:(NEffects + 1)],
                          paste0('host_', colnames(hostAncestors[[i]])),
                          baseNames)
         
         matMult <- array(NA,
                          dim = c(NMCSamples,
                                  NChains,
-                                 NHostNodes + NEffects + length(sumconts) + 1,
+                                 NHostNodes + NEffects + NSumTo0 + 1,
                                  NMicrobeNodes + 1),
                          dimnames = list(sample = NULL,
                                          chain = NULL,
@@ -820,10 +822,10 @@ summarizeLcGLM <- function(...) {
         ##
         
         ## build a temporary model matrix
-        hostMat <- matrix(0, nrow = NHostNodes + NEffects + length(sumconts) + 1, ncol = NHostNodes + NEffects + length(sumconts) + 1)
+        hostMat <- matrix(0, nrow = NHostNodes + NEffects + NSumTo0 + 1, ncol = NHostNodes + NEffects + NSumTo0 + 1)
         hostMat[1:(NEffects + 1), 1:(NEffects + 1)] <- diag(1, nrow = NEffects + 1)
         hostMat[(NEffects + 2):(NEffects + NHostNodes + 1), (NEffects + 2):(NEffects + NHostNodes + 1)] <- hostAncestors[[i]]
-        hostMat[(NEffects + NHostNodes + 2):(NEffects + NHostNodes + length(sumconts) + 1), (NEffects + NHostNodes + 2):(NEffects + NHostNodes + length(sumconts) + 1)] <- diag(1, nrow = length(sumconts))
+        hostMat[(NEffects + NHostNodes + 2):(NEffects + NHostNodes + NSumTo0 + 1), (NEffects + NHostNodes + 2):(NEffects + NHostNodes + NSumTo0 + 1)] <- diag(1, nrow = NSumTo0)
         ##
         
         cat('\nSummarizing summed node effects\n')
@@ -837,7 +839,7 @@ summarizeLcGLM <- function(...) {
         }
         
         allRes <- NULL
-        for(j in 1:(NHostNodes + NEffects + length(sumconts) + 1)) {
+        for(j in 1:(NHostNodes + NEffects + NSumTo0 + 1)) {
             temp <- monitor(array(matMult[,,j,],
                                   dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
                             warmup = warmup,
@@ -868,7 +870,7 @@ summarizeLcGLM <- function(...) {
         }
         
         allRes <- NULL
-        for(j in 1:(NHostNodes + NEffects + length(sumconts) + 1)) {
+        for(j in 1:(NHostNodes + NEffects + NSumTo0 + 1)) {
             temp <- monitor(array(matMult[,,j,],
                                   dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
                             warmup = warmup,

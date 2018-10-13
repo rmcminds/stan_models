@@ -179,40 +179,6 @@ newermap$log_sequencing_depth <- log(newermap$sequencing_depth)
 newermap$log_sequencing_depth_scaled <- scale(newermap$log_sequencing_depth)
 ##
 
-## prepare data for the model matrix
-allfactors <- attr(terms.formula(modelform), "term.labels")
-NFactors <- length(allfactors)
-allfactorder <- sapply(allfactors, function(x) sum(gregexpr(':', x, fixed = TRUE)[[1]] > 0))
-modelMat <- model.matrix(modelform, model.frame(newermap, na.action = NULL))
-modelMat[is.na(modelMat)] <- 0
-sumconts <- names(attr(modelMat, "contrasts")[attr(modelMat, "contrasts") == 'contr.sum'])
-##
-
-## create matrix relating each 'effect' (categorical and numeric) to the 'factor' that it belongs to
-factLevelMat <- sapply(1:NFactors, function (j) {
-    as.numeric(attr(modelMat, 'assign')[-1] == j)
-})
-colnames(factLevelMat) <- c(allfactors)
-
-## ditch the intercept in this matrix because the 'global' intercept and 'main effects' of host and microbe are all estimated separately.
-modelMat <- modelMat[, -1]
-##
-
-##
-NEffects <- ncol(modelMat)
-##
-
-## rename factors that have 'sum contrasts' because by default they get arbitrary names (careful with interpretation of interactions... probably better to add them as separate 'main effects' produced by concatenation)
-for(j in sumconts) {
-    searchTerms <- paste0('^', j, 1:(nlevels(newermap[,j]) - 1), '$')
-    replacementTerms <- paste0(j, levels(newermap[,j])[-nlevels(newermap[,j])])
-    for(k in 1:length(searchTerms)) {
-        colnames(modelMat) <- sub(searchTerms[[k]], replacementTerms[[k]], colnames(modelMat))
-    }
-}
-rownames(factLevelMat) <- colnames(modelMat)
-##
-
 ## extract all the possible species that 'fungid' could refer to
 possibleFungidSpecs <- grep(paste0(paste(possibleFungidGenera, collapse = '|'), '_'), attr(hostTree, "TipLabel"), value = T)
 ##
@@ -232,7 +198,7 @@ study.species.missing <- study.species[!study.species %in% grep(paste(c(attr(hos
 generaOfUnknowns <- sapply(study.species.missing, function(x) strsplit(x, '_')[[1]][[1]])
 ##
 
-### starting here, generate multiple random samples of the map and trees
+## generate multiple random samples of the map and trees
 sampleMap <- list()
 hostTreesSampled <- list()
 hostTreeDetails <- list()
@@ -241,7 +207,7 @@ for(i in 1:NTrees) {
     fungidSps <- grep('Fungid', levels(sampleMap[[i]][,sampleTipKey]))
     ##assign unidentified Fungids to a random member of the group independently for each tree
     levels(sampleMap[[i]][,sampleTipKey])[fungidSps] <- sample(possibleFungidSpecs[!possibleFungidSpecs %in% levels(sampleMap[[i]][,sampleTipKey])],
-                                                        length(fungidSps))
+                                                               length(fungidSps))
     for (j in unique(generaOfUnknowns)) {
         possibleGenera <- attr(hostTree, "TipLabel")[!attr(hostTree, "TipLabel") %in% levels(sampleMap[[i]][,sampleTipKey])]
         if(!any(grepl(j, possibleGenera))) {
@@ -264,7 +230,6 @@ for(i in 1:NTrees) {
 }
 ##
 
-
 ## create ancestry matrices for each host tree
 NHostTips <- length(hostTreesSampled[[1]]$tip.label)
 NIntHostNodes <- hostTreesSampled[[1]]$Nnode
@@ -281,6 +246,52 @@ for (i in 1:NTrees) {
 }
 ##
 
+## prepare data for the model matrix
+allfactors <- attr(terms.formula(modelform), "term.labels")
+NFactors <- length(allfactors)
+allfactorder <- sapply(allfactors, function(x) sum(gregexpr(':', x, fixed = TRUE)[[1]] > 0))
+modelMat <- model.matrix(modelform, model.frame(newermap, na.action = NULL))
+modelMat[is.na(modelMat)] <- 0
+sumconts <- names(attr(modelMat, "contrasts")[attr(modelMat, "contrasts") == 'contr.sum'])
+##
+
+## create matrix relating each 'effect' (categorical and numeric) to the 'factor' that it belongs to
+adjustment <- rep(1, NFactors)
+baseLevelMat <- NULL
+factLevelMat <- matrix(NA, nrow = ncol(modelMat) - 1, ncol = NFactors)
+colnames(factLevelMat) <- c(allfactors)
+NSumTo0 <- 0
+for(j in 1:NFactors) {
+    newColumn <- as.numeric(attr(modelMat, 'assign')[-1] == j)
+    if(colnames(factLevelMat)[[j]] %in% names(attr(modelMat, "contrasts"))) {
+        if(attr(modelMat, "contrasts")[[colnames(factLevelMat)[[j]]]] == 'contr.sum') {
+            ## if the contrast is a sum-to-zero ('effects') contrast, adjust the scale in preparation for making symmetrical marginal priors
+            adjustment[[j]] <- 1 / sqrt(1 - 1 / (sum(newColumn) + 1))
+            baseLevelMat <- rbind(baseLevelMat, c(0, newColumn, rep(0, NHostNodes))) / adjustment[[j]]
+            factLevelMat[,j] <- newColumn * adjustment[[j]]
+            NSumTo0 <- NSumTo0 + 1
+        } else {
+            factLevelMat[,j] <- newColumn
+        }
+    } else {
+        factLevelMat[,j] <- newColumn
+    }
+}
+
+##
+NEffects <- ncol(modelMat) - 1
+##
+
+## rename factors that have 'sum contrasts' because by default they get arbitrary names (careful with interpretation of interactions... probably better to add them as separate 'main effects' produced by concatenation)
+for(j in sumconts) {
+    searchTerms <- paste0('^', j, 1:(nlevels(newermap[,j]) - 1), '$')
+    replacementTerms <- paste0(j, levels(newermap[,j])[-nlevels(newermap[,j])])
+    for(k in 1:length(searchTerms)) {
+        colnames(modelMat) <- sub(searchTerms[[k]], replacementTerms[[k]], colnames(modelMat))
+    }
+}
+rownames(factLevelMat) <- colnames(modelMat)[2:ncol(modelMat)]
+##
 
 ## collect data to feed to stan
 standat <- list()
@@ -295,7 +306,9 @@ for (i in 1:NTrees) {
                          sampleNames                    = sampleNames,
                          microbeTipNames                = microbeTipNames,
                          factLevelMat                   = factLevelMat,
-                         modelMat                       = cbind(cbind(1, modelMat), hostAncestorsExpanded[[i]]),
+                         modelMat                       = cbind(modelMat, hostAncestorsExpanded[[i]]),
+                         NSumTo0                        = NSumTo0,
+                         baseLevelMat                   = baseLevelMat,
                          microbeAncestorsT              = t(microbeAncestors),
                          microbeTipAncestorsT           = t(cbind(1, microbeAncestors[1:NMicrobeTips, ])),
                          hostAncestors                  = hostAncestors[[i]],
