@@ -9,6 +9,18 @@ makeParentMat <- function(NNodes, tree, NTips, tipNames) {
     return(parentMat)
 }
 
+statusUpdate <- function(iter, N) {
+    if(iter == round(N / 4)) {
+        cat('\n25%...')
+    } else if(iter == round(N / 2)) {
+        cat('50%...')
+    } else if (iter == round(3 * N / 4)) {
+        cat('75%...')
+    } else if (iter == N) {
+        cat('100%\n')
+    }
+}
+
 summarizeLcGLM <- function(...) {
     
     fitModes <- sapply(fit, function(x) x@mode)
@@ -20,6 +32,11 @@ summarizeLcGLM <- function(...) {
                                        microbeTips))
 
     hostParents <- list()
+    hostParents[[1]] <- makeParentMat(NHostNodes,
+                                      hostTreesSampled[[1]],
+                                      NHostTips,
+                                      hostTreesSampled[[1]]$tip.label)
+                                      
     microbeAncestorsT <- t(cbind(1, microbeAncestors))
 
     colorpal <- colorRampPalette(brewer.pal(9, 'Blues'))
@@ -28,17 +45,17 @@ summarizeLcGLM <- function(...) {
     baseNames <- sapply(sumconts, function(m) paste0(m, levels(newermap[,m])[nlevels(newermap[,m])]))
 
     ## summarize results for parameters that can be interpretted across all sampled host trees
-    currplotdir <- file.path(outdir,'alltrees', 'plots')
-    currtabledir <- file.path(outdir,'alltrees', 'tables')
-    currdatadir <- file.path(outdir,'alltrees', 'data')
-
-    dir.create(currplotdir, recursive = T)
-    dir.create(currtabledir, recursive = T)
-    dir.create(currdatadir, recursive = T)
-    
     NSuccessTrees <- sum(fitModes == 0)
     
     if (NSuccessTrees > 1) {
+        
+        currplotdir <- file.path(outdir,'alltrees', 'plots')
+        currtabledir <- file.path(outdir,'alltrees', 'tables')
+        currdatadir <- file.path(outdir,'alltrees', 'data')
+        
+        dir.create(currplotdir, recursive = T)
+        dir.create(currtabledir, recursive = T)
+        dir.create(currdatadir, recursive = T)
         
         cat('\nSummarizing effects of all trees combined\n')
         cat(paste0(as.character(Sys.time()), '\n'))
@@ -206,6 +223,9 @@ summarizeLcGLM <- function(...) {
 
         save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
         ##
+        
+        cat('\nSummarizing node effects\n')
+        cat(paste0(as.character(Sys.time()), '\n'))
 
         ## summarize posterior distributions of effects
         allRes <- NULL
@@ -213,20 +233,26 @@ summarizeLcGLM <- function(...) {
             temp <- monitor(array(scaledMicrobeNodeEffects[,,j,],
                                   dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes + 1)),
                             warmup = warmup,
-                            probs  = c(0.05, 0.95))
+                            probs  = c(0.05, 0.95),
+                            print = F)
             temp <- cbind(effect = dimnames(scaledMicrobeNodeEffects)[[3]][j], temp)
             rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
             allRes <- rbind(allRes, temp)
+            statusUpdate(j, NEffects + NHostNodes + 1)
         }
         ##
+        
+        cat('\nSummarizing base-level node effects\n')
+        cat(paste0(as.character(Sys.time()), '\n'))
 
         ## summarize posterior distibutions of base-level effects
-        for(m in sumconts) {
+        for(m in baseNames) {
             temp <- monitor(array(baseLevelEffects[,,m,],
                                   dim = c(NMCSamples, NChains * NTrees, NMicrobeNodes + 1)),
                             warmup = warmup,
-                            probs  = c(0.05, 0.95))
-            temp <- cbind(effect = baseNames[[m]], temp)
+                            probs  = c(0.05, 0.95),
+                            print = F)
+            temp <- cbind(effect = m, temp)
             rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
             allRes <- rbind(allRes, temp)
         }
@@ -276,15 +302,20 @@ summarizeLcGLM <- function(...) {
             }
         }
 
+        cat('\nSummarizing summed node effects\n')
+        cat(paste0(as.character(Sys.time()), '\n'))
+        
         allRes <- NULL
         for(j in 1:(NHostNodes + NEffects + NSumTo0 + 1)) {
             temp <- monitor(array(matMult[,,j,],
                                   dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
                             warmup = warmup,
-                            probs = c(0.05, 0.95))
+                            probs = c(0.05, 0.95),
+                            print = F)
             temp <- cbind(hostEffect = effectNames[[j]], temp)
             rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
             allRes <- rbind(allRes, temp)
+            statusUpdate(j, NHostNodes + NEffects + NSumTo0 + 1)
         }
 
         cat('microbeNode\t', file = file.path(currtabledir, 'allSummedNodeEffects.txt'))
@@ -307,15 +338,20 @@ summarizeLcGLM <- function(...) {
             }
         }
 
+        cat('\nSummarizing parent-summed node effects\n')
+        cat(paste0(as.character(Sys.time()), '\n'))
+        
         allRes <- NULL
         for(j in 1:(NHostNodes + NEffects + NSumTo0 + 1)) {
             temp <- monitor(array(matMult[,,j,],
                                   dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
                             warmup = warmup,
-                            probs = c(0.05, 0.95))
+                            probs = c(0.05, 0.95),
+                            print = F)
             temp <- cbind(hostNode = effectNames[[j]], temp)
             rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
             allRes <- rbind(allRes, temp)
+            statusUpdate(j, NHostNodes + NEffects + NSumTo0 + 1)
         }
 
         cat('microbeNode\t', file = file.path(currtabledir, 'parentalSummedNodeEffects.txt'))
@@ -532,7 +568,7 @@ summarizeLcGLM <- function(...) {
         pdf(file = file.path(currplotdir, 'metaScales_boxes.pdf'), width = 7, height = 7)
         boxplot(metaScalesPlot, cex.axis = 0.5, las = 2)
         graphics.off()
-                            
+        
         save(metaScales, file = file.path(currdatadir, 'metaScales.RData'))
         ##
         
@@ -594,20 +630,23 @@ summarizeLcGLM <- function(...) {
             temp <- monitor(array(scaledMicrobeNodeEffects[,,j,],
                                   dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
                             warmup = warmup,
-                            probs  = c(0.05, 0.95))
+                            probs  = c(0.05, 0.95),
+                            print = F)
             temp <- cbind(effect = dimnames(scaledMicrobeNodeEffects)[[3]][j], temp)
             rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
             allRes <- rbind(allRes, temp)
+            statusUpdate(j, NEffects + NHostNodes + 1)
         }
         ##
         
         ## summarize posterior distibutions of base-level effects
-        for(m in sumconts) {
+        for(m in baseNames) {
             temp <- monitor(array(baseLevelEffects[,,m,],
                                   dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
                             warmup = warmup,
-                            probs = c(0.05, 0.95))
-            temp <- cbind(effect = baseNames[[m]], temp)
+                            probs = c(0.05, 0.95),
+                            print = F)
+            temp <- cbind(effect = m, temp)
             rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
             allRes <- rbind(allRes, temp)
         }
@@ -681,7 +720,8 @@ summarizeLcGLM <- function(...) {
             temp <- monitor(array(phyloLogVarMultRaw[,,j,],
                                   dim = c(NMCSamples, NChains, NMicrobeNodes)),
                             warmup = warmup,
-                            probs = c(0.05, 0.95))
+                            probs = c(0.05, 0.95),
+                            print = F)
             temp <- cbind(hostNode = colnames(hostAncestors[[i]])[[j]], temp)
             rownames(temp) <- rownames(microbeAncestors)
             allRes <- rbind(allRes, temp)
@@ -716,10 +756,12 @@ summarizeLcGLM <- function(...) {
             temp <- monitor(array(matMult[,,j,],
                                   dim = c(NMCSamples, NChains, NMicrobeNodes)),
                             warmup = warmup,
-                            probs = c(0.05, 0.95))
+                            probs = c(0.05, 0.95),
+                            print = F)
             temp <- cbind(hostNode = colnames(hostAncestors[[i]])[[j]], temp)
             rownames(temp) <- rownames(microbeAncestors)
             allRes <- rbind(allRes, temp)
+            statusUpdate(j, NHostNodes)
         }
         
         cat('microbeNode\t', file = file.path(currtabledir, 'allSummedPhyloVarianceEffects.txt'))
@@ -755,10 +797,12 @@ summarizeLcGLM <- function(...) {
             temp <- monitor(array(matMult[,,j,],
                                   dim = c(NMCSamples, NChains, NMicrobeNodes)),
                             warmup = warmup,
-                            probs = c(0.05, 0.95))
+                            probs = c(0.05, 0.95),
+                            print = F)
             temp <- cbind(hostNode = colnames(hostAncestors[[i]])[[j]], temp)
             rownames(temp) <- rownames(microbeAncestors)
             allRes <- rbind(allRes, temp)
+            statusUpdate(j, NHostNodes)
         }
         
         cat('microbeNode\t', file = file.path(currtabledir, 'parentalSummedPhyloVarianceEffects.txt'))
@@ -770,7 +814,7 @@ summarizeLcGLM <- function(...) {
         ##
         
         ## see if any host clades have higher variance among their descendants
-        sums <- summary(fit[[i]], pars = 'phyloLogVarMultADiv', probs = c(0.05,0.95), use_cache = F)
+        sums <- summary(fit[[i]], pars = 'phyloLogVarMultADiv', probs = c(0.05, 0.95), use_cache = F)
         rownames(sums$summary) <- colnames(hostAncestors[[i]])
         
         cat('hostNode\t', file = file.path(currtabledir, 'phylogeneticADivEffects.txt'))
@@ -782,7 +826,7 @@ summarizeLcGLM <- function(...) {
         ##
         
         ## see if any microbe clades have higher variance among their descendants
-        sums <- summary(fit[[i]], pars = 'phyloLogVarMultPrev', probs = c(0.05,0.95), use_cache = F)
+        sums <- summary(fit[[i]], pars = 'phyloLogVarMultPrev', probs = c(0.05, 0.95), use_cache = F)
         rownames(sums$summary) <- rownames(microbeAncestors)
         
         cat('microbeNode\t', file = file.path(currtabledir, 'phylogeneticPrevalenceEffects.txt'))
@@ -833,10 +877,12 @@ summarizeLcGLM <- function(...) {
             temp <- monitor(array(matMult[,,j,],
                                   dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
                             warmup = warmup,
-                            probs = c(0.05, 0.95))
+                            probs = c(0.05, 0.95),
+                            print = F)
             temp <- cbind(hostEffect = effectNames[[j]], temp)
             rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
             allRes <- rbind(allRes, temp)
+            statusUpdate(j, NHostNodes + NEffects + NSumTo0 + 1)
         }
         
         cat('microbeNode\t', file = file.path(currtabledir, 'allSummedNodeEffects.txt'))
@@ -864,10 +910,12 @@ summarizeLcGLM <- function(...) {
             temp <- monitor(array(matMult[,,j,],
                                   dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
                             warmup = warmup,
-                            probs = c(0.05, 0.95))
+                            probs = c(0.05, 0.95),
+                            print = F)
             temp <- cbind(hostNode = effectNames[[j]], temp)
             rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
             allRes <- rbind(allRes, temp)
+            statusUpdate(j, NHostNodes + NEffects + NSumTo0 + 1)
         }
         
         cat('microbeNode\t', file = file.path(currtabledir, 'parentalSummedNodeEffects.txt'))
@@ -914,4 +962,46 @@ makeDiagnosticPlots <- function(...) {
     
 }
 
+resample_from_prior <- function(...) {
+    outdir <- file.path(outdir, 'resampled_from_prior')
+
+    ## erase data from stan list
+    for (i in 1:NTrees) {
+        standat[[i]]$NObs <- 0
+        standat[[i]]$present <- standat[[i]]$sampleNames <- standat[[i]]$microbeTipNames <- vector()
+    }
+
+    cat('\nFitting model (sampling from prior)\n')
+    cat(paste0(as.character(Sys.time()),'\n'))
+
+    ## run the model!
+    fit <- mclapply(1:NTrees,
+        function(i) {
+            setTimeLimit(timeLimit)
+            tryCatch({
+                stan(file     = modelPath,
+                     data     = standat[[i]],
+                     control  = list(adapt_delta   = adapt_delta,
+                                     max_treedepth = max_treedepth),
+                     iter     = NIterations,
+                     thin     = thin,
+                     chains   = NChains,
+                     seed     = seed,
+                     chain_id = (NChains * (i - 1) + (1:NChains)),
+                     pars     = c('rawMicrobeNodeEffects'),
+                     include  = FALSE,
+                     init_r   = init_r)
+            }, error = function(e) NA)
+        }, mc.preschedule = F,
+           mc.cores       = NCores)
+
+    cat('\nSaving results\n')
+    cat(paste0(as.character(Sys.time()),'\n'))
+
+    save(fit, file = file.path(outdir,'fit.RData'))
+    ##
+
+    ## summarize the model fit
+    summarizeLcGLM()
+}
 ## fin

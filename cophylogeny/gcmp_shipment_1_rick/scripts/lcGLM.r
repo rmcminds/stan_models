@@ -90,6 +90,8 @@ contrastfunction <- function(dfin) {
     return(df2)
 }
 
+subsetdetails <- list(taxlevel = 'Order', taxname = 'o__Rickettsiales')
+
 ## import host phylogenies
 hostTree <- read.tree(hostTreePath)
 hostTree <- .compressTipLabel(hostTree)
@@ -112,8 +114,8 @@ newermaptemp <- droplevels(newmap[idx,])
 newermap <- contrastfunction(newermaptemp)
 ##
 
-y.old.filt <- t(apply(y.old,1,function(x) {
-    temp <- x/sum(x)
+y.old.filt <- t(apply(y.old, 1, function(x) {
+    temp <- x / sum(x)
     return(temp > minPercent & !is.na(temp))
 }))
 y.old.binary <- apply(y.old,2,function(x) x > 0)
@@ -131,24 +133,24 @@ rownames(tax) <- rownames(taxdat)
 colnames(tax) <- c('Kingdom', 'Phylum', 'Class', 'Order', 'Family', 'Genus', 'Species')
 
 
-endos <- rownames(tax[tax[,'Family'] == 'f__Endozoicimonaceae' & !is.na(tax[,'Family']),])
-myEndos <- colnames(y.binary.filtered)[colnames(y.binary.filtered) %in% endos]
-
-oceanos <- rownames(tax[tax[,'Order'] == 'o__Oceanospirillales' & !is.na(tax[,'Order']),])
-myOceanos <- colnames(y.binary.filtered)[colnames(y.binary.filtered) %in% oceanos]
-myOceanosSampled <- sample(myOceanos[!myOceanos %in% myEndos], ceiling(length(myEndos) / 20))
-
-myOthersSampled <- sample(colnames(y.binary.filtered)[!colnames(y.binary.filtered) %in% c(myEndos, myOceanos)], ceiling(length(myEndos) / 20))
-
-y.binary.filtered.endos <- y.binary.filtered[,colnames(y.binary.filtered) %in% c(myEndos, myOceanosSampled, myOthersSampled)]
-
-
-
 ## import microbe tree
 microbeTree <- read.tree(microbeTreePath)
-microbeTree.Y <- drop.tip(microbeTree, microbeTree$tip.label[!microbeTree$tip.label %in% colnames(y.binary.filtered.endos)])
 ##
 
+## filter the dataset to include only the monophyletic group of Rickettsiales plus some sampled outgroups
+rickAnc <- getMRCA(microbeTree, rownames(tax[tax[,'Family'] == 'f__Anaplasmataceae' | tax[,'Family'] == 'f__Rickettsiaceae' & !is.na(tax[,'Family']),]))
+rickTips <- microbeTree$tip.label[Descendants(microbeTree, rickAnc)[[1]]]
+
+otherRick <- rownames(tax[tax[,'Order']=='o__Rickettsiales' & !is.na(tax[,'Order']),])
+myOtherRick <- colnames(y.binary.filtered)[colnames(y.binary.filtered) %in% otherRick]
+myOtherRickSampled <- sample(myOtherRick[!myOtherRick %in% rickTips], ceiling(length(rickTips) / 20))
+
+myOthersSampled <- sample(colnames(y.binary.filtered)[!colnames(y.binary.filtered) %in% c(rickTips, myOtherRickSampled)], ceiling(length(rickTips) / 20))
+
+y.binary.filtered.subgroup <- y.binary.filtered[,colnames(y.binary.filtered) %in% c(rickTips, myOtherRickSampled,  myOthersSampled)]
+
+microbeTree.Y <- drop.tip(microbeTree, microbeTree$tip.label[!microbeTree$tip.label %in% colnames(y.binary.filtered.subgroup)])
+##
 
 
 ## root the tree if it's unrooted
@@ -172,13 +174,13 @@ if(is.null(finalMicrobeTree$edge.length)) {
 
 
 ## summarize the putative taxa to be estimated
-microbes <- factor(colnames(y.binary.filtered.endos), levels = finalMicrobeTree$tip.label)
+microbes <- factor(colnames(y.binary.filtered.subgroup), levels = finalMicrobeTree$tip.label)
 microbeNames <- levels(microbes)
 NMicrobeTips <- length(microbeNames)
 ##
 
 ## sort the OTU table so its entries match the tree's tip labels
-y <- y.binary.filtered.endos[,microbeNames]
+y <- y.binary.filtered.subgroup[,microbeNames]
 ##
 
 ## generate some summary numbers regarding microbes
@@ -344,7 +346,7 @@ for (i in 1:NTrees) {
                          sampleNames                    = sampleNames,
                          microbeTipNames                = microbeTipNames,
                          factLevelMat                   = factLevelMat,
-                         modelMat                       = cbind(modelMat, hostAncestorsExpanded[[i]]),
+                         modelMat                       = cbind(cbind(1, modelMat), hostAncestorsExpanded[[i]]),
                          NSumTo0                        = NSumTo0,
                          baseLevelMat                   = baseLevelMat,
                          microbeAncestorsT              = t(microbeAncestors),
@@ -408,8 +410,5 @@ save(fit, file = file.path(outdir,'fit.RData'))
 
 ## summarize the model fit
 summarizeLcGLM()
-
-## re-fit the model but ignore all data (sampling from prior to see if there are any biases)
-resample_from_prior()
 
 ## fin
