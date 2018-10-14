@@ -346,7 +346,7 @@ for (i in 1:NTrees) {
                          sampleNames                    = sampleNames,
                          microbeTipNames                = microbeTipNames,
                          factLevelMat                   = factLevelMat,
-                         modelMat                       = cbind(cbind(1, modelMat), hostAncestorsExpanded[[i]]),
+                         modelMat                       = cbind(modelMat, hostAncestorsExpanded[[i]]),
                          NSumTo0                        = NSumTo0,
                          baseLevelMat                   = baseLevelMat,
                          microbeAncestorsT              = t(microbeAncestors),
@@ -410,5 +410,8 @@ save(fit, file = file.path(outdir,'fit.RData'))
 
 ## summarize the model fit
 summarizeLcGLM()
+
+## re-fit the model but ignore all data (sampling from prior to see if there are any biases)
+resample_from_prior()
 
 ## fin

@@ -493,8 +493,8 @@ summarizeLcGLM <- function(...) {
         save(stDProps, file = file.path(currdatadir, 'stDProps.RData'))
         
         stDPropsPlot <- NULL
-        for(i in 1:NChains) {
-            stDPropsPlot <- rbind(stDPropsPlot, stDProps[(warmup + 1):NMCSamples, i,])
+        for(j in 1:NChains) {
+            stDPropsPlot <- rbind(stDPropsPlot, stDProps[(warmup + 1):NMCSamples, j,])
         }
         colnames(stDPropsPlot) <- gsub('_',
                                        ' ',
@@ -538,8 +538,8 @@ summarizeLcGLM <- function(...) {
                                                           'ADiv',
                                                           'Specificty')))
         metaVarPropsPlot <- NULL
-        for(i in 1:NChains) {
-            metaVarPropsPlot <- rbind(metaVarPropsPlot, metaVarProps[(warmup + 1):NMCSamples, i,])
+        for(j in 1:NChains) {
+            metaVarPropsPlot <- rbind(metaVarPropsPlot, metaVarProps[(warmup + 1):NMCSamples, j,])
         }
         pdf(file = file.path(currplotdir, 'metaVarProps_boxes.pdf'), width = 7, height = 7)
         boxplot(metaVarPropsPlot, cex.axis = 0.5, las = 2)
@@ -562,8 +562,8 @@ summarizeLcGLM <- function(...) {
                                                         'ADiv',
                                                         'Specificty')))
         metaScalesPlot <- NULL
-        for(i in 1:NChains) {
-            metaScalesPlot <- rbind(metaScalesPlot, metaScales[(warmup + 1):NMCSamples, i,])
+        for(j in 1:NChains) {
+            metaScalesPlot <- rbind(metaScalesPlot, metaScales[(warmup + 1):NMCSamples, j,])
         }
         pdf(file = file.path(currplotdir, 'metaScales_boxes.pdf'), width = 7, height = 7)
         boxplot(metaScalesPlot, cex.axis = 0.5, las = 2)
