@@ -368,7 +368,13 @@ cat(paste0(as.character(Sys.time()),'\n'))
 save(fit, file = file.path(outdir,'fit.RData'))
 ##
 
-## summarize the model fit
-summarizeLcGLM()
+## summarize the model fit (each tree individually)
+summarizeLcGLM(separateTrees = T, combineTrees = F)
+
+## summarize the model fit (all trees combined)
+summarizeLcGLM(separateTrees = F, combineTrees = T)
+
+## re-fit the model but ignore all data (sampling from prior to see if there are any biases)
+resample_from_prior()
 
 ## fin
