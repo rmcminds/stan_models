@@ -22,7 +22,7 @@ makeParentMat <- function(NNodes, tree, NTips, tipNames) {
 
 statusUpdate <- function(iter, N) {
     if(iter == round(N / 4)) {
-        cat('\n25%...')
+        cat('\t25%...')
     } else if(iter == round(N / 2)) {
         cat('50%...')
     } else if (iter == round(3 * N / 4)) {
@@ -79,7 +79,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
         dir.create(currtabledir, recursive = T)
         dir.create(currdatadir, recursive = T)
         
-        cat('\nSummarizing effects of all trees combined\n')
+        cat('\nSummarizing effects of all trees combined:\n')
         cat(paste0(as.character(Sys.time()), '\n'))
 
         allfit <- sflist2stanfit(fit[fitModes == 0])
@@ -248,7 +248,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
         save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
         ##
         
-        cat('\nSummarizing node effects\n')
+        cat('\n\tNode effects\n\t')
         cat(paste0(as.character(Sys.time()), '\n'))
 
         ## summarize posterior distributions of effects
@@ -266,9 +266,6 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
         }
         ##
         
-        cat('\nSummarizing base-level node effects\n')
-        cat(paste0(as.character(Sys.time()), '\n'))
-
         ## summarize posterior distibutions of base-level effects
         for(m in baseNames) {
             temp <- monitor(array(baseLevelEffects[,,m,],
@@ -331,7 +328,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             }
         }
 
-        cat('\nSummarizing summed node effects\n')
+        cat('\n\tSummed node effects\n\t')
         cat(paste0(as.character(Sys.time()), '\n'))
         
         allRes <- NULL
@@ -369,7 +366,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             }
         }
 
-        cat('\nSummarizing parent-summed node effects\n')
+        cat('\n\tParent-summed node effects\n\t')
         cat(paste0(as.character(Sys.time()), '\n'))
         
         allRes <- NULL
@@ -407,7 +404,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             }
         }
 
-        cat('\nSummarizing grandparent-summed node effects\n')
+        cat('\n\tGrandparent-summed node effects\n\t')
         cat(paste0(as.character(Sys.time()), '\n'))
         
         allRes <- NULL
@@ -445,7 +442,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
                 next
             }
             
-            cat(paste0('\nTree ', i, '\n'))
+            cat(paste0('\nSummarizing Tree ', i, ':\n'))
             cat(paste0(as.character(Sys.time()), '\n'))
             
             sink(stdout(), type = "message")
@@ -544,7 +541,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             }
             ##
 
-            cat('\nSummarizing raw variance estimates\n')
+            cat('\n\tRaw variance estimates\n\t')
             cat(paste0(as.character(Sys.time()), '\n'))
             
             ## variance partitioning
@@ -593,7 +590,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             graphics.off()
             ##
             
-            cat('\nSummarizing raw meta-variance estimates\n')
+            cat('\n\tRaw meta-variance estimates\n\t')
             cat(paste0(as.character(Sys.time()), '\n'))
             
             ## meta-variance partitioning
@@ -657,83 +654,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             save(OUAlphas, file = file.path(currdatadir, 'OUAlphas.RData'))
             ##
             
-            cat('\nSummarizing raw node effects\n')
-            cat(paste0(as.character(Sys.time()), '\n'))
-            
-            ## extract effects from model
-            scaledMicrobeNodeEffects <- array(extract(fit[[i]],
-                                                      pars       = 'scaledMicrobeNodeEffects',
-                                                      permuted   = F,
-                                                      inc_warmup = T),
-                                              dim = c(NMCSamples,
-                                                      NChains,
-                                                      NEffects + NHostNodes + 1,
-                                                      NMicrobeNodes + 1),
-                                              dimnames = list(sample  = NULL,
-                                                              chain   = NULL,
-                                                              effect  = c('microbePrevalence',
-                                                                          colnames(modelMat)[2:(NEffects + 1)],
-                                                                          paste0('host_', colnames(hostAncestors[[i]]))),
-                                                              taxnode = c('alphaDiversity', colnames(microbeAncestors))))
-                                                            
-            save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
-            ##
-            
-            ## calculate base-level effects (negative sum of all others in category)
-            baseLevelEffects <- array(extract(fit[[i]],
-                                              pars = 'baseLevelEffects',
-                                              permuted = F,
-                                              inc_warmup = T),
-                                      dim = c(NMCSamples,
-                                              NChains,
-                                              NSumTo0,
-                                              NMicrobeNodes + 1),
-                                      dimnames = list(sample  = NULL,
-                                                      chain   = NULL,
-                                                      effect  = baseNames,
-                                                      taxnode = c('alphaDiversity', colnames(microbeAncestors))))
-            
-            save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
-            ##
-
-            ## summarize posterior distributions of effects
-            allRes <- NULL
-            for(j in 1:(NEffects + NHostNodes + 1)) {
-                temp <- monitor(array(scaledMicrobeNodeEffects[,,j,],
-                                      dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
-                                warmup = warmup,
-                                probs  = c(0.05, 0.95),
-                                print = F)
-                temp <- cbind(effect = dimnames(scaledMicrobeNodeEffects)[[3]][j], temp)
-                rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
-                allRes <- rbind(allRes, temp)
-                statusUpdate(j, NEffects + NHostNodes + 1)
-            }
-            ##
-            
-            ## summarize posterior distibutions of base-level effects
-            for(m in baseNames) {
-                temp <- monitor(array(baseLevelEffects[,,m,],
-                                      dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
-                                warmup = warmup,
-                                probs = c(0.05, 0.95),
-                                print = F)
-                temp <- cbind(effect = m, temp)
-                rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
-                allRes <- rbind(allRes, temp)
-            }
-            ##
-            
-            ## write posterior summaries of effects to file
-            cat('microbeNode\t', file = file.path(currtabledir, 'nodeEffects.txt'))
-            write.table(allRes,
-                        file   = file.path(currtabledir, 'nodeEffects.txt'),
-                        sep    = '\t',
-                        quote  = F,
-                        append = T)
-            ##
-            
-            cat('\nSummarizing raw variance modifiers\n')
+            cat('\n\tRaw variance modifiers\n\t')
             cat(paste0(as.character(Sys.time()), '\n'))
             
             ## extract variance modifier terms from the fit model
@@ -812,7 +733,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
                         append = T)
             ##
             
-            cat('\nSummarizing summed variance modifiers\n')
+            cat('\n\tSummed variance modifiers\n\t')
             cat(paste0(as.character(Sys.time()), '\n'))
             
             ## since the model has many degrees of freedom, it's possible that certain regions of the tree have 'significant' effects but that those effects are 'implemented' via different, nearby nodes in each iteration. We can sum the effects of all ancestral nodes to see if a given node is consistently influenced by all of itself plus its ancestral terms, even if all of those terms are individually inconsistent
@@ -843,7 +764,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
                 for(k in 1:NChains) {
                     matMult[j,k,,] <- hostMat[c(1, (NEffects + 2):(NEffects + NHostNodes + 1)),
                                               c(1, (NEffects + 2):(NEffects + NHostNodes + 1))] %*%
-                                      phyloLogVarMultScaled %*%
+                                      phyloLogVarMultScaled[j,k,,] %*%
                                       microbeMat
                 }
             }
@@ -870,7 +791,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
                         append = T)
             ##
             
-            cat('\nSummarizing sums of node and parent node variance modifiers\n')
+            cat('\n\tSums of node and parent node variance modifiers\n\t')
             cat(paste0(as.character(Sys.time()), '\n'))
             
             ## we can also sum the effects of just a node and its parent, as a bit of a middle-ground approach to see whether a given node is significantly different from its grandparent instead of its parent or instead of the overall mean
@@ -884,7 +805,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             for(j in 1:NMCSamples) {
                 for(k in 1:NChains) {
                     matMult[j,k,,] <- hostParents[[i]] %*%
-                                      phyloLogVarMultScaled %*%
+                                      phyloLogVarMultScaled[j,k,,] %*%
                                       microbeParentsT
                 }
             }
@@ -911,7 +832,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
                         append = T)
             ##
             
-            cat('\nSummarizing sums of node, parent, and grandparent node variance modifiers\n')
+            cat('\n\tSums of node, parent, and grandparent node variance modifiers\n\t')
             cat(paste0(as.character(Sys.time()), '\n'))
             
             ## or a node, its parent, and its grandparent
@@ -920,7 +841,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             for(j in 1:NMCSamples) {
                 for(k in 1:NChains) {
                     matMult[j,k,,] <- hostGrandparents[[i]] %*%
-                                      phyloLogVarMultScaled %*%
+                                      phyloLogVarMultScaled[j,k,,] %*%
                                       microbeGrandparentsT
                 }
             }
@@ -928,7 +849,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             allRes <- NULL
             for(j in 1:(NHostNodes + 1)) {
                 temp <- monitor(array(matMult[,,j,],
-                                      dim = c(NMCSamples, NChains, NMicrobeNodes)),
+                                      dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
                                 warmup = warmup,
                                 probs = c(0.05, 0.95),
                                 print = F)
@@ -942,6 +863,82 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             cat('microbeNode\t', file = file.path(currtabledir, 'grandparentalSummedPhyloVarianceEffects.txt'))
             write.table(allRes,
                         file   = file.path(currtabledir, 'grandparentalSummedPhyloVarianceEffects.txt'),
+                        sep    = '\t',
+                        quote  = F,
+                        append = T)
+            ##
+            
+            cat('\n\tRaw node effects\n\t')
+            cat(paste0(as.character(Sys.time()), '\n'))
+            
+            ## extract effects from model
+            scaledMicrobeNodeEffects <- array(extract(fit[[i]],
+                                                      pars       = 'scaledMicrobeNodeEffects',
+                                                      permuted   = F,
+                                                      inc_warmup = T),
+                                              dim = c(NMCSamples,
+                                                      NChains,
+                                                      NEffects + NHostNodes + 1,
+                                                      NMicrobeNodes + 1),
+                                              dimnames = list(sample  = NULL,
+                                                              chain   = NULL,
+                                                              effect  = c('microbePrevalence',
+                                                                          colnames(modelMat)[2:(NEffects + 1)],
+                                                                          paste0('host_', colnames(hostAncestors[[i]]))),
+                                                              taxnode = c('alphaDiversity', colnames(microbeAncestors))))
+                                                            
+            save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
+            ##
+            
+            ## calculate base-level effects (negative sum of all others in category)
+            baseLevelEffects <- array(extract(fit[[i]],
+                                              pars = 'baseLevelEffects',
+                                              permuted = F,
+                                              inc_warmup = T),
+                                      dim = c(NMCSamples,
+                                              NChains,
+                                              NSumTo0,
+                                              NMicrobeNodes + 1),
+                                      dimnames = list(sample  = NULL,
+                                                      chain   = NULL,
+                                                      effect  = baseNames,
+                                                      taxnode = c('alphaDiversity', colnames(microbeAncestors))))
+            
+            save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
+            ##
+
+            ## summarize posterior distributions of effects
+            allRes <- NULL
+            for(j in 1:(NEffects + NHostNodes + 1)) {
+                temp <- monitor(array(scaledMicrobeNodeEffects[,,j,],
+                                      dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
+                                warmup = warmup,
+                                probs  = c(0.05, 0.95),
+                                print = F)
+                temp <- cbind(effect = dimnames(scaledMicrobeNodeEffects)[[3]][j], temp)
+                rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
+                allRes <- rbind(allRes, temp)
+                statusUpdate(j, NEffects + NHostNodes + 1)
+            }
+            ##
+            
+            ## summarize posterior distibutions of base-level effects
+            for(m in baseNames) {
+                temp <- monitor(array(baseLevelEffects[,,m,],
+                                      dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
+                                warmup = warmup,
+                                probs = c(0.05, 0.95),
+                                print = F)
+                temp <- cbind(effect = m, temp)
+                rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
+                allRes <- rbind(allRes, temp)
+            }
+            ##
+            
+            ## write posterior summaries of effects to file
+            cat('microbeNode\t', file = file.path(currtabledir, 'nodeEffects.txt'))
+            write.table(allRes,
+                        file   = file.path(currtabledir, 'nodeEffects.txt'),
                         sep    = '\t',
                         quote  = F,
                         append = T)
@@ -965,7 +962,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
                                                              colnames(microbeAncestors))))
             ##
             
-            cat('\nSummarizing summed node effects\n')
+            cat('\n\tSummed node effects\n\t')
             cat(paste0(as.character(Sys.time()), '\n'))
             
             ## since the model has many degrees of freedom, it's possible that certain regions of the tree have 'significant' effects but that those effects are 'implemented' via different, nearby nodes in each iteration. We can sum the effects of all ancestral nodes to see if a given node is consistently influenced by all of itself plus its ancestral terms, even if all of those terms are individually inconsistent
@@ -999,7 +996,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
                         append = T)
             ##
             
-            cat('\nSummarizing sums of node and parent node effects\n')
+            cat('\n\tSums of node and parent node effects\n\t')
             cat(paste0(as.character(Sys.time()), '\n'))
             
             ## we can also sum the effects of just a node and its parent, as a bit of a middle-ground approach to see whether a given node is significantly different from its grandparent instead of its parent or instead of the overall mean
@@ -1037,7 +1034,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
                         append = T)
             ##
             
-            cat('\nSummarizing sums of node, parent, and grandparent node effects\n')
+            cat('\n\tSums of node, parent, and grandparent node effects\n\t')
             cat(paste0(as.character(Sys.time()), '\n'))
             
             ## or a node, its parent, and its grandparent
