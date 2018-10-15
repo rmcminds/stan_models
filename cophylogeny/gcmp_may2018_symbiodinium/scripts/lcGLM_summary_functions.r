@@ -774,29 +774,24 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
                                                         hostnode = colnames(hostAncestors[[i]]),
                                                         microbenode = colnames(microbeAncestors)))
             save(phyloLogVarMultRaw, file = file.path(currdatadir, 'phyloLogVarMultRaw.RData'))
-            
-            matMult <- array(NA,
-                             dim = c(NMCSamples,
-                                     NChains,
-                                     NHostNodes + 1,
-                                     NMicrobeNodes + 1),
-                             dimnames = list(sample = NULL,
-                                             chain = NULL,
-                                             hostnode = c('microbePrevalence', colnames(hostAncestors[[i]])),
-                                             microbenode = c('alphaDiversity', colnames(microbeAncestors))))
             ##
+            
+            phyloLogVarMultScaled <- rbind(c(0,
+                                             phyloLogVarMultPrev[j,k,] * metaScales[j,k,1]),
+                                           cbind(phyloLogVarMultADiv[j,k,] * metaScales[j,k,2],
+                                                 phyloLogVarMultRaw[j,k,,] * metaScales[j,k,3]))
             
             ## see if any clades have higher variance among their descendants (maybe suggesting codiversification)
             allRes <- NULL
             for(j in 1:(NHostNodes + 1)) {
-                temp <- monitor(array(phyloLogVarMultRaw[,,j,],
-                                      dim = c(NMCSamples, NChains, NMicrobeNodes)),
+                temp <- monitor(array(phyloLogVarMultScaled[,,j,],
+                                      dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
                                 warmup = warmup,
                                 probs = c(0.05, 0.95),
                                 print = F)
                 temp <- cbind(hostNode = c('microbePrevalence',
                                            paste0('host_', colnames(hostAncestors[[i]])))[[j]], temp)
-                rownames(temp) <- rownames(microbeAncestors)
+                rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
                 allRes <- rbind(allRes, temp)
             }
             
@@ -825,14 +820,21 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             ##
             
             ## sum the effects
+            matMult <- array(NA,
+                 dim = c(NMCSamples,
+                         NChains,
+                         NHostNodes + 1,
+                         NMicrobeNodes + 1),
+                 dimnames = list(sample = NULL,
+                                 chain = NULL,
+                                 hostnode = c('microbePrevalence', colnames(hostAncestors[[i]])),
+                                 microbenode = c('alphaDiversity', colnames(microbeAncestors))))
+                                             
             for(j in 1:NMCSamples) {
                 for(k in 1:NChains) {
                     matMult[j,k,,] <- hostMat[c(1, (NEffects + 2):(NEffects + NHostNodes + 1)),
                                               c(1, (NEffects + 2):(NEffects + NHostNodes + 1))] %*%
-                                      rbind(c(0,
-                                              phyloLogVarMultPrev[j,k,] * metaScales[j,k,1]),
-                                            cbind(phyloLogVarMultADiv[j,k,] * metaScales[j,k,2],
-                                                  phyloLogVarMultRaw[j,k,,] * metaScales[j,k,3])) %*%
+                                      phyloLogVarMultScaled %*%
                                       microbeMat
                 }
             }
@@ -840,13 +842,13 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             allRes <- NULL
             for(j in 1:(NHostNodes + 1)) {
                 temp <- monitor(array(matMult[,,j,],
-                                      dim = c(NMCSamples, NChains, NMicrobeNodes)),
+                                      dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
                                 warmup = warmup,
                                 probs = c(0.05, 0.95),
                                 print = F)
                 temp <- cbind(hostNode = c('microbePrevalence',
                                            paste0('host_', colnames(hostAncestors[[i]])))[[j]], temp)
-                rownames(temp) <- rownames(microbeAncestors)
+                rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
                 allRes <- rbind(allRes, temp)
                 statusUpdate(j, NHostNodes)
             }
@@ -873,10 +875,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             for(j in 1:NMCSamples) {
                 for(k in 1:NChains) {
                     matMult[j,k,,] <- hostParents[[i]] %*%
-                                      rbind(c(0,
-                                              phyloLogVarMultPrev[j,k,] * metaScales[j,k,1]),
-                                            cbind(phyloLogVarMultADiv[j,k,] * metaScales[j,k,2],
-                                                  phyloLogVarMultRaw[j,k,,] * metaScales[j,k,3])) %*%
+                                      phyloLogVarMultScaled %*%
                                       microbeParentsT
                 }
             }
@@ -884,13 +883,13 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             allRes <- NULL
             for(j in 1:(NHostNodes + 1)) {
                 temp <- monitor(array(matMult[,,j,],
-                                      dim = c(NMCSamples, NChains, NMicrobeNodes)),
+                                      dim = c(NMCSamples, NChains, NMicrobeNodes + 1)),
                                 warmup = warmup,
                                 probs = c(0.05, 0.95),
                                 print = F)
                 temp <- cbind(hostNode = c('microbePrevalence',
                                            paste0('host_', colnames(hostAncestors[[i]])))[[j]], temp)
-                rownames(temp) <- rownames(microbeAncestors)
+                rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
                 allRes <- rbind(allRes, temp)
                 statusUpdate(j, NHostNodes)
             }
@@ -912,10 +911,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             for(j in 1:NMCSamples) {
                 for(k in 1:NChains) {
                     matMult[j,k,,] <- hostGrandparents[[i]] %*%
-                                      rbind(c(0,
-                                              phyloLogVarMultPrev[j,k,] * metaScales[j,k,1]),
-                                            cbind(phyloLogVarMultADiv[j,k,] * metaScales[j,k,2],
-                                                  phyloLogVarMultRaw[j,k,,] * metaScales[j,k,3])) %*%
+                                      phyloLogVarMultScaled %*%
                                       microbeGrandparentsT
                 }
             }
@@ -929,7 +925,7 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
                                 print = F)
                 temp <- cbind(hostNode = c('microbePrevalence',
                                            paste0('host_', colnames(hostAncestors[[i]])))[[j]], temp)
-                rownames(temp) <- rownames(microbeAncestors)
+                rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
                 allRes <- rbind(allRes, temp)
                 statusUpdate(j, NHostNodes)
             }
