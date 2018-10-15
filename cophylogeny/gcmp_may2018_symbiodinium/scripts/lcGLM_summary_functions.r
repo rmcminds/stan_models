@@ -776,10 +776,19 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             save(phyloLogVarMultRaw, file = file.path(currdatadir, 'phyloLogVarMultRaw.RData'))
             ##
             
-            phyloLogVarMultScaled <- rbind(c(0,
-                                             phyloLogVarMultPrev[j,k,] * metaScales[j,k,1]),
-                                           cbind(phyloLogVarMultADiv[j,k,] * metaScales[j,k,2],
-                                                 phyloLogVarMultRaw[j,k,,] * metaScales[j,k,3]))
+            phyloLogVarMultScaled <- array(NA,
+                                           dim = c(NMCSamples,
+                                                   NChains,
+                                                   NHostNodes,
+                                                   NMicrobeNodes))
+            for(j in 1:NMCSamples) {
+                for(k in 1:NChains) {
+                    phyloLogVarMultScaled[j,k,,] <- rbind(c(0,
+                                                           phyloLogVarMultPrev[j,k,] * metaScales[j,k,1]),
+                                                         cbind(phyloLogVarMultADiv[j,k,] * metaScales[j,k,2],
+                                                               phyloLogVarMultRaw[j,k,,] * metaScales[j,k,3]))
+                }
+            }
             
             ## see if any clades have higher variance among their descendants (maybe suggesting codiversification)
             allRes <- NULL
@@ -933,30 +942,6 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             cat('microbeNode\t', file = file.path(currtabledir, 'grandparentalSummedPhyloVarianceEffects.txt'))
             write.table(allRes,
                         file   = file.path(currtabledir, 'grandparentalSummedPhyloVarianceEffects.txt'),
-                        sep    = '\t',
-                        quote  = F,
-                        append = T)
-            ##
-            
-            ## see if any host clades have higher variance among their descendants
-            sums <- summary(fit[[i]], pars = 'phyloLogVarMultADiv', probs = c(0.05, 0.95), use_cache = F)
-            rownames(sums$summary) <- colnames(hostAncestors[[i]])
-            
-            cat('hostNode\t', file = file.path(currtabledir, 'phylogeneticADivEffects.txt'))
-            write.table(sums$summary,
-                        file   = file.path(currtabledir, 'phylogeneticADivEffects.txt'),
-                        sep    = '\t',
-                        quote  = F,
-                        append = T)
-            ##
-            
-            ## see if any microbe clades have higher variance among their descendants
-            sums <- summary(fit[[i]], pars = 'phyloLogVarMultPrev', probs = c(0.05, 0.95), use_cache = F)
-            rownames(sums$summary) <- rownames(microbeAncestors)
-            
-            cat('microbeNode\t', file = file.path(currtabledir, 'phylogeneticPrevalenceEffects.txt'))
-            write.table(sums$summary,
-                        file   = file.path(currtabledir, 'phylogeneticPrevalenceEffects.txt'),
                         sep    = '\t',
                         quote  = F,
                         append = T)
