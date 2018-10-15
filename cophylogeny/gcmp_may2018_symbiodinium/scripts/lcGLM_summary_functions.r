@@ -779,8 +779,8 @@ summarizeLcGLM <- function(combineTrees = T, separateTrees = T, ...) {
             phyloLogVarMultScaled <- array(NA,
                                            dim = c(NMCSamples,
                                                    NChains,
-                                                   NHostNodes,
-                                                   NMicrobeNodes))
+                                                   NHostNodes + 1,
+                                                   NMicrobeNodes + 1))
             for(j in 1:NMCSamples) {
                 for(k in 1:NChains) {
                     phyloLogVarMultScaled[j,k,,] <- rbind(c(0,
