@@ -13,8 +13,7 @@ library(ggplot2)
 library(RColorBrewer)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
-source(file.path('scripts', 'lcGLM_preparation_functions.r'))
-source(file.path('scripts', 'lcGLM_summary_functions.r'))
+source(file.path('scripts', 'lcGLM_functions.r'))
 
 
 microbeTreePath <- 'raw_data/gg_constrained_fastttree.tre' #ML microbial phylogeny
