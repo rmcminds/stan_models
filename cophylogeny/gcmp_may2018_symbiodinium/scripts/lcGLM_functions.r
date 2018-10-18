@@ -65,6 +65,12 @@ summarizeLcGLM <- function(combineTrees  = T,
                            sumScales     = T,
                            sumVarMods    = T,
                            sumEffects    = T,
+                           contrasts     = list(vsParent      = list(host    = diag(),
+                                                                     microbe = diag()),
+                                                vsGrandparent = list(host    = hostParentMat,
+                                                                     microbe = microbeParentMat),
+                                                vsRoot        = list(host    = hostAllSumMat,
+                                                                     microbe = microbeAllSumMat)),
                            ...) {
     
     fitModes <- sapply(fit, function(x) x@mode)
