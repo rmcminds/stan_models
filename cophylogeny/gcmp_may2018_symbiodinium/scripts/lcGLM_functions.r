@@ -74,26 +74,17 @@ summarizeLcGLM <- function(combineTrees  = T,
                                  finalMicrobeTree,
                                  NMicrobeTips,
                                  microbeTips)
-                                 
     microbeParentsT <- t(microbeP.GP$parentMat)
     microbeGrandparentsT <- t(microbeP.GP$grandparentMat)
-
-    hostP.GP <- list()
-    hostP.GP[[1]] <- makeParentMat(NHostNodes,
-                                   hostTreesSampled[[1]],
-                                   NHostTips,
-                                   hostTreesSampled[[1]]$tip.label)
-    
-    hostParents <- list()
-    hostParents[[1]] <- hostP.GP[[1]]$parentMat
-    hostGrandparents <- list()
-    hostGrandparents[[1]] <- hostP.GP[[1]]$grandparentMat
-    
     microbeAncestorsT <- t(microbeAncestors)
     microbeMat <- matrix(0, nrow = NMicrobeNodes + 1, ncol = NMicrobeNodes + 1)
     microbeMat[1, 1] <- 1
     microbeMat[2:(NMicrobeNodes + 1), 2:(NMicrobeNodes + 1)] <- microbeAncestorsT
 
+    hostP.GP <- list()
+    hostParents <- list()
+    hostGrandparents <- list()
+    
     colorpal <- colorRampPalette(brewer.pal(9, 'Blues'))
     plotcolors <- c('white', colorpal(100), 'black')
     
