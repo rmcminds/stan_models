@@ -3,8 +3,8 @@ functions {
         matrix[rows(pm), 2] newNHs = rep_matrix(0, rows(pm), 2);
         for (row in 1:(rows(pm) - NTips)) {
             newNHs[NTips + row, 1] = pm[NTips + row,] * newNHs[,2];
-            newNHs[NTips + row, 2] = inv_logit(logitNH[row])
-                                     * (1 - newNHs[NTips + row, 1])
+            newNHs[NTips + row, 2] = exp(log_inv_logit(logitNH[row])
+                                         + log(1 - newNHs[NTips + row, 1]))
                                      + newNHs[NTips + row, 1];
         }
         for (row in 1:NTips) {
