@@ -1,3 +1,6 @@
+logit <- function(x) { log(x / (1 - x)) }
+inv_logit <- function(x) { 1 / (1 + exp(-x)) }
+
 createAncestryMat <- function(NNodes, tree, NTips, tipNames) {
     ancestryMat <- matrix(0, NNodes + 1, NNodes + 1)
     for(node in 1:(NNodes + 1)) {
@@ -11,17 +14,22 @@ createAncestryMat <- function(NNodes, tree, NTips, tipNames) {
 
 getTreeDetails <- function(tree) {
     edgeOrder <- order(tree$edge[,2])
+    edgeLengths <- tree$edge.length[edgeOrder]
     NHs <- nodeHeights(tree)
     maxNHs <- max(NHs)
     NHRel <- NHs / maxNHs
     rownames(NHRel) <- tree$edge[,2]
     NHRel <- NHRel[edgeOrder,]
-    edgeLengths <- tree$edge.length[edgeOrder]
+    logitNH <- logit(apply(NHRel[(length(tree$tip.label) + 1):(length(tree$tip.label) + tree$Nnode - 1),], 1, function(x) (x[[2]] - x[[1]]) / (1 - x[[1]])))
+    pm <- makeParentMat(tree$Nnode - 1 + length(tree$tip.label), tree, length(tree$tip.label), tree$tip.label)[-1, -1]
+
     return(list(edgeOrder   = edgeOrder,
                 NHs         = NHs,
                 maxNHs      = maxNHs,
                 NHRel       = NHRel,
-                edgeLengths = edgeLengths))
+                edgeLengths = edgeLengths,
+                logitNH     = logitNH,
+                pm          = pm))
 }
 
 makeIdentityMat <- function(NNodes, ...) {

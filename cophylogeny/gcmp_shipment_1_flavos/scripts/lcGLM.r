@@ -38,6 +38,8 @@ aveStDPriorExpect <- 1.0
 aveStDMetaPriorExpect <- 0.1
 hostOUAlphaPriorExpect <- 1.0
 microbeOUAlphaPriorExpect <- 1.0
+stDLogitHostPriorExpect <- 0.1
+stDLogitMicrobePriorExpect <- 0.1
 globalScale <- 50
 NTrees <- 1 ## number of random trees to sample and to fit the model to
 modelform <- ~ ocean + ocean_area + reef_name + concatenated_date + colony_name + tissue_compartment + log_sequencing_depth_scaled
@@ -350,8 +352,12 @@ for (i in 1:NTrees) {
                          microbeTipAncestorsT           = t(cbind(1, microbeAncestors[1:NMicrobeTips, ])),
                          hostAncestors                  = hostAncestors[[i]],
                          hostTipAncestors               = hostAncestors[[i]][1:NHostTips, ],
-                         hostNodeHeights                = hostTreeDetails[[i]]$NHRel,
-                         microbeNodeHeights             = microbeTreeDetails$NHRel,
+                         microbeParents                 = microbeTreeDetails$pm,
+                         hostParents                    = hostTreeDetails[[i]]$pm,
+                         hostLogitNH                    = hostTreeDetails[[i]]$logitNH,
+                         microbeLogitNH                 = microbeTreeDetails$logitNH,
+                         stDLogitHostPriorExpect        = stDLogitHostPriorExpect,
+                         stDLogitMicrobePriorExpect     = stDLogitMicrobePriorExpect,
                          NHostNodes                     = NHostNodes,
                          aveStDPriorExpect              = aveStDPriorExpect,
                          aveStDMetaPriorExpect          = aveStDMetaPriorExpect,
