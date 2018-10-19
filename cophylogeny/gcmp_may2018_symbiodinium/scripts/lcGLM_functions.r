@@ -24,26 +24,45 @@ getTreeDetails <- function(tree) {
                 edgeLengths = edgeLengths))
 }
 
-makeParentMat <- function(NNodes, tree, NTips, tipNames) {
+makeIdentityMat <- function(NNodes, ...) {
+    idMat <- diag(NNodes + 1)
+    return(idMat)
+}
+
+makeParentMat <- function(NNodes, tree, NTips, tipNames, ...) {
     parentMat <- matrix(0, NNodes + 1, NNodes + 1)
-    grandparentMat <- matrix(0, NNodes + 1, NNodes + 1)
     for(node in 1:(NNodes + 1)) {
         p <- Ancestors(tree, node, 'parent')
         parentMat[node, ] <- as.numeric(1:(NNodes + 1) %in% c(p, node))
-        grandparentMat[node, ] <- as.numeric(1:(NNodes + 1) %in% c(Ancestors(tree, p, 'parent'), p, node))
     }
     colnames(parentMat) <- rownames(parentMat) <- paste0('i', 1:(NNodes + 1))
     colnames(parentMat)[1:NTips] <- rownames(parentMat)[1:NTips] <- paste0('t', tipNames)
     parentMat <- cbind(0, parentMat[-(NTips + 1), -(NTips + 1)])
     parentMat <- rbind(c(1, rep(0, ncol(parentMat) - 1)), parentMat)
     
+    return(parentMat)
+}
+
+makeGrandparentMat <- function(NNodes, tree, NTips, tipNames, ...) {
+    grandparentMat <- matrix(0, NNodes + 1, NNodes + 1)
+    for(node in 1:(NNodes + 1)) {
+        p <- Ancestors(tree, node, 'parent')
+        grandparentMat[node, ] <- as.numeric(1:(NNodes + 1) %in% c(Ancestors(tree, p, 'parent'), p, node))
+    }
+
     colnames(grandparentMat) <- rownames(grandparentMat) <- paste0('i', 1:(NNodes + 1))
     colnames(grandparentMat)[1:NTips] <- rownames(grandparentMat)[1:NTips] <- paste0('t', tipNames)
     grandparentMat <- cbind(0, grandparentMat[-(NTips + 1), -(NTips + 1)])
     grandparentMat <- rbind(c(1, rep(0, ncol(grandparentMat) - 1)), grandparentMat)
     
-    return(list(parentMat      = parentMat,
-                grandparentMat = grandparentMat))
+    return(grandparentMat)
+}
+
+makeRootMat <- function(NNodes, tree, NTips, tipNames, ...) {
+    idMat <- matrix(0, nrow = NNodes + 1, ncol = NNodes + 1)
+    idMat[1, 1] <- 1
+    idMat[2:(NNodes + 1), 2:(NNodes + 1)] <- createAncestryMat(NNodes, tree, NTips, tipNames)
+    return(idMat)
 }
 
 statusUpdate <- function(iter, N) {
@@ -65,41 +84,20 @@ summarizeLcGLM <- function(combineTrees  = T,
                            sumScales     = T,
                            sumVarMods    = T,
                            sumEffects    = T,
-                           contrasts     = list(vsParent      = list(host    = diag(),
-                                                                     microbe = diag()),
-                                                vsGrandparent = list(host    = hostParentMat,
-                                                                     microbe = microbeParentMat),
-                                                vsRoot        = list(host    = hostAllSumMat,
-                                                                     microbe = microbeAllSumMat)),
+                           contrastFuns  = list(vsParent                     = list(host    = makeIdentityMat,
+                                                                                    microbe = makeIdentityMat),
+                                                vsGrandparent                = list(host    = makeParentMat,
+                                                                                    microbe = makeParentMat),
+                                                vsGreatgrandparent           = list(host    = makeGrandparentMat,
+                                                                                    microbe = makeGrandparentMat),
+                                                vsRoot                       = list(host    = makeRootMat,
+                                                                                    microbe = makeRootMat),
+                                                microbeVsRootHostVsParent    = list(host    = makeIdentityMat,
+                                                                                    microbe = makeRootMat)),
                            ...) {
     
     fitModes <- sapply(fit, function(x) x@mode)
     
-    ## create parental ancestry matrix for microbes (only sums effect of a given node and its direct parent, not all ancestors
-    microbeP.GP <- makeParentMat(NMicrobeNodes,
-                                 finalMicrobeTree,
-                                 NMicrobeTips,
-                                 microbeTips)
-                                 
-    microbeParentsT <- t(microbeP.GP$parentMat)
-    microbeGrandparentsT <- t(microbeP.GP$grandparentMat)
-
-    hostP.GP <- list()
-    hostP.GP[[1]] <- makeParentMat(NHostNodes,
-                                   hostTreesSampled[[1]],
-                                   NHostTips,
-                                   hostTreesSampled[[1]]$tip.label)
-    
-    hostParents <- list()
-    hostParents[[1]] <- hostP.GP[[1]]$parentMat
-    hostGrandparents <- list()
-    hostGrandparents[[1]] <- hostP.GP[[1]]$grandparentMat
-    
-    microbeAncestorsT <- t(microbeAncestors)
-    microbeMat <- matrix(0, nrow = NMicrobeNodes + 1, ncol = NMicrobeNodes + 1)
-    microbeMat[1, 1] <- 1
-    microbeMat[2:(NMicrobeNodes + 1), 2:(NMicrobeNodes + 1)] <- microbeAncestorsT
-
     colorpal <- colorRampPalette(brewer.pal(9, 'Blues'))
     plotcolors <- c('white', colorpal(100), 'black')
     
@@ -411,8 +409,20 @@ summarizeLcGLM <- function(combineTrees  = T,
         
         if(sumVarMods) {
             
-            cat('\n\tRaw variance modifiers\n\t')
-            cat(paste0(as.character(Sys.time()), '\n'))
+            if(!exists('metaScales')) {
+                metaScales <- array(extract(fit[[i]],
+                            pars       = 'metaScales',
+                            permuted   = F,
+                            inc_warmup = T),
+                    dim = c(NMCSamples,
+                            NChains,
+                            3),
+                    dimnames = list(sample  = NULL,
+                                    chain   = NULL,
+                                    effect  = c('Prevalence',
+                                                'ADiv',
+                                                'Specificty')))
+            }
             
             ## extract variance modifier terms from the fit model
             phyloLogVarMultPrev <- array(extract(fit[[i]],
@@ -459,180 +469,79 @@ summarizeLcGLM <- function(combineTrees  = T,
             for(j in 1:NMCSamples) {
                 for(k in 1:NChains) {
                     phyloLogVarMultScaled[j,k,,] <- rbind(c(0,
-                                                           phyloLogVarMultPrev[j,k,] * metaScales[j,k,1]),
+                                                            phyloLogVarMultPrev[j,k,] * metaScales[j,k,1]),
                                                          cbind(phyloLogVarMultADiv[j,k,] * metaScales[j,k,2],
                                                                phyloLogVarMultRaw[j,k,,] * metaScales[j,k,3]))
                 }
             }
             
-            ## see if any clades have higher variance among their descendants (maybe suggesting codiversification)
-            allRes <- NULL
-            for(j in 1:(NHostNodes + 1)) {
-                temp <- monitor(array(phyloLogVarMultScaled[,,j,],
-                                      dim = c(NMCSamples,
-                                              NChains,
-                                              NMicrobeNodes + 1)),
-                                warmup = warmup,
-                                probs  = c(0.05, 0.95),
-                                print  = F)
-                temp <- cbind(hostNode = c('microbePrevalence',
-                                           paste0('host_', colnames(hostAncestors[[i]])))[[j]], temp)
-                rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
-                allRes <- rbind(allRes, temp)
-            }
-            
-            cat('microbeNode\t', file = file.path(currtabledir, 'individualPhyloVarianceEffects.txt'))
-            write.table(allRes,
-                        file   = file.path(currtabledir, 'individualPhyloVarianceEffects.txt'),
-                        sep    = '\t',
-                        quote  = F,
-                        append = T)
-            ##
-            
-            cat('\n\tSummed variance modifiers\n\t')
-            cat(paste0(as.character(Sys.time()), '\n'))
-            
-            ## since the model has many degrees of freedom, it's possible that certain regions of the tree have 'significant' effects but that those effects are 'implemented' via different, nearby nodes in each iteration. We can sum the effects of all ancestral nodes to see if a given node is consistently influenced by all of itself plus its ancestral terms, even if all of those terms are individually inconsistent
-            ## first build a temporary model matrix
-            hostMat <- matrix(0,
-                              nrow = NHostNodes + 1,
-                              ncol = NHostNodes + 1)
-            hostMat[1,1] <- 1
-            hostMat[2:(NHostNodes + 1), 2:(NHostNodes + 1)] <- hostAncestors[[i]]
-            ##
-            
-            ## sum the effects
-            matMult <- array(NA,
-                             dim = c(NMCSamples,
-                                     NChains,
-                                     NHostNodes + 1,
-                                     NMicrobeNodes + 1),
-                             dimnames = list(sample      = NULL,
-                                             chain       = NULL,
-                                             hostnode    = c('microbePrevalence',
-                                                             colnames(hostAncestors[[i]])),
-                                             microbenode = c('alphaDiversity',
-                                                             colnames(microbeAncestors))))
-                                 
-            for(j in 1:NMCSamples) {
-                for(k in 1:NChains) {
-                    matMult[j,k,,] <- hostMat %*%
-                                      phyloLogVarMultScaled[j,k,,] %*%
-                                      microbeMat
+            dir.create(file.path(currtabledir, 'phyloVarianceEffects'), recursive = T)
+                            
+            for(contrast in names(contrastFuns)) {
+                
+                cat(paste0('\n\tVariance modifiers (', contrast, ')\n\t'))
+                cat(paste0(as.character(Sys.time()), '\n'))
+                
+                ##
+                hostMat <- contrastFuns[[contrast]][['host']](NHostNodes,
+                                                              hostTreesSampled[[i]],
+                                                              NHostTips,
+                                                              hostTreesSampled[[i]]$tip.label)
+                microbeMat <- t(contrastFuns[[contrast]][['microbe']](NMicrobeNodes,
+                                                                      finalMicrobeTree,
+                                                                      NMicrobeTips,
+                                                                      microbeTips))
+                ##
+                
+                ## sum the effects
+                matMult <- array(NA,
+                                 dim = c(NMCSamples,
+                                         NChains,
+                                         NHostNodes + 1,
+                                         NMicrobeNodes + 1),
+                                 dimnames = list(sample      = NULL,
+                                                 chain       = NULL,
+                                                 hostnode    = c('microbePrevalence',
+                                                                 colnames(hostAncestors[[i]])),
+                                                 microbenode = c('alphaDiversity',
+                                                                 colnames(microbeAncestors))))
+                                     
+                for(j in 1:NMCSamples) {
+                    for(k in 1:NChains) {
+                        matMult[j,k,,] <- hostMat %*%
+                                          phyloLogVarMultScaled[j,k,,] %*%
+                                          microbeMat
+                    }
                 }
-            }
-            
-            allRes <- NULL
-            for(j in 1:(NHostNodes + 1)) {
-                temp <- monitor(array(matMult[,,j,],
-                                      dim = c(NMCSamples,
-                                              NChains,
-                                              NMicrobeNodes + 1)),
-                                warmup = warmup,
-                                probs  = c(0.05, 0.95),
-                                print  = F)
-                temp <- cbind(hostNode = c('microbePrevalence',
-                                           paste0('host_', colnames(hostAncestors[[i]])))[[j]], temp)
-                rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
-                allRes <- rbind(allRes, temp)
-                statusUpdate(j, NHostNodes)
-            }
-            
-            cat('microbeNode\t', file = file.path(currtabledir, 'allSummedPhyloVarianceEffects.txt'))
-            write.table(allRes,
-                        file   = file.path(currtabledir, 'allSummedPhyloVarianceEffects.txt'),
-                        sep    = '\t',
-                        quote  = F,
-                        append = T)
-            ##
-            
-            cat('\n\tSums of node and parent node variance modifiers\n\t')
-            cat(paste0(as.character(Sys.time()), '\n'))
-            
-            ## we can also sum the effects of just a node and its parent, as a bit of a middle-ground approach to see whether a given node is significantly different from its grandparent instead of its parent or instead of the overall mean
-            hostP.GP[[i]] <- makeParentMat(NHostNodes,
-                                           hostTreesSampled[[i]],
-                                           NHostTips,
-                                           hostTreesSampled[[i]]$tip.label)
-                                           
-            hostParents[[i]] <- hostP.GP[[i]]$parentMat
-
-            for(j in 1:NMCSamples) {
-                for(k in 1:NChains) {
-                    matMult[j,k,,] <- hostParents[[i]] %*%
-                                      phyloLogVarMultScaled[j,k,,] %*%
-                                      microbeParentsT
+                
+                allRes <- NULL
+                for(j in 1:(NHostNodes + 1)) {
+                    temp <- monitor(array(matMult[,,j,],
+                                          dim = c(NMCSamples,
+                                                  NChains,
+                                                  NMicrobeNodes + 1)),
+                                    warmup = warmup,
+                                    probs  = c(0.05, 0.95),
+                                    print  = F)
+                    temp <- cbind(hostNode = c('microbePrevalence',
+                                               paste0('host_', colnames(hostAncestors[[i]])))[[j]], temp)
+                    rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
+                    allRes <- rbind(allRes, temp)
+                    statusUpdate(j, NHostNodes)
                 }
+                
+                cat('microbeNode\t', file = file.path(currtabledir, 'phyloVarianceEffects', paste0(contrast, '.txt')))
+                write.table(allRes,
+                            file   = file.path(currtabledir, 'phyloVarianceEffects', paste0(contrast, '.txt')),
+                            sep    = '\t',
+                            quote  = F,
+                            append = T)
+                ##
+                
             }
-            
-            allRes <- NULL
-            for(j in 1:(NHostNodes + 1)) {
-                temp <- monitor(array(matMult[,,j,],
-                                      dim = c(NMCSamples,
-                                              NChains,
-                                              NMicrobeNodes + 1)),
-                                warmup = warmup,
-                                probs  = c(0.05, 0.95),
-                                print  = F)
-                temp <- cbind(hostNode = c('microbePrevalence',
-                                           paste0('host_', colnames(hostAncestors[[i]])))[[j]], temp)
-                rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
-                allRes <- rbind(allRes, temp)
-                statusUpdate(j, NHostNodes)
-            }
-            
-            cat('microbeNode\t', file = file.path(currtabledir, 'parentalSummedPhyloVarianceEffects.txt'))
-            write.table(allRes,
-                        file   = file.path(currtabledir, 'parentalSummedPhyloVarianceEffects.txt'),
-                        sep    = '\t',
-                        quote  = F,
-                        append = T)
-            ##
-            
-            cat('\n\tSums of node, parent, and grandparent node variance modifiers\n\t')
-            cat(paste0(as.character(Sys.time()), '\n'))
-            
-            ## or a node, its parent, and its grandparent
-            hostGrandparents[[i]] <- hostP.GP[[i]]$grandparentMat
-            
-            for(j in 1:NMCSamples) {
-                for(k in 1:NChains) {
-                    matMult[j,k,,] <- hostGrandparents[[i]] %*%
-                                      phyloLogVarMultScaled[j,k,,] %*%
-                                      microbeGrandparentsT
-                }
-            }
-            
-            allRes <- NULL
-            for(j in 1:(NHostNodes + 1)) {
-                temp <- monitor(array(matMult[,,j,],
-                                      dim = c(NMCSamples,
-                                              NChains,
-                                              NMicrobeNodes + 1)),
-                                warmup = warmup,
-                                probs  = c(0.05, 0.95),
-                                print  = F)
-                temp <- cbind(hostNode = c('microbePrevalence',
-                                           paste0('host_', colnames(hostAncestors[[i]])))[[j]], temp)
-                rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
-                allRes <- rbind(allRes, temp)
-                statusUpdate(j, NHostNodes)
-            }
-            
-            cat('microbeNode\t', file = file.path(currtabledir, 'grandparentalSummedPhyloVarianceEffects.txt'))
-            write.table(allRes,
-                        file   = file.path(currtabledir, 'grandparentalSummedPhyloVarianceEffects.txt'),
-                        sep    = '\t',
-                        quote  = F,
-                        append = T)
-            ##
-            
         }
         
         if(sumEffects) {
-        
-            cat('\n\tRaw node effects\n\t')
-            cat(paste0(as.character(Sys.time()), '\n'))
             
             ## extract effects from model
             scaledMicrobeNodeEffects <- array(extract(fit[[i]],
@@ -669,192 +578,77 @@ summarizeLcGLM <- function(combineTrees  = T,
             
             save(baseLevelEffects, file = file.path(currdatadir, 'baseLevelEffects.RData'))
             ##
-
-            ## summarize posterior distributions of effects
-            allRes <- NULL
-            for(j in 1:(NEffects + NHostNodes + 1)) {
-                temp <- monitor(array(scaledMicrobeNodeEffects[,,j,],
-                                      dim = c(NMCSamples,
-                                              NChains,
-                                              NMicrobeNodes + 1)),
-                                warmup = warmup,
-                                probs  = c(0.05, 0.95),
-                                print  = F)
-                temp <- cbind(effect = dimnames(scaledMicrobeNodeEffects)[[3]][j], temp)
-                rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
-                allRes <- rbind(allRes, temp)
-                statusUpdate(j, NEffects + NHostNodes + 1)
-            }
-            ##
-            
-            ## summarize posterior distibutions of base-level effects
-            for(m in baseNames) {
-                temp <- monitor(array(baseLevelEffects[,,m,],
-                                      dim = c(NMCSamples,
-                                              NChains,
-                                              NMicrobeNodes + 1)),
-                                warmup = warmup,
-                                probs  = c(0.05, 0.95),
-                                print  = F)
-                temp <- cbind(effect = m, temp)
-                rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
-                allRes <- rbind(allRes, temp)
-            }
-            ##
-            
-            ## write posterior summaries of effects to file
-            cat('microbeNode\t', file = file.path(currtabledir, 'nodeEffects.txt'))
-            write.table(allRes,
-                        file   = file.path(currtabledir, 'nodeEffects.txt'),
-                        sep    = '\t',
-                        quote  = F,
-                        append = T)
-            ##
             
             ##
             effectNames <- c('microbePrevalence',
                              colnames(modelMat)[2:(NEffects + 1)],
                              paste0('host_', colnames(hostAncestors[[i]])),
                              baseNames)
+                             
+            dir.create(file.path(currtabledir, 'nodeEffects'), recursive = T)
             
-            matMult <- array(NA,
-                             dim = c(NMCSamples,
-                                     NChains,
-                                     NHostNodes + NEffects + NSumTo0 + 1,
-                                     NMicrobeNodes + 1),
-                             dimnames = list(sample = NULL,
-                                             chain = NULL,
-                                             hostnode = effectNames,
-                                             microbenode = c('alphaDiversity',
-                                                             colnames(microbeAncestors))))
-            ##
-            
-            cat('\n\tSummed node effects\n\t')
-            cat(paste0(as.character(Sys.time()), '\n'))
-            
-            ## since the model has many degrees of freedom, it's possible that certain regions of the tree have 'significant' effects but that those effects are 'implemented' via different, nearby nodes in each iteration. We can sum the effects of all ancestral nodes to see if a given node is consistently influenced by all of itself plus its ancestral terms, even if all of those terms are individually inconsistent
-            ## first build a temporary model matrix
-            hostMat <- matrix(0,
-                              nrow = NHostNodes + NEffects + NSumTo0 + 1,
-                              ncol = NHostNodes + NEffects + NSumTo0 + 1)
-            hostMat[1:(NEffects + 1),
-                    1:(NEffects + 1)] <- diag(1, nrow = NEffects + 1)
-            hostMat[(NEffects + 2):(NEffects + NHostNodes + 1),
-                    (NEffects + 2):(NEffects + NHostNodes + 1)] <- hostAncestors[[i]]
-            hostMat[(NEffects + NHostNodes + 2):(NEffects + NHostNodes + NSumTo0 + 1),
-                    (NEffects + NHostNodes + 2):(NEffects + NHostNodes + NSumTo0 + 1)] <- diag(1, nrow = NSumTo0)
-            ##
-            for(j in 1:NMCSamples) {
-                for(k in 1:NChains) {
-                    matMult[j,k,,] <- hostMat %*%
-                                      rbind(scaledMicrobeNodeEffects[j,k,,],
-                                            baseLevelEffects[j,k,,]) %*%
-                                      microbeMat
+            for(contrast in names(contrastFuns)) {
+                
+                cat(paste0('\n\tNode effects (', contrast, ')\n\t'))
+                cat(paste0(as.character(Sys.time()), '\n'))
+                
+                matMult <- array(NA,
+                                 dim = c(NMCSamples,
+                                         NChains,
+                                         NHostNodes + NEffects + NSumTo0 + 1,
+                                         NMicrobeNodes + 1),
+                                 dimnames = list(sample = NULL,
+                                                 chain = NULL,
+                                                 hostnode = effectNames,
+                                                 microbenode = c('alphaDiversity',
+                                                                 colnames(microbeAncestors))))
+                ##
+                
+                ##build a temporary model matrix
+                hostMat <- diag(NHostNodes + NEffects + NSumTo0 + 1)
+                hostMat[(NEffects + 2):(NEffects + NHostNodes + 1),
+                        (NEffects + 2):(NEffects + NHostNodes + 1)] <- contrastFuns[[contrast]][['host']](NHostNodes,
+                                                                                                          hostTreesSampled[[i]],
+                                                                                                          NHostTips,
+                                                                                                          hostTreesSampled[[i]]$tip.label)[-1, -1]
+                microbeMat <- t(contrastFuns[[contrast]][['microbe']](NMicrobeNodes,
+                                                                      finalMicrobeTree,
+                                                                      NMicrobeTips,
+                                                                      microbeTips))
+                ##
+                
+                for(j in 1:NMCSamples) {
+                    for(k in 1:NChains) {
+                        matMult[j,k,,] <- hostMat %*%
+                                          rbind(scaledMicrobeNodeEffects[j,k,,],
+                                                baseLevelEffects[j,k,,]) %*%
+                                          microbeMat
+                    }
                 }
-            }
-            
-            allRes <- NULL
-            for(j in 1:(NHostNodes + NEffects + NSumTo0 + 1)) {
-                temp <- monitor(array(matMult[,,j,],
-                                      dim = c(NMCSamples,
-                                              NChains,
-                                              NMicrobeNodes + 1)),
-                                warmup = warmup,
-                                probs  = c(0.05, 0.95),
-                                print  = F)
-                temp <- cbind(hostEffect = effectNames[[j]], temp)
-                rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
-                allRes <- rbind(allRes, temp)
-                statusUpdate(j, NHostNodes + NEffects + NSumTo0 + 1)
-            }
-            
-            cat('microbeNode\t', file = file.path(currtabledir, 'allSummedNodeEffects.txt'))
-            write.table(allRes,
-                        file   = file.path(currtabledir, 'allSummedNodeEffects.txt'),
-                        sep    = '\t',
-                        quote  = F,
-                        append = T)
-            ##
-            
-            cat('\n\tSums of node and parent node effects\n\t')
-            cat(paste0(as.character(Sys.time()), '\n'))
-            
-            ## we can also sum the effects of just a node and its parent, as a bit of a middle-ground approach to see whether a given node is significantly different from its grandparent instead of its parent or instead of the overall mean
-            hostParentMat <- hostMat
-            hostParentMat[(NEffects + 2):(NEffects + NHostNodes + 1),
-                          (NEffects + 2):(NEffects + NHostNodes + 1)] <- hostParents[[i]][-1, -1]
-            
-            for(j in 1:NMCSamples) {
-                for(k in 1:NChains) {
-                    matMult[j,k,,] <- hostParentMat %*%
-                                      rbind(scaledMicrobeNodeEffects[j,k,,],
-                                            baseLevelEffects[j,k,,]) %*%
-                                      microbeParentsT
+                
+                allRes <- NULL
+                for(j in 1:(NHostNodes + NEffects + NSumTo0 + 1)) {
+                    temp <- monitor(array(matMult[,,j,],
+                                          dim = c(NMCSamples,
+                                                  NChains,
+                                                  NMicrobeNodes + 1)),
+                                    warmup = warmup,
+                                    probs  = c(0.05, 0.95),
+                                    print  = F)
+                    temp <- cbind(hostEffect = effectNames[[j]], temp)
+                    rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
+                    allRes <- rbind(allRes, temp)
+                    statusUpdate(j, NHostNodes + NEffects + NSumTo0 + 1)
                 }
+                
+                cat('microbeNode\t', file = file.path(currtabledir, 'nodeEffects', paste0(contrast, '.txt')))
+                write.table(allRes,
+                            file   = file.path(currtabledir, 'nodeEffects', paste0(contrast, '.txt')),
+                            sep    = '\t',
+                            quote  = F,
+                            append = T)
+                ##
             }
-            
-            allRes <- NULL
-            for(j in 1:(NHostNodes + NEffects + NSumTo0 + 1)) {
-                temp <- monitor(array(matMult[,,j,],
-                                      dim = c(NMCSamples,
-                                              NChains,
-                                              NMicrobeNodes + 1)),
-                                warmup = warmup,
-                                probs  = c(0.05, 0.95),
-                                print  = F)
-                temp <- cbind(hostNode = effectNames[[j]], temp)
-                rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
-                allRes <- rbind(allRes, temp)
-                statusUpdate(j, NHostNodes + NEffects + NSumTo0 + 1)
-            }
-            
-            cat('microbeNode\t', file = file.path(currtabledir, 'parentalSummedNodeEffects.txt'))
-            write.table(allRes,
-                        file   = file.path(currtabledir, 'parentalSummedNodeEffects.txt'),
-                        sep    = '\t',
-                        quote  = F,
-                        append = T)
-            ##
-            
-            cat('\n\tSums of node, parent, and grandparent node effects\n\t')
-            cat(paste0(as.character(Sys.time()), '\n'))
-            
-            ## or a node, its parent, and its grandparent
-            hostGrandparentMat <- hostMat
-            hostGrandparentMat[(NEffects + 2):(NEffects + NHostNodes + 1),
-                               (NEffects + 2):(NEffects + NHostNodes + 1)] <- hostGrandparents[[i]][-1, -1]
-            
-            for(j in 1:NMCSamples) {
-                for(k in 1:NChains) {
-                    matMult[j,k,,] <- hostGrandparentMat %*%
-                                      rbind(scaledMicrobeNodeEffects[j,k,,],
-                                            baseLevelEffects[j,k,,]) %*%
-                                      microbeGrandparentsT
-                }
-            }
-            
-            allRes <- NULL
-            for(j in 1:(NHostNodes + NEffects + NSumTo0 + 1)) {
-                temp <- monitor(array(matMult[,,j,],
-                                      dim = c(NMCSamples,
-                                              NChains,
-                                              NMicrobeNodes + 1)),
-                                warmup = warmup,
-                                probs  = c(0.05, 0.95),
-                                print  = F)
-                temp <- cbind(hostNode = effectNames[[j]], temp)
-                rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
-                allRes <- rbind(allRes, temp)
-                statusUpdate(j, NHostNodes + NEffects + NSumTo0 + 1)
-            }
-            
-            cat('microbeNode\t', file = file.path(currtabledir, 'grandparentalSummedNodeEffects.txt'))
-            write.table(allRes,
-                        file   = file.path(currtabledir, 'grandparentalSummedNodeEffects.txt'),
-                        sep    = '\t',
-                        quote  = F,
-                        append = T)
-            ##
         }
     }
 }
