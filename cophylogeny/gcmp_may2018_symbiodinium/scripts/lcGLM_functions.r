@@ -91,6 +91,7 @@ summarizeLcGLM <- function(combineTrees  = T,
                            plotTrees     = T,
                            sumScales     = T,
                            sumVarMods    = T,
+                           sumLatVars    = T,
                            sumEffects    = T,
                            contrastFuns  = list(vsParent                     = list(host    = makeIdentityMat,
                                                                                     microbe = makeIdentityMat),
@@ -287,11 +288,13 @@ summarizeLcGLM <- function(combineTrees  = T,
                                       inc_warmup = T),
                               dim = c(NMCSamples,
                                       NChains,
-                                      2 * NFactors + 3),
+                                      2 * (NLatent + NFactors) + 3),
                               dimnames = list(sample  = NULL,
                                               chain   = NULL,
-                                              factor  = c(paste0('ADiv.', colnames(factLevelMat)),
-                                                          paste0('Specificity.', colnames(factLevelMat)),
+                                              factor  = c(paste0('ADiv.', c(paste0('latentVar', 1:NLatent),
+                                                                            colnames(factLevelMat))),
+                                                          paste0('Specificity.', c(paste0('latentVar', 1:NLatent),
+                                                                                   colnames(factLevelMat))),
                                                           'ADiv.host',
                                                           'host.specificity',
                                                           'microbe.prevalence')))
@@ -303,16 +306,20 @@ summarizeLcGLM <- function(combineTrees  = T,
             }
             colnames(stDPropsPlot) <- gsub('_',
                                            ' ',
-                                           c(paste0(colnames(factLevelMat), ' (ADiv)'),
-                                             paste0(colnames(factLevelMat), ' (Specificity)'),
+                                           c(paste0(c(paste0('latentVar', 1:NLatent),
+                                                      colnames(factLevelMat)),
+                                                    ' (ADiv)'),
+                                             paste0(c(paste0('latentVar', 1:NLatent),
+                                                      colnames(factLevelMat)),
+                                                    ' (Specificity)'),
                                              'Host (ADiv)',
                                              'Host (Specificity)',
                                              'Microbe prevalence'))
                                     
-            ADivInd <- c(1:NFactors, 2 * NFactors + 1)
-            specInd <- c((NFactors + 1):(2 * NFactors), 2 * NFactors + 2)
+            ADivInd <- c(1:(NFactors + NLatent), 2 * (NLatent + NFactors) + 1)
+            specInd <- c((NLatent + NFactors + 1):(2 * (NLatent + NFactors)), 2 * (NLatent + NFactors) + 2)
             meds <- apply(stDPropsPlot, 2, median)
-            stDPropsPlot <- stDPropsPlot[, c(2 * NFactors + 3,
+            stDPropsPlot <- stDPropsPlot[, c(2 * (NLatent + NFactors) + 3,
                                              ADivInd[order(meds[ADivInd], decreasing = T)],
                                              specInd[order(meds[specInd], decreasing = T)])]
                                        
@@ -320,7 +327,7 @@ summarizeLcGLM <- function(combineTrees  = T,
                 width  = 7,
                 height = 7)
             boxplot(stDPropsPlot,
-                    at       = c(1, 3:(NFactors + 3), (NFactors + 5):(2 * NFactors + 5)),
+                    at       = c(1, 3:(NLatent + NFactors + 3), (NLatent + NFactors + 5):(2 * (NLatent + NFactors) + 5)),
                     cex.axis = 0.5,
                     las      = 2,
                     xlab     = 'Factor',
@@ -549,7 +556,59 @@ summarizeLcGLM <- function(combineTrees  = T,
             }
         }
         
+        if(sumLatVars) {
+            latentVars <- array(extract(fit[[i]],
+                                        pars       = 'latentVars',
+                                        permuted   = F,
+                                        inc_warmup = T),
+                                dim = c(NMCSamples,
+                                        NChains,
+                                        NSamples,
+                                        NLatent),
+                                dimnames = list(sample    = NULL,
+                                                chain     = NULL,
+                                                bioSample = senddat[,1],
+                                                latVar    = paste0('latentVar', 1:NLatent)))
+                                                
+            save(latentVars, file = file.path(currdatadir, 'latentVars.RData'))
+            
+            allRes <- NULL
+            plotSum <- NULL
+            for(j in 1:NLatent) {
+                temp <- monitor(array(latentVars[,,,j],
+                                      dim = c(NMCSamples,
+                                              NChains,
+                                              NSamples)),
+                                warmup = warmup,
+                                probs  = c(0.05, 0.5, 0.95),
+                                print  = F)
+                temp <- cbind(dimension = paste0('latentVar', j), temp)
+                rownames(temp) <- senddat[,1]
+                allRes <- rbind(allRes, temp)
+                plotSum <- cbind(plotSum, temp[,'mean'])
+                statusUpdate(j, NLatent)
+            }
+            
+            colnames(plotSum) <- paste0('latentVar', 1:NLatent)
+            rownames(plotSum) <- senddat[,1]
+            save(plotSum, file = file.path(currdatadir, 'latentVars_forPlotting.RData'))
+            
+            cat('microbeNode\t', file = file.path(currtabledir, 'latentVars.txt'))
+            write.table(allRes,
+                        file   = file.path(currtabledir, 'latentVars.txt'),
+                        sep    = '\t',
+                        quote  = F,
+                        append = T)
+            
+        }
+        
         if(sumEffects) {
+            
+            effectNames <- c(paste0('latentVar', 1:NLatent),
+                             'microbePrevalence',
+                             colnames(modelMat)[2:(NEffects + 1)],
+                             paste0('host_', colnames(hostAncestors[[i]])),
+                             baseNames)
             
             ## extract effects from model
             scaledMicrobeNodeEffects <- array(extract(fit[[i]],
@@ -558,13 +617,11 @@ summarizeLcGLM <- function(combineTrees  = T,
                                                       inc_warmup = T),
                                               dim = c(NMCSamples,
                                                       NChains,
-                                                      NEffects + NHostNodes + 1,
+                                                      NLatent + NEffects + NHostNodes + 1,
                                                       NMicrobeNodes + 1),
                                               dimnames = list(sample  = NULL,
                                                               chain   = NULL,
-                                                              effect  = c('microbePrevalence',
-                                                                          colnames(modelMat)[2:(NEffects + 1)],
-                                                                          paste0('host_', colnames(hostAncestors[[i]]))),
+                                                              effect  = effectNames,
                                                               taxnode = c('alphaDiversity', colnames(microbeAncestors))))
                                                             
             save(scaledMicrobeNodeEffects, file = file.path(currdatadir, 'scaledMicrobeNodeEffects.RData'))
@@ -588,11 +645,6 @@ summarizeLcGLM <- function(combineTrees  = T,
             ##
             
             ##
-            effectNames <- c('microbePrevalence',
-                             colnames(modelMat)[2:(NEffects + 1)],
-                             paste0('host_', colnames(hostAncestors[[i]])),
-                             baseNames)
-                             
             dir.create(file.path(currtabledir, 'nodeEffects'), recursive = T)
             
             for(contrast in names(contrastFuns)) {
@@ -603,7 +655,7 @@ summarizeLcGLM <- function(combineTrees  = T,
                 matMult <- array(NA,
                                  dim = c(NMCSamples,
                                          NChains,
-                                         NHostNodes + NEffects + NSumTo0 + 1,
+                                         NHostNodes + NLatent + NEffects + NSumTo0 + 1,
                                          NMicrobeNodes + 1),
                                  dimnames = list(sample = NULL,
                                                  chain = NULL,
@@ -613,12 +665,12 @@ summarizeLcGLM <- function(combineTrees  = T,
                 ##
                 
                 ##build a temporary model matrix
-                hostMat <- diag(NHostNodes + NEffects + NSumTo0 + 1)
-                hostMat[(NEffects + 2):(NEffects + NHostNodes + 1),
-                        (NEffects + 2):(NEffects + NHostNodes + 1)] <- contrastFuns[[contrast]][['host']](NHostNodes,
-                                                                                                          hostTreesSampled[[i]],
-                                                                                                          NHostTips,
-                                                                                                          hostTreesSampled[[i]]$tip.label)[-1, -1]
+                hostMat <- diag(NHostNodes + NLatent + NEffects + NSumTo0 + 1)
+                hostMat[(NLatent + NEffects + 2):(NLatent + NEffects + NHostNodes + 1),
+                        (NLatent + NEffects + 2):(NLatent + NEffects + NHostNodes + 1)] <- contrastFuns[[contrast]][['host']](NHostNodes,
+                                                                                                                              hostTreesSampled[[i]],
+                                                                                                                              NHostTips,
+                                                                                                                              hostTreesSampled[[i]]$tip.label)[-1, -1]
                 microbeMat <- t(contrastFuns[[contrast]][['microbe']](NMicrobeNodes,
                                                                       finalMicrobeTree,
                                                                       NMicrobeTips,
@@ -635,7 +687,7 @@ summarizeLcGLM <- function(combineTrees  = T,
                 }
                 
                 allRes <- NULL
-                for(j in 1:(NHostNodes + NEffects + NSumTo0 + 1)) {
+                for(j in 1:(NHostNodes + NLatent + NEffects + NSumTo0 + 1)) {
                     temp <- monitor(array(matMult[,,j,],
                                           dim = c(NMCSamples,
                                                   NChains,
@@ -646,7 +698,7 @@ summarizeLcGLM <- function(combineTrees  = T,
                     temp <- cbind(hostEffect = effectNames[[j]], temp)
                     rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
                     allRes <- rbind(allRes, temp)
-                    statusUpdate(j, NHostNodes + NEffects + NSumTo0 + 1)
+                    statusUpdate(j, NHostNodes + NLatent + NEffects + NSumTo0 + 1)
                 }
                 
                 cat('microbeNode\t', file = file.path(currtabledir, 'nodeEffects', paste0(contrast, '.txt')))
