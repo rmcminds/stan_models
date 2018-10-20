@@ -27,7 +27,6 @@ data {
     int NEffects;
     int NHostNodes;
     int NHostTips;
-    int NLatent;
     int present[NObs];
     int sampleNames[NObs];
     int microbeTipNames[NObs];
@@ -53,8 +52,7 @@ data {
 }
 parameters {
     real<lower=0> aveStD;
-    vector<lower=0>[2 * NFactors + NLatent + 3] stDPropsRaw;
-    positive_ordered[NLatent] latentStDPropsRaw;
+    simplex[2 * NFactors + 3] stDProps;
     real<lower=0> hostOUAlpha;
     real<lower=0> microbeOUAlpha;
     real<lower=0> aveStDMeta;
@@ -66,12 +64,10 @@ parameters {
     row_vector[NMicrobeNodes] phyloLogVarMultPrev;
     vector[NHostNodes] phyloLogVarMultADiv;
     matrix[NHostNodes, NMicrobeNodes] phyloLogVarMultRaw;
-    matrix<lower=0>[NSamples, NLatent] latentVars;
-    matrix[NEffects + NHostNodes + NLatent + 1, NMicrobeNodes + 1] rawMicrobeNodeEffects;
+    matrix[NEffects + NHostNodes + 1, NMicrobeNodes + 1] rawMicrobeNodeEffects;
 }
 transformed parameters {
-    simplex[2 * (NFactors + NLatent) + 3] stDProps;
-    vector<lower=0>[2 * (NFactors + NLatent) + 3] scales;
+    vector<lower=0>[2 * NFactors + 3] scales;
     vector<lower=0>[3] metaScales;
     matrix[NMicrobeNodes, 2] newMicrobeNHs;
     matrix[NHostNodes, 2] newHostNHs;
@@ -81,27 +77,18 @@ transformed parameters {
     vector<lower=0>[NHostNodes] hostScales;
     matrix<lower=0>[NHostNodes, NMicrobeNodes] phyloVarRaw;
     matrix<lower=0>[NHostNodes, NMicrobeNodes] phyloScales;
-    matrix[NEffects + NHostNodes + NLatent + 1, NMicrobeNodes + 1] scaledMicrobeNodeEffects;
+    matrix[NEffects + NHostNodes + 1, NMicrobeNodes + 1] scaledMicrobeNodeEffects;
     matrix[NSamples, NMicrobeTips] sampleTipEffects;
-    stDProps
-        = append_row(
-              append_row(stDPropsRaw[1:NLatent],
-                         latentStDPropsRaw),
-              stDPropsRaw[(NLatent + 1):(2 * NFactors + NLatent + 3)]);
-    stDProps
-        = stDProps / sum(stDProps);
     scales
-        = sqrt((2 * (NFactors + NLatent) + 3) * stDProps)
+        = sqrt((2 * NFactors + 3) * stDProps)
           * aveStD;
     metaScales
         = sqrt(3 * metaVarProps)
-          * aveStDMeta
-          * aveStDMetaPriorExpect;
+          * aveStDMeta;
     newMicrobeNHs
         = makeNHMat(microbeParents,
                     NMicrobeTips,
                     microbeLogitNH + stDLogitMicrobe
-                                     * stDLogitMicrobePriorExpect
                                      * phyloLogitVarMicrobe);
     microbeVarRaw
         = rescaleOU(newMicrobeNHs, microbeOUAlpha)'
@@ -115,7 +102,6 @@ transformed parameters {
         = makeNHMat(hostParents,
                     NHostTips,
                     hostLogitNH + stDLogitHost
-                                  * stDLogitHostPriorExpect
                                   * phyloLogitVarHost);
     hostVarRaw
         = rescaleOU(newHostNHs, hostOUAlpha)
@@ -123,7 +109,7 @@ transformed parameters {
               * (phyloLogVarMultADiv
                  * metaScales[2]));
     hostScales
-        = scales[2 * (NFactors + NLatent) + 1]
+        = scales[2 * NFactors + 1]
           * sqrt(hostVarRaw
                  / mean(hostTipAncestors * hostVarRaw));
 
@@ -134,46 +120,42 @@ transformed parameters {
               * microbeAncestorsT)
           .* (hostVarRaw * microbeVarRaw);
     phyloScales
-        = scales[2 * (NFactors + NLatent) + 2]
+        = scales[2 * NFactors + 2]
           * sqrt(phyloVarRaw
                  / mean(hostTipAncestors
                         * (phyloVarRaw
                            * microbeTipAncestorsT[2:,])));
     scaledMicrobeNodeEffects
         = append_col(
-              append_row(segment(scales, 1, NLatent),
-                  append_row(globalScale,
-                      append_row(factLevelMat * segment(scales, 2 * NLatent + 1, NFactors),
-                          hostScales))),
-              append_row(
-                append_row(segment(scales, NLatent + 1, NLatent),
-                    append_row(scales[2 * (NFactors + NLatent) + 3],
-                        factLevelMat * segment(scales, NFactors + 2 * NLatent + 1, NFactors)))
-                * microbeScales,
-                phyloScales))
+                append_row(globalScale,
+                           append_row(factLevelMat * segment(scales, 1, NFactors),
+                                      hostScales)),
+                append_row(
+                    append_row(
+                        scales[2 * NFactors + 3],
+                        factLevelMat * segment(scales, NFactors + 1, NFactors))
+                    * microbeScales,
+                    phyloScales))
           .* rawMicrobeNodeEffects;
-    sampleTipEffects
-        = append_col(latentVars, modelMat) * (scaledMicrobeNodeEffects * microbeTipAncestorsT);
+    sampleTipEffects = modelMat * (scaledMicrobeNodeEffects * microbeTipAncestorsT);
 }
 model {
     vector[NObs] logit_ratios;
     aveStD ~ exponential(1.0 / aveStDPriorExpect);
-    stDPropsRaw ~ exponential(1.0);
-    latentStDPropsRaw ~ exponential(1.0);
+    stDProps ~ dirichlet(rep_vector(1, 2 * NFactors + 3));
     hostOUAlpha ~ exponential(1.0 / hostOUAlphaPriorExpect);
     microbeOUAlpha ~ exponential(1.0 / microbeOUAlphaPriorExpect);
-    aveStDMeta ~ exponential(1.0);
+    aveStDMeta ~ exponential(1.0 / aveStDMetaPriorExpect);
     metaVarProps ~ dirichlet(rep_vector(1, 3));
-    stDLogitMicrobe ~ exponential(1.0);
-    stDLogitHost ~ exponential(1.0);
+    stDLogitMicrobe ~ exponential(1.0 / stDLogitMicrobePriorExpect);
+    stDLogitHost ~ exponential(1.0 / stDLogitHostPriorExpect);
     phyloLogitVarMicrobe ~ normal(0,1);
     phyloLogitVarHost ~ normal(0,1);
     phyloLogVarMultPrev ~ normal(0,1);
     phyloLogVarMultADiv ~ normal(0,1);
     to_vector(phyloLogVarMultRaw) ~ normal(0,1);
-    to_vector(latentVars) ~ normal(0,2);
     to_vector(rawMicrobeNodeEffects) ~ normal(0,1);
-    to_vector(baseLevelMat * rawMicrobeNodeEffects[(2 * NLatent + 2):(2 * NLatent + NEffects + 1),]) ~ normal(0,1);
+    to_vector(baseLevelMat * rawMicrobeNodeEffects[2:(NEffects + 1),]) ~ normal(0,1);
     for (n in 1:NObs)
         logit_ratios[n] = sampleTipEffects[sampleNames[n], microbeTipNames[n]];
     present ~ bernoulli_logit(logit_ratios);
@@ -182,7 +164,7 @@ generated quantities {
     matrix[NSumTo0, NMicrobeNodes + 1] baseLevelEffects;
     int present_pred[NObs];
     baseLevelEffects
-        = baseLevelMat * scaledMicrobeNodeEffects[(2 * NLatent + 2):(2 * NLatent + NEffects + 1),];
+        = baseLevelMat * scaledMicrobeNodeEffects[2:(NEffects + 1),];
     for (n in 1:NObs)
         present_pred[n] = bernoulli_logit_rng(sampleTipEffects[sampleNames[n], microbeTipNames[n]]);
 }
