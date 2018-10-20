@@ -37,7 +37,7 @@ aveStDMetaPriorExpect <- 0.1
 hostOUAlphaPriorExpect <- 1.0
 microbeOUAlphaPriorExpect <- 1.0
 stDLogitHostPriorExpect <- 0.1
-stDLogitMicrobePriorExpect <- 1.5
+stDLogitMicrobePriorExpect <- 0.5
 globalScale <- 50
 NTrees <- 10 ## number of random trees to sample and to fit the model to
 modelform <- ~ ocean + ocean_area + reef_name + concatenated_date + colony_name + tissue_compartment + log_sequencing_depth_scaled

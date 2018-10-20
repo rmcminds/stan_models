@@ -3,8 +3,8 @@ functions {
         matrix[rows(pm), 2] newNHs = rep_matrix(0, rows(pm), 2);
         for (row in 1:(rows(pm) - NTips)) {
             newNHs[NTips + row, 1] = pm[NTips + row,] * newNHs[,2];
-            newNHs[NTips + row, 2] = inv_logit(logitNH[row])
-                                     * (1 - newNHs[NTips + row, 1])
+            newNHs[NTips + row, 2] = exp(log_inv_logit(logitNH[row])
+                                     + (1 - newNHs[NTips + row, 1]))
                                      + newNHs[NTips + row, 1];
         }
         for (row in 1:NTips) {
@@ -84,11 +84,13 @@ transformed parameters {
           * aveStD;
     metaScales
         = sqrt(3 * metaVarProps)
+          * aveStDMetaPriorExpect
           * aveStDMeta;
     newMicrobeNHs
         = makeNHMat(microbeParents,
                     NMicrobeTips,
                     microbeLogitNH + stDLogitMicrobe
+                                     * stDLogitMicrobePriorExpect
                                      * phyloLogitVarMicrobe);
     microbeVarRaw
         = rescaleOU(newMicrobeNHs, microbeOUAlpha)'
@@ -102,6 +104,7 @@ transformed parameters {
         = makeNHMat(hostParents,
                     NHostTips,
                     hostLogitNH + stDLogitHost
+                                  * stDLogitHostPriorExpect
                                   * phyloLogitVarHost);
     hostVarRaw
         = rescaleOU(newHostNHs, hostOUAlpha)
@@ -145,10 +148,10 @@ model {
     stDProps ~ dirichlet(rep_vector(1, 2 * NFactors + 3));
     hostOUAlpha ~ exponential(1.0 / hostOUAlphaPriorExpect);
     microbeOUAlpha ~ exponential(1.0 / microbeOUAlphaPriorExpect);
-    aveStDMeta ~ exponential(1.0 / aveStDMetaPriorExpect);
+    aveStDMeta ~ exponential(1.0);
     metaVarProps ~ dirichlet(rep_vector(1, 3));
-    stDLogitMicrobe ~ exponential(1.0 / stDLogitMicrobePriorExpect);
-    stDLogitHost ~ exponential(1.0 / stDLogitHostPriorExpect);
+    stDLogitMicrobe ~ exponential(1.0);
+    stDLogitHost ~ exponential(1.0);
     phyloLogitVarMicrobe ~ normal(0,1);
     phyloLogitVarHost ~ normal(0,1);
     phyloLogVarMultPrev ~ normal(0,1);
