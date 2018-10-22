@@ -280,7 +280,7 @@ summarizeLcGLM <- function(combineTrees  = T,
             cat('\n\tRaw variance estimates\n\t')
             cat(paste0(as.character(Sys.time()), '\n'))
             
-            ## variance partitioning
+            ## variance partitioning (top level factors)
             stDProps <- array(extract(fit[[i]],
                                       pars       = 'stDProps',
                                       permuted   = F,
@@ -290,8 +290,8 @@ summarizeLcGLM <- function(combineTrees  = T,
                                       2 * NFactors + 3),
                               dimnames = list(sample  = NULL,
                                               chain   = NULL,
-                                              factor  = c(paste0('ADiv.', colnames(factLevelMat)),
-                                                          paste0('Specificity.', colnames(factLevelMat)),
+                                              factor  = c(paste0('ADiv.', names(groupedFactors)),
+                                                          paste0('Specificity.', names(groupedFactors)),
                                                           'ADiv.host',
                                                           'host.specificity',
                                                           'microbe.prevalence')))
@@ -303,8 +303,8 @@ summarizeLcGLM <- function(combineTrees  = T,
             }
             colnames(stDPropsPlot) <- gsub('_',
                                            ' ',
-                                           c(paste0(colnames(factLevelMat), ' (ADiv)'),
-                                             paste0(colnames(factLevelMat), ' (Specificity)'),
+                                           c(paste0(names(groupedFactors), ' (ADiv)'),
+                                             paste0(names(groupedFactors), ' (Specificity)'),
                                              'Host (ADiv)',
                                              'Host (Specificity)',
                                              'Microbe prevalence'))
@@ -327,6 +327,55 @@ summarizeLcGLM <- function(combineTrees  = T,
                     ylab     = 'Percent of total variance')
             graphics.off()
             ##
+            
+            ## variance partitioning (broken down by subfactors)
+            NSubfactorGammas <- 0
+            gammaNames <- NULL
+            for(j in 1:NFactors) {
+                if(NSubPerFactor[[j]] > 1) {
+                    NSubfactorGammas <- NSubfactorGammas + NSubPerFactor[[j]]
+                    gammaNames <- c(gammaNames, groupedFactors[[j]])
+                }
+            }
+            subfactPropsRaw <- array(extract(fit[[i]],
+                                             pars       = 'subfactPropsRaw',
+                                             permuted   = F,
+                                             inc_warmup = T),
+                                     dim = c(NMCSamples,
+                                             NChains,
+                                             2 * NSubfactorGammas),
+                                     dimnames = list(sample  = NULL,
+                                                     chain   = NULL,
+                                                     factor  = c(paste0('ADiv.', gammaNames),
+                                                                 paste0('Specificity.', gammaNames))))
+            start <- 1
+            for (j in 1:NFactors) {
+                if(NSubPerFactor[[j]] > 1) {
+                    
+                    subfactProps <- NULL
+                    for(k in 1:NChains) {
+                        subfactProps <- rbind(subfactProps, apply(subfactPropsRaw[(warmup + 1):NMCSamples,
+                                                                                  k,
+                                                                                  start:(start - 1 + NSubPerFactor[[j]])],
+                                                                  1,
+                                                                  function(x) x / sum(x)))
+                    }
+                    colnames(stDPropsPlot) <- gammaNames[start:(start - 1 + NSubPerFactor[[j]])]
+                    save(stDPropsPlot, file = file.path(currdatadir, paste0('subfactProps_', names(groupedFactors)[[j]], '.RData')))
+
+                    pdf(file   = file.path(currplotdir, paste0('subfactProps_', names(groupedFactors)[[j]], '_boxes.pdf')),
+                        width  = 7,
+                        height = 7)
+                    boxplot(stDPropsPlot,
+                            cex.axis = 0.5,
+                            las      = 2,
+                            xlab     = 'Subfactor',
+                            ylab     = paste0('Percent of', names(groupedFactors)[[j]], 'variance'))
+                    graphics.off()
+                    
+                }
+                start <- start + NSubPerFactor[[j]]
+            }
             
             cat('\n\tRaw meta-variance estimates\n\t')
             cat(paste0(as.character(Sys.time()), '\n'))

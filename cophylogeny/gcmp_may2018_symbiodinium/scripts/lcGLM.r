@@ -13,6 +13,7 @@ library(ggplot2)
 library(RColorBrewer)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
+
 source(file.path('scripts', 'lcGLM_functions.r'))
 
 
@@ -34,13 +35,17 @@ minSamps <- 1 # minimum number of samples that a sequence variant is present in 
 ## model options
 aveStDPriorExpect <- 1.0
 aveStDMetaPriorExpect <- 0.1
-hostOUAlphaPriorExpect <- 0.1
-microbeOUAlphaPriorExpect <- 0.1
+hostOUAlphaPriorExpect <- 0.25
+microbeOUAlphaPriorExpect <- 0.25
 stDLogitHostPriorExpect <- 0.1
 stDLogitMicrobePriorExpect <- 0.5
-globalScale <- 50
+globalScale <- 100
 NTrees <- 10 ## number of random trees to sample and to fit the model to
-modelform <- ~ ocean + ocean_area + reef_name + concatenated_date + colony_name + tissue_compartment + log_sequencing_depth_scaled
+groupedFactors <- list(location           = c('ocean', 'ocean_area', 'reef_name'),
+                       date               = 'concatenated_date',
+                       colony             = 'colony_name',
+                       tissue_compartment = 'tissue_compartment',
+                       sequencing_depth   = 'log_sequencing_depth_scaled')
 ##
 
 ## Stan options
@@ -257,34 +262,35 @@ for (i in 1:NTrees) {
 ##
 
 ## prepare data for the model matrix
-allfactors <- attr(terms.formula(modelform), "term.labels")
-NFactors <- length(allfactors)
-allfactorder <- sapply(allfactors, function(x) sum(gregexpr(':', x, fixed = TRUE)[[1]] > 0))
+modelform <- as.formula(paste0('~',paste(unlist(groupedFactors), collapse = ' + ')))
+NFactors <- length(groupedFactors)
+NSubPerFactor <- sapply(groupedFactors, length)
+NSubfactors <- sum(NSubPerFactor)
 modelMat <- model.matrix(modelform, model.frame(newermap, na.action = NULL))
 modelMat[is.na(modelMat)] <- 0
 sumconts <- names(attr(modelMat, "contrasts")[attr(modelMat, "contrasts") == 'contr.sum'])
 ##
 
 ## create matrix relating each 'effect' (categorical and numeric) to the 'factor' that it belongs to
-stDAdjust <- rep(1, NFactors)
+stDAdjust <- rep(1, NSubfactors)
 baseLevelMat <- NULL
-factLevelMat <- matrix(NA, nrow = ncol(modelMat) - 1, ncol = NFactors)
-colnames(factLevelMat) <- c(allfactors)
+subfactLevelMat <- matrix(NA, nrow = ncol(modelMat) - 1, ncol = NSubfactors)
+colnames(subfactLevelMat) <- unlist(groupedFactors)
 NSumTo0 <- 0
-for(j in 1:NFactors) {
+for(j in 1:NSubfactors) {
     newColumn <- as.numeric(attr(modelMat, 'assign')[-1] == j)
-    if(colnames(factLevelMat)[[j]] %in% names(attr(modelMat, "contrasts"))) {
-        if(attr(modelMat, "contrasts")[[colnames(factLevelMat)[[j]]]] == 'contr.sum') {
+    if(colnames(subfactLevelMat)[[j]] %in% names(attr(modelMat, "contrasts"))) {
+        if(attr(modelMat, "contrasts")[[colnames(subfactLevelMat)[[j]]]] == 'contr.sum') {
             ## if the contrast is a sum-to-zero ('effects') contrast, adjust the scale in preparation for making symmetrical marginal priors
             stDAdjust[[j]] <- 1 / sqrt(1 - 1 / (sum(newColumn) + 1))
             baseLevelMat <- rbind(baseLevelMat, -newColumn)
-            factLevelMat[,j] <- newColumn * stDAdjust[[j]]
+            subfactLevelMat[,j] <- newColumn * stDAdjust[[j]]
             NSumTo0 <- NSumTo0 + 1
         } else {
-            factLevelMat[,j] <- newColumn
+            subfactLevelMat[,j] <- newColumn
         }
     } else {
-        factLevelMat[,j] <- newColumn
+        subfactLevelMat[,j] <- newColumn
     }
 }
 
@@ -300,7 +306,7 @@ for(j in sumconts) {
         colnames(modelMat) <- sub(searchTerms[[k]], replacementTerms[[k]], colnames(modelMat))
     }
 }
-rownames(factLevelMat) <- colnames(modelMat)[2:ncol(modelMat)]
+rownames(subfactLevelMat) <- colnames(modelMat)[2:ncol(modelMat)]
 ##
 
 ## collect data to feed to stan
@@ -311,11 +317,12 @@ for (i in 1:NTrees) {
                          NMicrobeNodes                  = NMicrobeNodes,
                          NMicrobeTips                   = NMicrobeTips,
                          NFactors                       = NFactors,
+                         NSubPerFactor                  = NSubPerFactor,
                          NEffects                       = NEffects,
                          present                        = present,
                          sampleNames                    = sampleNames,
                          microbeTipNames                = microbeTipNames,
-                         factLevelMat                   = factLevelMat,
+                         subfactLevelMat                = subfactLevelMat,
                          modelMat                       = cbind(modelMat, hostAncestorsExpanded[[i]]),
                          NSumTo0                        = NSumTo0,
                          baseLevelMat                   = baseLevelMat,

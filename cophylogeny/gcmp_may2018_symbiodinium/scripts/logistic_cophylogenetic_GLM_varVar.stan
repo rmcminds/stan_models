@@ -4,7 +4,7 @@ functions {
         for (row in 1:(rows(pm) - NTips)) {
             newNHs[NTips + row, 1] = pm[NTips + row,] * newNHs[,2];
             newNHs[NTips + row, 2] = exp(log_inv_logit(logitNH[row])
-                                     + log(1 - newNHs[NTips + row, 1]))
+                                         + log(1 - newNHs[NTips + row, 1]))
                                      + newNHs[NTips + row, 1];
         }
         for (row in 1:NTips) {
@@ -24,8 +24,7 @@ data {
     int NMicrobeNodes;
     int NMicrobeTips;
     int NFactors;
-    int NFactorsWSubfactors;
-    int NSubfactorsPerFactor[NFactorsWSubfactors]
+    int NSubPerFactor[NFactors];
     int NEffects;
     int NHostNodes;
     int NHostTips;
@@ -38,9 +37,7 @@ data {
     real<lower=0> microbeOUAlphaPriorExpect;
     real<lower=0> stDLogitMicrobePriorExpect;
     real<lower=0> stDLogitHostPriorExpect;
-    matrix[sum(NSubfactorsPerFactor) + NFactors - NFactorsWSubfactors, sum(NSubfactorsPerFactor)] subfactSinglefactMat;
-    matrix[NSubfactors, NFactors] factSubfactMat;
-    matrix[NEffects, NSubfactors] subfactLevelMat;
+    matrix[NEffects, sum(NSubPerFactor)] subfactLevelMat;
     matrix[NSamples, NEffects + NHostNodes + 1] modelMat;
     int NSumTo0;
     matrix[NSumTo0, NEffects] baseLevelMat;
@@ -54,10 +51,19 @@ data {
     vector[NMicrobeNodes - NMicrobeTips] microbeLogitNH;
     real<lower=0> globalScale;
 }
+transformed data {
+    int NSubfactorGammas;
+    int NSubfactors = sum(NSubPerFactor);
+    for(i in 1:NFactors) {
+        if(NSubPerFactor[i] > 1) {
+            NSubfactorGammas = NSubfactorGammas + NSubPerFactor[i];
+        }
+    }
+}
 parameters {
     real<lower=0> aveStD;
+    vector<lower=0>[2 * NSubfactorGammas] subfactPropsRaw;
     simplex[2 * NFactors + 3] stDProps;
-    vector<lower=0>[NSubfactors - NSingleFactors] factSubfactPropsRaw;
     real<lower=0> hostOUAlpha;
     real<lower=0> microbeOUAlpha;
     real<lower=0> aveStDMeta;
@@ -72,9 +78,8 @@ parameters {
     matrix[NEffects + NHostNodes + 1, NMicrobeNodes + 1] rawMicrobeNodeEffects;
 }
 transformed parameters {
-    int start;
-    vector<lower=0>[NSubfactors] subfactProps;
-    vector<lower=0>[2 * NFactors + 3] scales;
+    vector<lower=0>[2 * NSubfactors + 3] subfactProps;
+    vector<lower=0>[2 * NSubfactors + 3] scales;
     vector<lower=0>[3] metaScales;
     matrix[NMicrobeNodes, 2] newMicrobeNHs;
     matrix[NHostNodes, 2] newHostNHs;
@@ -86,20 +91,31 @@ transformed parameters {
     matrix<lower=0>[NHostNodes, NMicrobeNodes] phyloScales;
     matrix[NEffects + NHostNodes + 1, NMicrobeNodes + 1] scaledMicrobeNodeEffects;
     matrix[NSamples, NMicrobeTips] sampleTipEffects;
-    start = 1;
-    for (i in 1:NFactorsWSubfactors) {
-        subfactProps[start:(start - 1 + NSubfactorsPerFactor[i])]
-            = segment(factSubfactPropsRaw, start, NSubfactorsPerFactor[i])
-        subfactProps[start:(start - 1 + NSubfactorsPerFactor[i])]
-            = subfactProps[start:(start - 1 + NSubfactorsPerFactor[i])]
-              / sum(subfactProps[start:(start - 1 + NSubfactorsPerFactor[i])])
-        start
-            = start + NSubfactorsPerFactor[i];
+    {
+        int rawStart = 1;
+        int normStart = 1;
+        for (i in 1:NFactors) {
+            if(NSubPerFactor[i] > 1) {
+                subfactProps[normStart:(normStart - 1 + NSubPerFactor[i])]
+                    = segment(subfactPropsRaw, rawStart, NSubPerFactor[i])
+                      / sum(segment(subfactPropsRaw, rawStart, NSubPerFactor[i]))
+                      * stDProps[i];
+                subfactProps[(NSubfactors + normStart):(NSubfactors + normStart - 1 + NSubPerFactor[i])]
+                    = segment(subfactPropsRaw, NSubfactors + rawStart, NSubPerFactor[i])
+                      / sum(segment(subfactPropsRaw, NSubfactors + rawStart, NSubPerFactor[i]))
+                      * stDProps[NFactors + i];
+                rawStart = rawStart + NSubPerFactor[i];
+            } else {
+                subfactProps[normStart]
+                    = stDProps[i];
+                subfactProps[NSubfactors + normStart]
+                    = stDProps[NFactors + i];
+            }
+            normStart = normStart + NSubPerFactor[i];
+        }
     }
-    subfactPropsRaw
-        = subfactSinglefactMat * subfactProps;
     scales
-        = sqrt((2 * NFactors + 3) * stDProps)
+        = sqrt(rows(subfactProps) * subfactProps)
           * aveStD;
     metaScales
         = sqrt(3 * metaVarProps)
@@ -112,7 +128,7 @@ transformed parameters {
                                      * stDLogitMicrobePriorExpect
                                      * phyloLogitVarMicrobe);
     microbeVarRaw
-        = rescaleOU(newMicrobeNHs, microbeOUAlpha)' // replace this with the original edge lengths to estimate ancestral states?? just recalculate this and the estimate effects in generated quantities and scale it the same, with the only difference being the application fo the OU transform?
+        = rescaleOU(newMicrobeNHs, microbeOUAlpha)'
           .* exp((phyloLogVarMultPrev
                   * metaScales[1])
                  * microbeAncestorsT);
@@ -131,7 +147,7 @@ transformed parameters {
               * (phyloLogVarMultADiv
                  * metaScales[2]));
     hostScales
-        = scales[2 * NFactors + 1]
+        = scales[2 * NSubfactors + 1]
           * sqrt(hostVarRaw
                  / mean(hostTipAncestors * hostVarRaw));
 
@@ -142,7 +158,7 @@ transformed parameters {
               * microbeAncestorsT)
           .* (hostVarRaw * microbeVarRaw);
     phyloScales
-        = scales[2 * NFactors + 2]
+        = scales[2 * NSubfactors + 2]
           * sqrt(phyloVarRaw
                  / mean(hostTipAncestors
                         * (phyloVarRaw
@@ -150,12 +166,12 @@ transformed parameters {
     scaledMicrobeNodeEffects
         = append_col(
                 append_row(globalScale,
-                           append_row(subfactLevelMat * factSubfactMat * segment(scales, 1, NFactors),
+                           append_row(subfactLevelMat * segment(scales, 1, NSubfactors),
                                       hostScales)),
                 append_row(
                     append_row(
-                        scales[2 * NFactors + 3],
-                        subfactLevelMat * factSubfactMat * segment(scales, NFactors + 1, NFactors))
+                        scales[2 * NSubfactors + 3],
+                        subfactLevelMat * segment(scales, NSubfactors + 1, NSubfactors))
                     * microbeScales,
                     phyloScales))
           .* rawMicrobeNodeEffects;
@@ -164,6 +180,7 @@ transformed parameters {
 model {
     vector[NObs] logit_ratios;
     aveStD ~ exponential(1.0 / aveStDPriorExpect);
+    subfactPropsRaw ~ exponential(1.0);
     stDProps ~ dirichlet(rep_vector(1, 2 * NFactors + 3));
     hostOUAlpha ~ exponential(1.0 / hostOUAlphaPriorExpect);
     microbeOUAlpha ~ exponential(1.0 / microbeOUAlphaPriorExpect);
