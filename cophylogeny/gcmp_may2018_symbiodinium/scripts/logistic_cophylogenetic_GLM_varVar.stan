@@ -52,11 +52,11 @@ data {
     real<lower=0> globalScale;
 }
 transformed data {
-    int NSubfactorGammas;
+    int NSubfactorGammas = 0;
     int NSubfactors = sum(NSubPerFactor);
     for(i in 1:NFactors) {
         if(NSubPerFactor[i] > 1) {
-            NSubfactorGammas = NSubfactorGammas + NSubPerFactor[i];
+            NSubfactorGammas += NSubPerFactor[i];
         }
     }
 }
@@ -104,18 +104,18 @@ transformed parameters {
                     = segment(subfactPropsRaw, NSubfactors + rawStart, NSubPerFactor[i])
                       / sum(segment(subfactPropsRaw, NSubfactors + rawStart, NSubPerFactor[i]))
                       * stDProps[NFactors + i];
-                rawStart = rawStart + NSubPerFactor[i];
+                rawStart += NSubPerFactor[i];
             } else {
                 subfactProps[normStart]
                     = stDProps[i];
                 subfactProps[NSubfactors + normStart]
                     = stDProps[NFactors + i];
             }
-            normStart = normStart + NSubPerFactor[i];
+            normStart += NSubPerFactor[i];
         }
     }
     scales
-        = sqrt(rows(subfactProps) * subfactProps)
+        = sqrt((2 * NSubfactors + 3) * subfactProps)
           * aveStD;
     metaScales
         = sqrt(3 * metaVarProps)
