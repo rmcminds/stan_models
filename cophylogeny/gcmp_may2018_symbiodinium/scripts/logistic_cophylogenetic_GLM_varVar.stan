@@ -78,7 +78,7 @@ parameters {
     matrix[NEffects + NHostNodes + 1, NMicrobeNodes + 1] rawMicrobeNodeEffects;
 }
 transformed parameters {
-    vector<lower=0>[2 * NSubfactors + 3] subfactProps;
+    simplex[2 * NSubfactors + 3] subfactProps;
     vector<lower=0>[2 * NSubfactors + 3] scales;
     vector<lower=0>[3] metaScales;
     matrix[NMicrobeNodes, 2] newMicrobeNHs;
@@ -101,8 +101,8 @@ transformed parameters {
                       / sum(segment(subfactPropsRaw, rawStart, NSubPerFactor[i]))
                       * stDProps[i];
                 subfactProps[(NSubfactors + normStart):(NSubfactors + normStart - 1 + NSubPerFactor[i])]
-                    = segment(subfactPropsRaw, NSubfactors + rawStart, NSubPerFactor[i])
-                      / sum(segment(subfactPropsRaw, NSubfactors + rawStart, NSubPerFactor[i]))
+                    = segment(subfactPropsRaw, NSubfactorGammas + rawStart, NSubPerFactor[i])
+                      / sum(segment(subfactPropsRaw, NSubfactorGammas + rawStart, NSubPerFactor[i]))
                       * stDProps[NFactors + i];
                 rawStart += NSubPerFactor[i];
             } else {
@@ -114,6 +114,8 @@ transformed parameters {
             normStart += NSubPerFactor[i];
         }
     }
+    subfactProps[(2 * NSubfactors + 1):(2 * NSubfactors + 3)]
+        = stDProps[(2 * NFactors + 1):(2 * NFactors + 3)];
     scales
         = sqrt((2 * NSubfactors + 3) * subfactProps)
           * aveStD;
