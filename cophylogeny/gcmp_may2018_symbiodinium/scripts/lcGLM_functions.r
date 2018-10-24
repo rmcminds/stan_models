@@ -809,6 +809,7 @@ runStanModel <- function(noData = F, shuffleData = F, ...) {
     ##
 
     ## summarize the model fit
+    environment(summarizeLcGLM) <- environment()
     summarizeLcGLM()
 }
 ## fin
