@@ -360,8 +360,8 @@ summarizeLcGLM <- function(combineTrees  = T,
                                                                   1,
                                                                   function(x) x / sum(x)))
                     }
-                    colnames(stDPropsPlot) <- gammaNames[start:(start - 1 + NSubPerFactor[[j]])]
-                    save(stDPropsPlot, file = file.path(currdatadir, paste0('subfactProps_', names(groupedFactors)[[j]], '.RData')))
+                    colnames(subfactProps) <- gammaNames[start:(start - 1 + NSubPerFactor[[j]])]
+                    save(subfactProps, file = file.path(currdatadir, paste0('subfactProps_', names(groupedFactors)[[j]], '.RData')))
 
                     pdf(file   = file.path(currplotdir, paste0('subfactProps_', names(groupedFactors)[[j]], '_boxes.pdf')),
                         width  = 7,
