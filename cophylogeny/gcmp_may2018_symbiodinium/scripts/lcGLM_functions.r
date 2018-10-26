@@ -337,36 +337,34 @@ summarizeLcGLM <- function(combineTrees  = T,
                     gammaNames <- c(gammaNames, groupedFactors[[j]])
                 }
             }
-            subfactPropsRaw <- array(extract(fit[[i]],
-                                             pars       = 'subfactPropsRaw',
-                                             permuted   = F,
-                                             inc_warmup = T),
-                                     dim = c(NMCSamples,
-                                             NChains,
-                                             2 * NSubfactorGammas),
-                                     dimnames = list(sample  = NULL,
-                                                     chain   = NULL,
-                                                     factor  = c(paste0('ADiv.', gammaNames),
-                                                                 paste0('Specificity.', gammaNames))))
+            subfactProps<- array(extract(fit[[i]],
+                                         pars       = 'subfactProps',
+                                         permuted   = F,
+                                         inc_warmup = T),
+                                 dim = c(NMCSamples,
+                                         NChains,
+                                         2 * NSubfactorGammas),
+                                 dimnames = list(sample  = NULL,
+                                                 chain   = NULL,
+                                                 factor  = c(paste0('ADiv.', gammaNames),
+                                                             paste0('Specificity.', gammaNames))))
             start <- 1
             for (j in 1:NFactors) {
                 if(NSubPerFactor[[j]] > 1) {
                     
-                    subfactProps <- NULL
+                    subfactPropsPlot <- NULL
                     for(k in 1:NChains) {
-                        subfactProps <- rbind(subfactProps, apply(subfactPropsRaw[(warmup + 1):NMCSamples,
-                                                                                  k,
-                                                                                  start:(start - 1 + NSubPerFactor[[j]])],
-                                                                  1,
-                                                                  function(x) x / sum(x)))
+                        subfactPropsPlot <- rbind(subfactPropsPlot, subfactProps[(warmup + 1):NMCSamples,
+                                                                                 k,
+                                                                                 start:(start - 1 + NSubPerFactor[[j]])])
                     }
-                    colnames(subfactProps) <- gammaNames[start:(start - 1 + NSubPerFactor[[j]])]
-                    save(subfactProps, file = file.path(currdatadir, paste0('subfactProps_', names(groupedFactors)[[j]], '.RData')))
+                    colnames(subfactPropsPlot) <- gammaNames[start:(start - 1 + NSubPerFactor[[j]])]
+                    save(subfactPropsPlot, file = file.path(currdatadir, paste0('subfactProps_', names(groupedFactors)[[j]], '.RData')))
 
                     pdf(file   = file.path(currplotdir, paste0('subfactProps_', names(groupedFactors)[[j]], '_boxes.pdf')),
                         width  = 7,
                         height = 7)
-                    boxplot(stDPropsPlot,
+                    boxplot(subfactPropsPlot,
                             cex.axis = 0.5,
                             las      = 2,
                             xlab     = 'Subfactor',

@@ -56,7 +56,7 @@ transformed data {
     int NSubfactors = sum(NSubPerFactor);
     for(i in 1:NFactors) {
         if(NSubPerFactor[i] > 1) {
-            NSubfactorGammas += NSubPerFactor[i];
+            NSubfactorGammas += NSubPerFactor[i] - 1;
         }
     }
 }
@@ -91,20 +91,29 @@ transformed parameters {
     matrix<lower=0>[NHostNodes, NMicrobeNodes] phyloScales;
     matrix[NEffects + NHostNodes + 1, NMicrobeNodes + 1] scaledMicrobeNodeEffects;
     matrix[NSamples, NMicrobeTips] sampleTipEffects;
+    real negK_log_sum_gammmas = 0;
     {
         int rawStart = 1;
         int normStart = 1;
         for (i in 1:NFactors) {
             if(NSubPerFactor[i] > 1) {
+                real sum_gamma = 1 + sum(segment(subfactPropsRaw,
+                                                 rawStart,
+                                                 NSubPerFactor[i] - 1));
+                negK_log_sum_gammmas += -NSubPerFactor[i] * log(sum_gamma);
                 subfactProps[normStart:(normStart - 1 + NSubPerFactor[i])]
-                    = segment(subfactPropsRaw, rawStart, NSubPerFactor[i])
-                      / sum(segment(subfactPropsRaw, rawStart, NSubPerFactor[i]))
+                    = append_row(1, segment(subfactPropsRaw, rawStart, NSubPerFactor[i] - 1))
+                      / sum_gamma
                       * stDProps[i];
+                sum_gamma = 1 + sum(segment(subfactPropsRaw,
+                                            NSubfactorGammas + rawStart,
+                                            NSubPerFactor[i] - 1));
+                negK_log_sum_gammmas += -NSubPerFactor[i] * log(sum_gamma);
                 subfactProps[(NSubfactors + normStart):(NSubfactors + normStart - 1 + NSubPerFactor[i])]
                     = segment(subfactPropsRaw, NSubfactorGammas + rawStart, NSubPerFactor[i])
-                      / sum(segment(subfactPropsRaw, NSubfactorGammas + rawStart, NSubPerFactor[i]))
+                      / sum_gamma
                       * stDProps[NFactors + i];
-                rawStart += NSubPerFactor[i];
+                rawStart += NSubPerFactor[i] - 1;
             } else {
                 subfactProps[normStart]
                     = stDProps[i];
@@ -182,7 +191,13 @@ transformed parameters {
 model {
     vector[NObs] logit_ratios;
     aveStD ~ exponential(1.0 / aveStDPriorExpect);
-    subfactPropsRaw ~ exponential(1.0);
+    target += negK_log_sum_gammmas;
+    for(i in 1:NFactors) {
+        if(NSubPerFactor[i] > 1) {
+            target += dirichlet_lpdf(subfactProps[normStart:(normStart - 1 + NSubPerFactor[i])] | rep_vector(1, NSubPerFactor[i]));
+            target += dirichlet_lpdf(subfactProps[(NSubfactors + normStart):(NSubfactors + normStart - 1 + NSubPerFactor[i])] | rep_vector(1, NSubPerFactor[i]));
+        }
+    }
     stDProps ~ dirichlet(rep_vector(1, 2 * NFactors + 3));
     hostOUAlpha ~ exponential(1.0 / hostOUAlphaPriorExpect);
     microbeOUAlpha ~ exponential(1.0 / microbeOUAlphaPriorExpect);
