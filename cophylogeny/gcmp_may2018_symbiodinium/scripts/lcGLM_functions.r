@@ -343,32 +343,50 @@ summarizeLcGLM <- function(combineTrees  = T,
                                          inc_warmup = T),
                                  dim = c(NMCSamples,
                                          NChains,
-                                         2 * NSubfactorGammas),
+                                         2 * sum(NSubPerFactor) + 3),
                                  dimnames = list(sample  = NULL,
                                                  chain   = NULL,
-                                                 factor  = c(paste0('ADiv.', gammaNames),
-                                                             paste0('Specificity.', gammaNames))))
+                                                 factor  = c(paste0('ADiv.', unlist(groupedFactors)),
+                                                             paste0('Specificity.', unlist(groupedFactors)),
+                                                             'ADiv.host',
+                                                             'host.specificity',
+                                                             'microbe.prevalence')))
             start <- 1
             for (j in 1:NFactors) {
                 if(NSubPerFactor[[j]] > 1) {
                     
                     subfactPropsPlot <- NULL
                     for(k in 1:NChains) {
-                        subfactPropsPlot <- rbind(subfactPropsPlot, subfactProps[(warmup + 1):NMCSamples,
-                                                                                 k,
-                                                                                 start:(start - 1 + NSubPerFactor[[j]])])
+                        subfactPropsADivPlot <- rbind(subfactPropsPlot, subfactProps[(warmup + 1):NMCSamples,
+                                                                                     k,
+                                                                                     start:(start - 1 + NSubPerFactor[[j]])])
+                        subfactPropsSpecPlot <- rbind(subfactPropsPlot, subfactProps[(warmup + 1):NMCSamples,
+                                                                                     k,
+                                                                                     (sum(NSubPerFactor) + start):(sum(NSubPerFactor) + start - 1 + NSubPerFactor[[j]])])
                     }
-                    colnames(subfactPropsPlot) <- gammaNames[start:(start - 1 + NSubPerFactor[[j]])]
-                    save(subfactPropsPlot, file = file.path(currdatadir, paste0('subfactProps_', names(groupedFactors)[[j]], '.RData')))
+                    subfactPropsADivPlot <- t(apply(subfactPropsADivPlot, 1, function(x) x / sum(x)))
+                    subfactPropsSpecPlot <- t(apply(subfactPropsSpecPlot, 1, function(x) x / sum(x)))
+                    save(subfactPropsADivPlot, file = file.path(currdatadir, paste0('subfactProps_ADiv_', names(groupedFactors)[[j]], '.RData')))
+                    save(subfactPropsSpecPlot, file = file.path(currdatadir, paste0('subfactProps_Spec_', names(groupedFactors)[[j]], '.RData')))
 
-                    pdf(file   = file.path(currplotdir, paste0('subfactProps_', names(groupedFactors)[[j]], '_boxes.pdf')),
+                    pdf(file   = file.path(currplotdir, paste0('subfactProps_ADiv_', names(groupedFactors)[[j]], '_boxes.pdf')),
                         width  = 7,
                         height = 7)
-                    boxplot(subfactPropsPlot,
+                    boxplot(subfactPropsADivPlot,
                             cex.axis = 0.5,
                             las      = 2,
                             xlab     = 'Subfactor',
-                            ylab     = paste0('Percent of', names(groupedFactors)[[j]], 'variance'))
+                            ylab     = paste0('Percent of ', names(groupedFactors)[[j]], ' (Adiv) variance'))
+                    graphics.off()
+                    
+                    pdf(file   = file.path(currplotdir, paste0('subfactProps_Spec_', names(groupedFactors)[[j]], '_boxes.pdf')),
+                        width  = 7,
+                        height = 7)
+                    boxplot(subfactPropsSpecPlot,
+                            cex.axis = 0.5,
+                            las      = 2,
+                            xlab     = 'Subfactor',
+                            ylab     = paste0('Percent of ', names(groupedFactors)[[j]], ' (Specificity) variance'))
                     graphics.off()
                     
                 }
