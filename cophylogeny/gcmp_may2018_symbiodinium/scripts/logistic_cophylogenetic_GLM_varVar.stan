@@ -20,7 +20,6 @@ functions {
 }
 data {
     int NSamples;
-    int NObs;
     int NMicrobeNodes;
     int NMicrobeTips;
     int NFactors;
@@ -28,9 +27,9 @@ data {
     int NEffects;
     int NHostNodes;
     int NHostTips;
-    int present[NObs];
-    int sampleNames[NObs];
-    int microbeTipNames[NObs];
+    int NSeqs;
+    int present[NSamples, NSeqs];
+    matrix[NMicrobeTips, NSeqs] profileMat;
     real<lower=0> aveStDPriorExpect;
     real<lower=0> aveStDMetaPriorExpect;
     real<lower=0> hostOUAlphaPriorExpect;
@@ -192,10 +191,12 @@ transformed parameters {
                     * microbeScales,
                     phyloScales))
           .* rawMicrobeNodeEffects;
-    sampleTipEffects = modelMat * (scaledMicrobeNodeEffects * microbeTipAncestorsT);
+    sampleTipEffects
+        = modelMat
+          * (scaledMicrobeNodeEffects
+             * microbeTipAncestorsT);
 }
 model {
-    vector[NObs] logit_ratios;
     aveStD ~ exponential(1.0 / aveStDPriorExpect);
     target += dirichSubFact_lpdf;
     stDProps ~ dirichlet(rep_vector(1, 2 * NFactors + 3));
@@ -212,15 +213,16 @@ model {
     to_vector(phyloLogVarMultRaw) ~ normal(0,1);
     to_vector(rawMicrobeNodeEffects) ~ normal(0,1);
     to_vector(baseLevelMat * rawMicrobeNodeEffects[2:(NEffects + 1),]) ~ normal(0,1);
-    for (n in 1:NObs)
-        logit_ratios[n] = sampleTipEffects[sampleNames[n], microbeTipNames[n]];
-    present ~ bernoulli_logit(logit_ratios);
+    to_array_1d(present) ~ bernoulli_logit(to_array_1d(sampleTipEffects * profileMat));
 }
 generated quantities {
+    matrix[NSamples, NMicrobeTips] profilePresence;
     matrix[NSumTo0, NMicrobeNodes + 1] baseLevelEffects;
-    int present_pred[NObs];
+    for (i  in 1:NSamples) {
+        for (j in 1:NMicrobeTips) {
+            profilePresence[i,j] = bernoulli_logit_rng(sampleTipEffects[i,j]);
+        }
+    }
     baseLevelEffects
         = baseLevelMat * scaledMicrobeNodeEffects[2:(NEffects + 1),];
-    for (n in 1:NObs)
-        present_pred[n] = bernoulli_logit_rng(sampleTipEffects[sampleNames[n], microbeTipNames[n]]);
 }
