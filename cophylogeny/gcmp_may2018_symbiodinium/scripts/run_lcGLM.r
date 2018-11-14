@@ -41,7 +41,9 @@ stDLogitHostPriorExpect <- 0.1
 stDLogitMicrobePriorExpect <- 1.0
 globalScale <- 100
 NTrees <- 10 ## number of random trees to sample and to fit the model to
-groupedFactors <- list(location           = c('ocean', 'ocean_area', 'reef_name'),
+groupedFactors <- list(isBiological       = 'isBiological',
+                       sample_type        = 'sample_type',
+                       location           = c('ocean', 'ocean_area', 'reef_name'),
                        date               = 'concatenated_date',
                        colony             = 'colony_name',
                        tissue_compartment = 'tissue_compartment',
@@ -69,27 +71,30 @@ filterfunction <- function(dfin) {
     undupsamps <- levels(dfin$physical_sample_name)[sapply(levels(dfin$physical_sample_name),
                                                            function(x) sum(x == dfin$physical_sample_name) == 1)]
     df1 <- droplevels(dfin[dfin$physical_sample_name %in% undupsamps,])
-    df2 <- droplevels(df1[(df1$tissue_compartment == 'W' |
-                           df1$tissue_compartment == 'T' |
-                           df1$tissue_compartment == 'S' |
-                           df1$tissue_compartment == 'M') &
+    df2 <- droplevels(df1[(df1$tissue_compartment %in% c('W', 'T', 'S', 'M') &
                            !grepl('Unknown|Missing',
                                   df1[,sampleTipKey],
-                                  ignore.case = T),])
+                                  ignore.case = T)) |
+                          df1$sample_type %in% c('Reef Sediment', 'Reef Water'),])
     return(df2)
 }
 
 contrastfunction <- function(dfin) {
     df2 <- dfin
+    df2$isBiological <- factor(df2$tissue_compartment %in% c('W', 'T', 'S', 'M'), labels = c('nonbiological','biological'))
+    contrasts(df2$isBiological) <- 'contr.sum'
+    levels(df2$sample_type)[levels(df2$sample_type) == 'Reef Sediment'] <- 'sediment'
+    levels(df2$sample_type)[levels(df2$sample_type) == 'Reef Water'] <- 'water'
+    levels(df2$sample_type)[!levels(df2$sample_type) %in% c('sediment', 'water')] <- NA
+    contrasts(df2$sample_type) <- 'contr.sum'
     contrasts(df2$ocean) <- 'contr.sum'
     contrasts(df2$ocean_area) <- 'contr.sum'
     contrasts(df2$host_scientific_name) <- 'contr.sum'
-    if('W' %in% levels(df2$tissue_compartment)) {
-        levels(df2$tissue_compartment)[levels(df2$tissue_compartment) == 'W'] <- NA
-    }
+    levels(df2$tissue_compartment)[!levels(df2$tissue_compartment) %in% c('T', 'S', 'M')] <- NA
     contrasts(df2$tissue_compartment) <- 'contr.sum'
     contrasts(df2$reef_name) <- 'contr.sum'
     contrasts(df2$concatenated_date) <- 'contr.sum'
+    levels(df2$colony_name)[levels(df2$colony_name) == 'not_applicable'] <- NA
     contrasts(df2$colony_name) <- 'contr.sum'
     levels(df2[,sampleTipKey])[levels(df2[,sampleTipKey]) == 'Homophyllia_hillae'] <- "Homophyllia_bowerbanki"
     levels(df2[,sampleTipKey])[levels(df2[,sampleTipKey]) == 'Pocillopora_eydouxi'] <- "Pocillopora_grandis"
@@ -150,6 +155,7 @@ newermaptemp <- droplevels(newmap[idx,])
 
 ## define contrasts
 newermap <- contrastfunction(newermaptemp)
+levels(newermap[,sampleTipKey])[!levels(newermap[,sampleTipKey]) %in% unique(newermap[newermap$isBiological == 'biological', sampleTipKey])] <- NA
 ##
 
 ## convert data to presence/absence
@@ -260,7 +266,9 @@ for (i in 1:NTrees) {
                                             hostTreesSampled[[i]],
                                             NHostTips,
                                             hostTreesSampled[[i]]$tip.label)
-    hostAncestorsExpanded[[i]] <- hostAncestors[[i]][as.character(sampleMap[[i]][,sampleTipKey]),]
+    index <- as.character(sampleMap[[i]][,sampleTipKey])
+    index[is.na(index)] <- 'nonbiological'
+    hostAncestorsExpanded[[i]] <- rbind(hostAncestors[[i]], nonbiological = 0)[index,]
     rownames(hostAncestorsExpanded[[i]]) <- rownames(sampleMap[[i]])
 }
 ##
