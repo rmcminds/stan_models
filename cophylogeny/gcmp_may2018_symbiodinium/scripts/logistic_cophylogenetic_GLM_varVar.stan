@@ -213,7 +213,7 @@ model {
     to_vector(phyloLogVarMultRaw) ~ normal(0,1);
     to_vector(rawMicrobeNodeEffects) ~ normal(0,1);
     to_vector(baseLevelMat * rawMicrobeNodeEffects[2:(NEffects + 1),]) ~ normal(0,1);
-    to_array_1d(present) ~ bernoulli_logit(to_array_1d(sampleTipEffects * profileMat));
+    to_array_1d(present) ~ bernoulli_logit(to_array_1d(to_array_2d(sampleTipEffects * profileMat)));
 }
 generated quantities {
     matrix[NSamples, NMicrobeTips] profilePresence;
