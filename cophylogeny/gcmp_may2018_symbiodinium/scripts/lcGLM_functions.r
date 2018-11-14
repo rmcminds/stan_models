@@ -756,7 +756,7 @@ makeDiagnosticPlots <- function(...) {
     
 }
 
-runStanModel <- function(noData = F, shuffleData = F, ...) {
+runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, ...) {
     
     if(sum(noData, shuffleData) > 1) {
         cat('\at most one of noData and shuffleData can be TRUE.\n')
@@ -777,8 +777,9 @@ runStanModel <- function(noData = F, shuffleData = F, ...) {
     } else if(shuffleData) {
 
         ## shuffle data from stan list
+        presentShuffled <- sample(present)
         for (i in 1:NTrees) {
-            standat[[i]]$present <- sample(present)
+            standat[[i]]$present <- presentShuffled
         }
         
         subdir <- file.path(outdir, 'resampled_with_randomObs')
@@ -786,6 +787,20 @@ runStanModel <- function(noData = F, shuffleData = F, ...) {
         save.image(file.path(subdir, 'setup.RData'))
 
         cat('\nSampling from shuffled data\n')
+    } else if(shuffleSamples) {
+        
+        ## shuffle data from stan list
+        senddatShuffled <- melt(y[sample(1:nrow(y)),], varnames = c('sample', 'tip'), value.name = 'present')
+        presentSamplesShuffled <- senddatShuffled[,3]
+        for (i in 1:NTrees) {
+            standat[[i]]$present <- presentSamplesShuffled
+        }
+        
+        subdir <- file.path(outdir, 'resampled_with_randomSamples')
+        dir.create(subdir, recursive = T)
+        save.image(file.path(subdir, 'setup.RData'))
+        
+        cat('\nSampling from shuffled samples\n')
     } else {
         
         subdir <- file.path(outdir, 'primary_sampling')
