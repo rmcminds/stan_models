@@ -180,7 +180,6 @@ summarizeLcGLM <- function(combineTrees  = T,
             ##
             
             ## plot the sampled tree with the time bins marked
-            finalMicrobeTree$tip.label <- substr(finalMicrobeTree$tip.label, 1, 30)
             pdf(file   = file.path(currplotdir, 'sampledMicrobeTree.pdf'),
                 width  = 25,
                 height = 15)
@@ -199,6 +198,7 @@ summarizeLcGLM <- function(combineTrees  = T,
                               3,
                               mean)
             finalMicrobeTree.newEdges <- finalMicrobeTree
+            finalMicrobeTree.newEdges$tip.label <- substr(finalMicrobeTree.newEdges$tip.label, 1, 30)
             finalMicrobeTree.newEdges$edge.length <- newEdges[order(microbeTreeDetails$edgeOrder)]
             pdf(file   = file.path(currplotdir, 'microbeTreeWEstimatedEdgeLengths.pdf'),
                 width  = 25,
@@ -241,7 +241,7 @@ summarizeLcGLM <- function(combineTrees  = T,
             temp <- temp[order(temp[,sampleTipKey]),]
             for(comp in c('T', 'S', 'M')) {
                 
-                temp2 <- temp[temp$tissue_compartment == comp,]
+                temp2 <- temp[temp$tissue_compartment == comp & !is.na(temp$tissue_compartment),]
                 hostvectTemp <- hostvect[rownames(temp2)]
                 
                 # expand the tips into polytomies containing a tip for each sample
@@ -833,15 +833,21 @@ runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, variat
                      include  = FALSE,
                      init_r   = init_r)
                 } else {
+                    NMCSamples <- 1000
+                    warmup <- 0
                     vb(stan_model(file = modelPath),
                        data     = standat[[i]],
-                       iter     = NIterations,
+                       iter     = 25000,
                        seed     = seed,
                        pars     = c('rawMicrobeNodeEffects', 'sampleTipEffects'),
                        include  = FALSE,
-                       init_r   = init_r)
+                       init_r   = init_r,
+                       sample_file = file.path(subdir, 'samples.csv'))
                 }
-            }, error = function(e) NA)
+            }, error = function(e) {
+                   print(e)
+                   return(NA)
+               })
         }, mc.preschedule = F,
            mc.cores       = NCores)
 

@@ -218,9 +218,6 @@ model {
 }
 generated quantities {
     matrix[NSumTo0, NMicrobeNodes + 1] baseLevelEffects;
-    int present_pred[NObs];
     baseLevelEffects
         = baseLevelMat * scaledMicrobeNodeEffects[2:(NEffects + 1),];
-    for (n in 1:NObs)
-        present_pred[n] = bernoulli_logit_rng(sampleTipEffects[sampleNames[n], microbeTipNames[n]]);
 }
