@@ -115,7 +115,7 @@ summarizeLcGLM <- function(combineTrees  = T,
     NSuccessTrees <- sum(fitModes == 0)
 
     ## summarize the results separately for each sampled host tree and/or for all trees combined
-    for(i in 1:(separateTrees * NTrees + combineTrees)) {
+    for(i in 1:(separateTrees * NTrees + combineTrees * (NTrees > 1))) {
         
         if (NSuccessTrees > 1 & i == (separateTrees * NTrees + 1)) {
     
@@ -162,9 +162,11 @@ summarizeLcGLM <- function(combineTrees  = T,
             
         }
         
-        sink(stdout(), type = "message")
-        check_hmc_diagnostics(fit[[i]])
-        sink(NULL, type = "message")
+        if(!variational) {
+            sink(stdout(), type = "message")
+            check_hmc_diagnostics(fit[[i]])
+            sink(NULL, type = "message")
+        }
 
         if(plotTrees) {
         
@@ -178,6 +180,7 @@ summarizeLcGLM <- function(combineTrees  = T,
             ##
             
             ## plot the sampled tree with the time bins marked
+            finalMicrobeTree$tip.label <- substr(finalMicrobeTree$tip.label, 1, 30)
             pdf(file   = file.path(currplotdir, 'sampledMicrobeTree.pdf'),
                 width  = 25,
                 height = 15)
@@ -196,7 +199,6 @@ summarizeLcGLM <- function(combineTrees  = T,
                               3,
                               mean)
             finalMicrobeTree.newEdges <- finalMicrobeTree
-            finalMicrobeTree.newEdges$tip.label <- substr(finalMicrobeTree.newEdges$tip.label, 1, 30)
             finalMicrobeTree.newEdges$edge.length <- newEdges[order(microbeTreeDetails$edgeOrder)]
             pdf(file   = file.path(currplotdir, 'microbeTreeWEstimatedEdgeLengths.pdf'),
                 width  = 25,
@@ -228,7 +230,7 @@ summarizeLcGLM <- function(combineTrees  = T,
             
             ## plot heatmap of cophylogenetic patterns
             plotmicrobetree <- ladderize(multi2di(finalMicrobeTree))
-            hclmicrobetree <- as.hclust(plotmicrobetree)
+            hclmicrobetree <- as.hclust(force.ultrametric(plotmicrobetree))
             # for each sample in the data, assign its mitotype to a vector
             hostvect <- sampleMap[[i]][,sampleTipKey]
             # name the vector with the sample IDs
@@ -756,10 +758,10 @@ makeDiagnosticPlots <- function(...) {
     
 }
 
-runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, ...) {
+runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, variational = F, ...) {
     
-    if(sum(noData, shuffleData) > 1) {
-        cat('\at most one of noData and shuffleData can be TRUE.\n')
+    if(sum(noData, shuffleData, shuffleSamples) > 1) {
+        cat('\at most one of noData, shuffleData, and shuffleSamples can be TRUE.\n')
         q()
     } else if(noData) {
 
@@ -817,6 +819,7 @@ runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, ...) {
         function(i) {
             setTimeLimit(timeLimit)
             tryCatch({
+                if(!variational) {
                 stan(file     = modelPath,
                      data     = standat[[i]],
                      control  = list(adapt_delta   = adapt_delta,
@@ -829,6 +832,15 @@ runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, ...) {
                      pars     = c('rawMicrobeNodeEffects', 'sampleTipEffects'),
                      include  = FALSE,
                      init_r   = init_r)
+                } else {
+                    vb(stan_model(file = modelPath),
+                       data     = standat[[i]],
+                       iter     = NIterations,
+                       seed     = seed,
+                       pars     = c('rawMicrobeNodeEffects', 'sampleTipEffects'),
+                       include  = FALSE,
+                       init_r   = init_r)
+                }
             }, error = function(e) NA)
         }, mc.preschedule = F,
            mc.cores       = NCores)
