@@ -229,8 +229,8 @@ summarizeLcGLM <- function(combineTrees  = T,
             ##
             
             ## plot heatmap of cophylogenetic patterns
-            plotmicrobetree <- ladderize(multi2di(finalMicrobeTree))
-            hclmicrobetree <- as.hclust(force.ultrametric(plotmicrobetree))
+            plotmicrobetree <- force.ultrametric(ladderize(multi2di(finalMicrobeTree)))
+            hclmicrobetree <- as.hclust(plotmicrobetree)
             # for each sample in the data, assign its mitotype to a vector
             hostvect <- sampleMap[[i]][,sampleTipKey]
             # name the vector with the sample IDs
@@ -253,10 +253,10 @@ summarizeLcGLM <- function(combineTrees  = T,
                                      
                 # convert polytomies into randomly-split, binary subtrees with 0-length branches,
                 # and ladderize the whole tree
-                hosttree.dichotomous <- ladderize(multi2di(hosttree, random = F), right = F)
+                hosttree.dichotomous <- force.ultrametric(ladderize(multi2di(hosttree, random = F), right = F))
                 
                 # convert the phylogenetic tree into an hclust object
-                hclhosttree <- as.hclust(force.ultrametric(hosttree.dichotomous))
+                hclhosttree <- as.hclust(hosttree.dichotomous)
                 plotFilt <- as.matrix(t(y)[plotmicrobetree$tip.label, hosttree.dichotomous$tip.label])
                 pdf(file   = file.path(currplotdir,
                                        paste0('cophylogeny_heatmap_',
@@ -299,6 +299,22 @@ summarizeLcGLM <- function(combineTrees  = T,
                                                           'microbe.prevalence')))
             save(stDProps, file = file.path(currdatadir, 'stDProps.RData'))
             
+            allRes <- monitor(stDProps,
+                              warmup = warmup,
+                              probs  = c(0.025, 0.5, 0.975),
+                              print  = F)
+            rownames(allRes) <- c(paste0('ADiv.', names(groupedFactors)),
+                              paste0('Specificity.', names(groupedFactors)),
+                              'ADiv.host',
+                              'host.specificity',
+                              'microbe.prevalence')
+            cat('factor\t', file = file.path(currtabledir, 'stDProps.txt'))
+            write.table(allRes,
+                        file   = file.path(currtabledir, 'stDProps.txt'),
+                        sep    = '\t',
+                        quote  = F,
+                        append = T)
+            
             stDPropsPlot <- NULL
             for(j in 1:NChains) {
                 stDPropsPlot <- rbind(stDPropsPlot, stDProps[(warmup + 1):NMCSamples, j,])
@@ -339,20 +355,20 @@ summarizeLcGLM <- function(combineTrees  = T,
                     gammaNames <- c(gammaNames, groupedFactors[[j]])
                 }
             }
-            subfactProps<- array(extract(fit[[i]],
-                                         pars       = 'subfactProps',
-                                         permuted   = F,
-                                         inc_warmup = T),
-                                 dim = c(NMCSamples,
-                                         NChains,
-                                         2 * sum(NSubPerFactor) + 3),
-                                 dimnames = list(sample  = NULL,
-                                                 chain   = NULL,
-                                                 factor  = c(paste0('ADiv.', unlist(groupedFactors)),
-                                                             paste0('Specificity.', unlist(groupedFactors)),
-                                                             'ADiv.host',
-                                                             'host.specificity',
-                                                             'microbe.prevalence')))
+            subfactProps <- array(extract(fit[[i]],
+                                          pars       = 'subfactProps',
+                                          permuted   = F,
+                                          inc_warmup = T),
+                                  dim = c(NMCSamples,
+                                          NChains,
+                                          2 * sum(NSubPerFactor) + 3),
+                                  dimnames = list(sample  = NULL,
+                                                  chain   = NULL,
+                                                  factor  = c(paste0('ADiv.', unlist(groupedFactors)),
+                                                              paste0('Specificity.', unlist(groupedFactors)),
+                                                              'ADiv.host',
+                                                              'host.specificity',
+                                                              'microbe.prevalence')))
             start <- 1
             for (j in 1:NFactors) {
                 if(NSubPerFactor[[j]] > 1) {
@@ -370,6 +386,36 @@ summarizeLcGLM <- function(combineTrees  = T,
                     subfactPropsSpecPlot <- t(apply(subfactPropsSpecPlot, 1, function(x) x / sum(x)))
                     save(subfactPropsADivPlot, file = file.path(currdatadir, paste0('subfactProps_ADiv_', names(groupedFactors)[[j]], '.RData')))
                     save(subfactPropsSpecPlot, file = file.path(currdatadir, paste0('subfactProps_Spec_', names(groupedFactors)[[j]], '.RData')))
+                    
+                    allres <- monitor(array(subfactPropsADivPlot,
+                                            dim = c(nrow(subfactPropsADivPlot),
+                                                    1,
+                                                    ncol(subfactPropsADivPlot))),
+                                      warmup = 0,
+                                      probs  = c(0.025, 0.5, 0.975),
+                                      print  = F)
+                    rownames(allres) <- groupedFactors[[j]]
+                    cat('subfactor\t', file = file.path(currtabledir, paste0('subfactProps_ADiv_', names(groupedFactors)[[j]], '.txt')))
+                    write.table(allres,
+                                file   = file.path(currtabledir, paste0('subfactProps_ADiv_', names(groupedFactors)[[j]], '.txt')),
+                                sep    = '\t',
+                                quote  = F,
+                                append = T)
+                                
+                    allres <- monitor(array(subfactPropsSpecPlot,
+                                            dim = c(nrow(subfactPropsSpecPlot),
+                                                    1,
+                                                    ncol(subfactPropsSpecPlot))),
+                                      warmup = 0,
+                                      probs  = c(0.025, 0.5, 0.975),
+                                      print  = F)
+                    rownames(allres) <- groupedFactors[[j]]
+                    cat('subfactor\t', file = file.path(currtabledir, paste0('subfactProps_Spec_', names(groupedFactors)[[j]], '.txt')))
+                    write.table(allres,
+                                file   = file.path(currtabledir, paste0('subfactProps_Spec_', names(groupedFactors)[[j]], '.txt')),
+                                sep    = '\t',
+                                quote  = F,
+                                append = T)
 
                     pdf(file   = file.path(currplotdir, paste0('subfactProps_ADiv_', names(groupedFactors)[[j]], '_boxes.pdf')),
                         width  = 7,
@@ -760,6 +806,11 @@ makeDiagnosticPlots <- function(...) {
 
 runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, variational = F, ...) {
     
+    if(variational) {
+        NMCSamples <- 1000
+        warmup <- 0
+    }
+    
     if(sum(noData, shuffleData, shuffleSamples) > 1) {
         cat('\at most one of noData, shuffleData, and shuffleSamples can be TRUE.\n')
         q()
@@ -833,8 +884,6 @@ runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, variat
                      include  = FALSE,
                      init_r   = init_r)
                 } else {
-                    NMCSamples <- 1000
-                    warmup <- 0
                     vb(stan_model(file = modelPath),
                        data     = standat[[i]],
                        iter     = 25000,
