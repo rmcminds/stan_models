@@ -1,6 +1,32 @@
 logit <- function(x) { log(x / (1 - x)) }
 inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 
+getTreeDetails <- function(tree) {
+    edgeOrder <- order(tree$edge[,2])
+    edgeLengths <- tree$edge.length[edgeOrder]
+    NHs <- nodeHeights(tree)
+    maxNHs <- max(NHs)
+    NHRel <- NHs / maxNHs
+    rownames(NHRel) <- tree$edge[,2]
+    NHRel <- NHRel[edgeOrder,]
+    logitNH <- logit(apply(NHRel[(length(tree$tip.label) + 1):(length(tree$tip.label) + tree$Nnode - 1),],
+                           1,
+                           function(x) (x[[2]] - x[[1]]) / (1 - x[[1]])))
+    pm <- makeContrastMat(tree$Nnode - 1 + length(tree$tip.label),
+                          tree,
+                          length(tree$tip.label),
+                          tree$tip.label,
+                          1)[-1, -1]
+
+    return(list(edgeOrder   = edgeOrder,
+                NHs         = NHs,
+                maxNHs      = maxNHs,
+                NHRel       = NHRel,
+                edgeLengths = edgeLengths,
+                logitNH     = logitNH,
+                pm          = pm))
+}
+
 createAncestryMat <- function(NNodes, tree, NTips, tipNames) {
     ancestryMat <- matrix(0, NNodes + 1, NNodes + 1)
     for(node in 1:(NNodes + 1)) {
@@ -12,65 +38,30 @@ createAncestryMat <- function(NNodes, tree, NTips, tipNames) {
     return(ancestryMat)
 }
 
-getTreeDetails <- function(tree) {
-    edgeOrder <- order(tree$edge[,2])
-    edgeLengths <- tree$edge.length[edgeOrder]
-    NHs <- nodeHeights(tree)
-    maxNHs <- max(NHs)
-    NHRel <- NHs / maxNHs
-    rownames(NHRel) <- tree$edge[,2]
-    NHRel <- NHRel[edgeOrder,]
-    logitNH <- logit(apply(NHRel[(length(tree$tip.label) + 1):(length(tree$tip.label) + tree$Nnode - 1),], 1, function(x) (x[[2]] - x[[1]]) / (1 - x[[1]])))
-    pm <- makeParentMat(tree$Nnode - 1 + length(tree$tip.label), tree, length(tree$tip.label), tree$tip.label)[-1, -1]
-
-    return(list(edgeOrder   = edgeOrder,
-                NHs         = NHs,
-                maxNHs      = maxNHs,
-                NHRel       = NHRel,
-                edgeLengths = edgeLengths,
-                logitNH     = logitNH,
-                pm          = pm))
-}
-
-makeIdentityMat <- function(NNodes, ...) {
-    idMat <- diag(NNodes + 1)
-    return(idMat)
-}
-
-makeParentMat <- function(NNodes, tree, NTips, tipNames, ...) {
-    parentMat <- matrix(0, NNodes + 1, NNodes + 1)
-    for(node in 1:(NNodes + 1)) {
-        p <- Ancestors(tree, node, 'parent')
-        parentMat[node, ] <- as.numeric(1:(NNodes + 1) %in% c(p, node))
+makeContrastMat <- function(NNodes, tree = NULL, NTips = NULL, tipNames = NULL, nLevels = 0, ...) {
+    ## creates a matrix that, when multiplied by a matrix of raw per-branch effects, sums the effects of parental branches to some specified degree in order to draw contrasts between different parts of the tree
+    if (nLevels == 0) {
+        contrastMat <- diag(NNodes + 1)
+    } else {
+        contrastMat <- matrix(0, nrow = NNodes + 1, ncol = NNodes + 1)
+        if(nLevels == 'vsRoot') {
+            contrastMat[1, 1] <- 1
+            contrastMat[2:(NNodes + 1), 2:(NNodes + 1)] <- createAncestryMat(NNodes, tree, NTips, tipNames)
+        } else {
+            for(node in 1:(NNodes + 1)) {
+                x <- node
+                for(i in 1:nLevels) {
+                    x <- c(Ancestors(tree, x[[1]], 'parent'), x)
+                }
+                contrastMat[node, ] <- as.numeric(1:(NNodes + 1) %in% x)
+            }
+            colnames(contrastMat) <- rownames(contrastMat) <- paste0('i', 1:(NNodes + 1))
+            colnames(contrastMat)[1:NTips] <- rownames(contrastMat)[1:NTips] <- paste0('t', tipNames)
+            contrastMat <- cbind(0, contrastMat[-(NTips + 1), -(NTips + 1)])
+            contrastMat <- rbind(c(1, rep(0, ncol(contrastMat) - 1)), contrastMat)
+        }
     }
-    colnames(parentMat) <- rownames(parentMat) <- paste0('i', 1:(NNodes + 1))
-    colnames(parentMat)[1:NTips] <- rownames(parentMat)[1:NTips] <- paste0('t', tipNames)
-    parentMat <- cbind(0, parentMat[-(NTips + 1), -(NTips + 1)])
-    parentMat <- rbind(c(1, rep(0, ncol(parentMat) - 1)), parentMat)
-    
-    return(parentMat)
-}
-
-makeGrandparentMat <- function(NNodes, tree, NTips, tipNames, ...) {
-    grandparentMat <- matrix(0, NNodes + 1, NNodes + 1)
-    for(node in 1:(NNodes + 1)) {
-        p <- Ancestors(tree, node, 'parent')
-        grandparentMat[node, ] <- as.numeric(1:(NNodes + 1) %in% c(Ancestors(tree, p, 'parent'), p, node))
-    }
-
-    colnames(grandparentMat) <- rownames(grandparentMat) <- paste0('i', 1:(NNodes + 1))
-    colnames(grandparentMat)[1:NTips] <- rownames(grandparentMat)[1:NTips] <- paste0('t', tipNames)
-    grandparentMat <- cbind(0, grandparentMat[-(NTips + 1), -(NTips + 1)])
-    grandparentMat <- rbind(c(1, rep(0, ncol(grandparentMat) - 1)), grandparentMat)
-    
-    return(grandparentMat)
-}
-
-makeRootMat <- function(NNodes, tree, NTips, tipNames, ...) {
-    idMat <- matrix(0, nrow = NNodes + 1, ncol = NNodes + 1)
-    idMat[1, 1] <- 1
-    idMat[2:(NNodes + 1), 2:(NNodes + 1)] <- createAncestryMat(NNodes, tree, NTips, tipNames)
-    return(idMat)
+    return(contrastMat)
 }
 
 statusUpdate <- function(iter, N) {
@@ -92,22 +83,31 @@ summarizeLcGLM <- function(combineTrees  = T,
                            sumScales     = T,
                            sumVarMods    = T,
                            sumEffects    = T,
-                           contrastFuns  = list(vsParent                     = list(host    = makeIdentityMat,
-                                                                                    microbe = makeIdentityMat),
-                                                vsGrandparent                = list(host    = makeParentMat,
-                                                                                    microbe = makeParentMat),
-                                                vsGreatgrandparent           = list(host    = makeGrandparentMat,
-                                                                                    microbe = makeGrandparentMat),
-                                                vsRoot                       = list(host    = makeRootMat,
-                                                                                    microbe = makeRootMat),
-                                                microbeVsRootHostVsParent    = list(host    = makeIdentityMat,
-                                                                                    microbe = makeRootMat)),
+                           contrastLevels  = list(vsParent                     = list(host    = 0,
+                                                                                      microbe = 0),
+                                                  vsGrandparent                = list(host    = 1,
+                                                                                      microbe = 1),
+                                                  vsGreatgrandparent           = list(host    = 2,
+                                                                                      microbe = 2),
+                                                  vsGreatgreatgrandparent      = list(host    = 3,
+                                                                                      microbe = 3),
+                                                  vsRoot                       = list(host    = 'vsRoot',
+                                                                                      microbe = 'vsRoot'),
+                                                  microbeVsRootHostVsParent    = list(host    = 0,
+                                                                                      microbe = 'vsRoot'),
+                                                  hostVsRootMicrobeVsParent    = list(host    = 'vsRoot',
+                                                                                      microbe = 0)),
                            ...) {
     
     fitModes <- sapply(fit, function(x) x@mode)
     
     colorpal <- colorRampPalette(brewer.pal(9, 'Blues'))
     plotcolors <- c('white', colorpal(100), 'black')
+    
+    mycols <- rev(brewer.pal(11, 'RdYlBu'))
+    mycols[[6]] < 'white'
+    colorpal <- colorRampPalette(mycols)
+    plotcolorsVar <- c(colorpal(101))
     
     baseNames <- sapply(sumconts, function(m) paste0(m, levels(newermap[,m])[nlevels(newermap[,m])]))
 
@@ -229,7 +229,7 @@ summarizeLcGLM <- function(combineTrees  = T,
             ##
             
             ## plot heatmap of cophylogenetic patterns
-            plotmicrobetree <- force.ultrametric(ladderize(multi2di(finalMicrobeTree)))
+            plotmicrobetree <- ladderize(multi2di(force.ultrametric(finalMicrobeTree)))
             hclmicrobetree <- as.hclust(plotmicrobetree)
             # for each sample in the data, assign its mitotype to a vector
             hostvect <- sampleMap[[i]][,sampleTipKey]
@@ -240,292 +240,297 @@ summarizeLcGLM <- function(combineTrees  = T,
             temp <- temp[order(temp$reef_name),]
             temp <- temp[order(temp[,sampleTipKey]),]
             for(comp in c('T', 'S', 'M')) {
-                
-                temp2 <- temp[temp$tissue_compartment == comp & !is.na(temp$tissue_compartment),]
-                hostvectTemp <- hostvect[rownames(temp2)]
-                
-                # expand the tips into polytomies containing a tip for each sample
-                hosttree <- expandTaxonTree(hostTreesSampled[[i]],
-                                            hostvectTemp,
-                                            keepBrLen = T)
-                hosttree <- drop.tip(hosttree,
-                                     hosttree$tip.label[!hosttree$tip.label %in% names(hostvectTemp)])
-                                     
-                # convert polytomies into randomly-split, binary subtrees with 0-length branches,
-                # and ladderize the whole tree
-                hosttree.dichotomous <- force.ultrametric(ladderize(multi2di(hosttree, random = F), right = F))
-                
-                # convert the phylogenetic tree into an hclust object
-                hclhosttree <- as.hclust(hosttree.dichotomous)
-                plotFilt <- as.matrix(t(y)[plotmicrobetree$tip.label, hosttree.dichotomous$tip.label])
-                pdf(file   = file.path(currplotdir,
-                                       paste0('cophylogeny_heatmap_',
-                                              comp,
-                                              '.pdf')),
-                    width  = 10,
-                    height = 10)
-                heatmap(plotFilt,
-                        Rowv   = as.dendrogram(hclmicrobetree),
-                        Colv   = as.dendrogram(hclhosttree),
-                        col    = plotcolors,
-                        cexCol = 0.2,
-                        cexRow = 0.1,
-                        scale  = 'none')
-                graphics.off()
+                tryCatch({
+                    
+                    temp2 <- temp[temp$tissue_compartment == comp & !is.na(temp$tissue_compartment),]
+                    hostvectTemp <- hostvect[rownames(temp2)]
+                    
+                    # expand the tips into polytomies containing a tip for each sample
+                    hosttree <- expandTaxonTree(hostTreesSampled[[i]],
+                                                hostvectTemp,
+                                                keepBrLen = T)
+                    hosttree <- drop.tip(hosttree,
+                                         hosttree$tip.label[!hosttree$tip.label %in% names(hostvectTemp)])
+                                         
+                    # convert polytomies into randomly-split, binary subtrees with 0-length branches,
+                    # and ladderize the whole tree
+                    hosttree.dichotomous <- ladderize(multi2di(force.ultrametric(hosttree), random = F), right = F)
+                    
+                    # convert the phylogenetic tree into an hclust object
+                    hclhosttree <- as.hclust(hosttree.dichotomous)
+                    plotFilt <- as.matrix(t(y)[plotmicrobetree$tip.label, hosttree.dichotomous$tip.label])
+                    pdf(file   = file.path(currplotdir,
+                                           paste0('cophylogeny_heatmap_',
+                                                  comp,
+                                                  '.pdf')),
+                        width  = 10,
+                        height = 10)
+                    heatmap(plotFilt,
+                            Rowv   = as.dendrogram(hclmicrobetree),
+                            Colv   = as.dendrogram(hclhosttree),
+                            col    = plotcolors,
+                            cexCol = 0.2,
+                            cexRow = 0.1,
+                            scale  = 'none')
+                    graphics.off()
+                    
+                }, error = function(e) print(e))
             }
             ##
         
         }
 
         if(sumScales) {
-            
-            cat('\n\tRaw variance estimates\n\t')
-            cat(paste0(as.character(Sys.time()), '\n'))
-            
-            ## variance partitioning (top level factors)
-            stDProps <- array(extract(fit[[i]],
-                                      pars       = 'stDProps',
-                                      permuted   = F,
-                                      inc_warmup = T),
-                              dim = c(NMCSamples,
-                                      NChains,
-                                      2 * NFactors + 3),
-                              dimnames = list(sample  = NULL,
-                                              chain   = NULL,
-                                              factor  = c(paste0('ADiv.', names(groupedFactors)),
-                                                          paste0('Specificity.', names(groupedFactors)),
-                                                          'ADiv.host',
-                                                          'host.specificity',
-                                                          'microbe.prevalence')))
-            save(stDProps, file = file.path(currdatadir, 'stDProps.RData'))
-            
-            allRes <- monitor(stDProps,
-                              warmup = warmup,
-                              probs  = c(0.025, 0.5, 0.975),
-                              print  = F)
-            rownames(allRes) <- c(paste0('ADiv.', names(groupedFactors)),
-                              paste0('Specificity.', names(groupedFactors)),
-                              'ADiv.host',
-                              'host.specificity',
-                              'microbe.prevalence')
-            cat('factor\t', file = file.path(currtabledir, 'stDProps.txt'))
-            write.table(allRes,
-                        file   = file.path(currtabledir, 'stDProps.txt'),
-                        sep    = '\t',
-                        quote  = F,
-                        append = T)
-            
-            stDPropsPlot <- NULL
-            for(j in 1:NChains) {
-                stDPropsPlot <- rbind(stDPropsPlot, stDProps[(warmup + 1):NMCSamples, j,])
-            }
-            colnames(stDPropsPlot) <- gsub('_',
-                                           ' ',
-                                           c(paste0(names(groupedFactors), ' (ADiv)'),
-                                             paste0(names(groupedFactors), ' (Specificity)'),
-                                             'Host (ADiv)',
-                                             'Host (Specificity)',
-                                             'Microbe prevalence'))
-                                    
-            ADivInd <- c(1:NFactors, 2 * NFactors + 1)
-            specInd <- c((NFactors + 1):(2 * NFactors), 2 * NFactors + 2)
-            meds <- apply(stDPropsPlot, 2, median)
-            stDPropsPlot <- stDPropsPlot[, c(2 * NFactors + 3,
-                                             ADivInd[order(meds[ADivInd], decreasing = T)],
-                                             specInd[order(meds[specInd], decreasing = T)])]
-                                       
-            pdf(file   = file.path(currplotdir, 'stDProps_boxes.pdf'),
-                width  = 7,
-                height = 7)
-            boxplot(stDPropsPlot,
-                    at       = c(1, 3:(NFactors + 3), (NFactors + 5):(2 * NFactors + 5)),
-                    cex.axis = 0.5,
-                    las      = 2,
-                    xlab     = 'Factor',
-                    ylab     = 'Percent of total variance')
-            graphics.off()
-            ##
-            
-            ## variance partitioning (broken down by subfactors)
-            NSubfactorGammas <- 0
-            gammaNames <- NULL
-            for(j in 1:NFactors) {
-                if(NSubPerFactor[[j]] > 1) {
-                    NSubfactorGammas <- NSubfactorGammas + NSubPerFactor[[j]]
-                    gammaNames <- c(gammaNames, groupedFactors[[j]])
-                }
-            }
-            subfactProps <- array(extract(fit[[i]],
-                                          pars       = 'subfactProps',
+            tryCatch({
+                
+                cat('\n\tRaw variance estimates\n\t')
+                cat(paste0(as.character(Sys.time()), '\n'))
+                
+                ## variance partitioning (top level factors)
+                stDProps <- array(extract(fit[[i]],
+                                          pars       = 'stDProps',
                                           permuted   = F,
                                           inc_warmup = T),
                                   dim = c(NMCSamples,
                                           NChains,
-                                          2 * sum(NSubPerFactor) + 3),
+                                          2 * NFactors + 3),
                                   dimnames = list(sample  = NULL,
                                                   chain   = NULL,
-                                                  factor  = c(paste0('ADiv.', unlist(groupedFactors)),
-                                                              paste0('Specificity.', unlist(groupedFactors)),
+                                                  factor  = c(paste0('ADiv.', names(groupedFactors)),
+                                                              paste0('Specificity.', names(groupedFactors)),
                                                               'ADiv.host',
                                                               'host.specificity',
                                                               'microbe.prevalence')))
-            start <- 1
-            for (j in 1:NFactors) {
-                if(NSubPerFactor[[j]] > 1) {
-                    
-                    subfactPropsPlot <- NULL
-                    for(k in 1:NChains) {
-                        subfactPropsADivPlot <- rbind(subfactPropsPlot, subfactProps[(warmup + 1):NMCSamples,
-                                                                                     k,
-                                                                                     start:(start - 1 + NSubPerFactor[[j]])])
-                        subfactPropsSpecPlot <- rbind(subfactPropsPlot, subfactProps[(warmup + 1):NMCSamples,
-                                                                                     k,
-                                                                                     (sum(NSubPerFactor) + start):(sum(NSubPerFactor) + start - 1 + NSubPerFactor[[j]])])
-                    }
-                    subfactPropsADivPlot <- t(apply(subfactPropsADivPlot, 1, function(x) x / sum(x)))
-                    subfactPropsSpecPlot <- t(apply(subfactPropsSpecPlot, 1, function(x) x / sum(x)))
-                    save(subfactPropsADivPlot, file = file.path(currdatadir, paste0('subfactProps_ADiv_', names(groupedFactors)[[j]], '.RData')))
-                    save(subfactPropsSpecPlot, file = file.path(currdatadir, paste0('subfactProps_Spec_', names(groupedFactors)[[j]], '.RData')))
-                    
-                    allres <- monitor(array(subfactPropsADivPlot,
-                                            dim = c(nrow(subfactPropsADivPlot),
-                                                    1,
-                                                    ncol(subfactPropsADivPlot))),
-                                      warmup = 0,
-                                      probs  = c(0.025, 0.5, 0.975),
-                                      print  = F)
-                    rownames(allres) <- groupedFactors[[j]]
-                    cat('subfactor\t', file = file.path(currtabledir, paste0('subfactProps_ADiv_', names(groupedFactors)[[j]], '.txt')))
-                    write.table(allres,
-                                file   = file.path(currtabledir, paste0('subfactProps_ADiv_', names(groupedFactors)[[j]], '.txt')),
-                                sep    = '\t',
-                                quote  = F,
-                                append = T)
-                                
-                    allres <- monitor(array(subfactPropsSpecPlot,
-                                            dim = c(nrow(subfactPropsSpecPlot),
-                                                    1,
-                                                    ncol(subfactPropsSpecPlot))),
-                                      warmup = 0,
-                                      probs  = c(0.025, 0.5, 0.975),
-                                      print  = F)
-                    rownames(allres) <- groupedFactors[[j]]
-                    cat('subfactor\t', file = file.path(currtabledir, paste0('subfactProps_Spec_', names(groupedFactors)[[j]], '.txt')))
-                    write.table(allres,
-                                file   = file.path(currtabledir, paste0('subfactProps_Spec_', names(groupedFactors)[[j]], '.txt')),
-                                sep    = '\t',
-                                quote  = F,
-                                append = T)
-
-                    pdf(file   = file.path(currplotdir, paste0('subfactProps_ADiv_', names(groupedFactors)[[j]], '_boxes.pdf')),
-                        width  = 7,
-                        height = 7)
-                    boxplot(subfactPropsADivPlot,
-                            cex.axis = 0.5,
-                            las      = 2,
-                            xlab     = 'Subfactor',
-                            ylab     = paste0('Percent of ', names(groupedFactors)[[j]], ' (Adiv) variance'))
-                    graphics.off()
-                    
-                    pdf(file   = file.path(currplotdir, paste0('subfactProps_Spec_', names(groupedFactors)[[j]], '_boxes.pdf')),
-                        width  = 7,
-                        height = 7)
-                    boxplot(subfactPropsSpecPlot,
-                            cex.axis = 0.5,
-                            las      = 2,
-                            xlab     = 'Subfactor',
-                            ylab     = paste0('Percent of ', names(groupedFactors)[[j]], ' (Specificity) variance'))
-                    graphics.off()
-                    
+                save(stDProps, file = file.path(currdatadir, 'stDProps.RData'))
+                
+                allRes <- monitor(stDProps,
+                                  warmup = warmup,
+                                  probs  = c(0.025, 0.5, 0.975),
+                                  print  = F)
+                rownames(allRes) <- c(paste0('ADiv.', names(groupedFactors)),
+                                  paste0('Specificity.', names(groupedFactors)),
+                                  'ADiv.host',
+                                  'host.specificity',
+                                  'microbe.prevalence')
+                cat('factor\t', file = file.path(currtabledir, 'stDProps.txt'))
+                write.table(allRes,
+                            file   = file.path(currtabledir, 'stDProps.txt'),
+                            sep    = '\t',
+                            quote  = F,
+                            append = T)
+                
+                stDPropsPlot <- NULL
+                for(j in 1:NChains) {
+                    stDPropsPlot <- rbind(stDPropsPlot, stDProps[(warmup + 1):NMCSamples, j,])
                 }
-                start <- start + NSubPerFactor[[j]]
-            }
-            
-            cat('\n\tRaw meta-variance estimates\n\t')
-            cat(paste0(as.character(Sys.time()), '\n'))
-            
-            ## meta-variance partitioning
-            metaVarProps <- array(extract(fit[[i]],
-                                          pars       = 'metaVarProps',
+                colnames(stDPropsPlot) <- gsub('_',
+                                               ' ',
+                                               c(paste0(names(groupedFactors), ' (ADiv)'),
+                                                 paste0(names(groupedFactors), ' (Specificity)'),
+                                                 'Host (ADiv)',
+                                                 'Host (Specificity)',
+                                                 'Microbe prevalence'))
+                                        
+                ADivInd <- c(1:NFactors, 2 * NFactors + 1)
+                specInd <- c((NFactors + 1):(2 * NFactors), 2 * NFactors + 2)
+                meds <- apply(stDPropsPlot, 2, median)
+                stDPropsPlot <- stDPropsPlot[, c(2 * NFactors + 3,
+                                                 ADivInd[order(meds[ADivInd], decreasing = T)],
+                                                 specInd[order(meds[specInd], decreasing = T)])]
+                                           
+                pdf(file   = file.path(currplotdir, 'stDProps_boxes.pdf'),
+                    width  = 7,
+                    height = 7)
+                boxplot(stDPropsPlot,
+                        at       = c(1, 3:(NFactors + 3), (NFactors + 5):(2 * NFactors + 5)),
+                        cex.axis = 0.5,
+                        las      = 2,
+                        xlab     = 'Factor',
+                        ylab     = 'Percent of total variance')
+                graphics.off()
+                ##
+                
+                ## variance partitioning (broken down by subfactors)
+                NSubfactorGammas <- 0
+                gammaNames <- NULL
+                for(j in 1:NFactors) {
+                    if(NSubPerFactor[[j]] > 1) {
+                        NSubfactorGammas <- NSubfactorGammas + NSubPerFactor[[j]]
+                        gammaNames <- c(gammaNames, groupedFactors[[j]])
+                    }
+                }
+                subfactProps <- array(extract(fit[[i]],
+                                              pars       = 'subfactProps',
+                                              permuted   = F,
+                                              inc_warmup = T),
+                                      dim = c(NMCSamples,
+                                              NChains,
+                                              2 * sum(NSubPerFactor) + 3),
+                                      dimnames = list(sample  = NULL,
+                                                      chain   = NULL,
+                                                      factor  = c(paste0('ADiv.', unlist(groupedFactors)),
+                                                                  paste0('Specificity.', unlist(groupedFactors)),
+                                                                  'ADiv.host',
+                                                                  'host.specificity',
+                                                                  'microbe.prevalence')))
+                start <- 1
+                for (j in 1:NFactors) {
+                    if(NSubPerFactor[[j]] > 1) {
+                        
+                        subfactPropsPlot <- NULL
+                        for(k in 1:NChains) {
+                            subfactPropsADivPlot <- rbind(subfactPropsPlot, subfactProps[(warmup + 1):NMCSamples,
+                                                                                         k,
+                                                                                         start:(start - 1 + NSubPerFactor[[j]])])
+                            subfactPropsSpecPlot <- rbind(subfactPropsPlot, subfactProps[(warmup + 1):NMCSamples,
+                                                                                         k,
+                                                                                         (sum(NSubPerFactor) + start):(sum(NSubPerFactor) + start - 1 + NSubPerFactor[[j]])])
+                        }
+                        subfactPropsADivPlot <- t(apply(subfactPropsADivPlot, 1, function(x) x / sum(x)))
+                        subfactPropsSpecPlot <- t(apply(subfactPropsSpecPlot, 1, function(x) x / sum(x)))
+                        save(subfactPropsADivPlot, file = file.path(currdatadir, paste0('subfactProps_ADiv_', names(groupedFactors)[[j]], '.RData')))
+                        save(subfactPropsSpecPlot, file = file.path(currdatadir, paste0('subfactProps_Spec_', names(groupedFactors)[[j]], '.RData')))
+                        
+                        allres <- monitor(array(subfactPropsADivPlot,
+                                                dim = c(nrow(subfactPropsADivPlot),
+                                                        1,
+                                                        ncol(subfactPropsADivPlot))),
+                                          warmup = 0,
+                                          probs  = c(0.025, 0.5, 0.975),
+                                          print  = F)
+                        rownames(allres) <- groupedFactors[[j]]
+                        cat('subfactor\t', file = file.path(currtabledir, paste0('subfactProps_ADiv_', names(groupedFactors)[[j]], '.txt')))
+                        write.table(allres,
+                                    file   = file.path(currtabledir, paste0('subfactProps_ADiv_', names(groupedFactors)[[j]], '.txt')),
+                                    sep    = '\t',
+                                    quote  = F,
+                                    append = T)
+                                    
+                        allres <- monitor(array(subfactPropsSpecPlot,
+                                                dim = c(nrow(subfactPropsSpecPlot),
+                                                        1,
+                                                        ncol(subfactPropsSpecPlot))),
+                                          warmup = 0,
+                                          probs  = c(0.025, 0.5, 0.975),
+                                          print  = F)
+                        rownames(allres) <- groupedFactors[[j]]
+                        cat('subfactor\t', file = file.path(currtabledir, paste0('subfactProps_Spec_', names(groupedFactors)[[j]], '.txt')))
+                        write.table(allres,
+                                    file   = file.path(currtabledir, paste0('subfactProps_Spec_', names(groupedFactors)[[j]], '.txt')),
+                                    sep    = '\t',
+                                    quote  = F,
+                                    append = T)
+
+                        pdf(file   = file.path(currplotdir, paste0('subfactProps_ADiv_', names(groupedFactors)[[j]], '_boxes.pdf')),
+                            width  = 7,
+                            height = 7)
+                        boxplot(subfactPropsADivPlot,
+                                cex.axis = 0.5,
+                                las      = 2,
+                                xlab     = 'Subfactor',
+                                ylab     = paste0('Percent of ', names(groupedFactors)[[j]], ' (Adiv) variance'))
+                        graphics.off()
+                        
+                        pdf(file   = file.path(currplotdir, paste0('subfactProps_Spec_', names(groupedFactors)[[j]], '_boxes.pdf')),
+                            width  = 7,
+                            height = 7)
+                        boxplot(subfactPropsSpecPlot,
+                                cex.axis = 0.5,
+                                las      = 2,
+                                xlab     = 'Subfactor',
+                                ylab     = paste0('Percent of ', names(groupedFactors)[[j]], ' (Specificity) variance'))
+                        graphics.off()
+                        
+                    }
+                    start <- start + NSubPerFactor[[j]]
+                }
+                
+                cat('\n\tRaw meta-variance estimates\n\t')
+                cat(paste0(as.character(Sys.time()), '\n'))
+                
+                ## meta-variance partitioning
+                metaVarProps <- array(extract(fit[[i]],
+                                              pars       = 'metaVarProps',
+                                              permuted   = F,
+                                              inc_warmup = T),
+                                      dim = c(NMCSamples,
+                                              NChains,
+                                              3),
+                                      dimnames = list(sample  = NULL,
+                                                      chain   = NULL,
+                                                      effect  = c('Prevalence',
+                                                                  'ADiv',
+                                                                  'Specificty')))
+                metaVarPropsPlot <- NULL
+                for(j in 1:NChains) {
+                    metaVarPropsPlot <- rbind(metaVarPropsPlot, metaVarProps[(warmup + 1):NMCSamples, j,])
+                }
+                pdf(file   = file.path(currplotdir, 'metaVarProps_boxes.pdf'),
+                    width  = 7,
+                    height = 7)
+                boxplot(metaVarPropsPlot,
+                        cex.axis = 0.5,
+                        las      = 2)
+                graphics.off()
+                
+                save(metaVarProps, file = file.path(currdatadir, 'metaVarProps.RData'))
+                ##
+                
+                ## actual scales of metavariance
+                metaScales <- array(extract(fit[[i]],
+                                            pars       = 'metaScales',
+                                            permuted   = F,
+                                            inc_warmup = T),
+                                    dim = c(NMCSamples,
+                                            NChains,
+                                            3),
+                                    dimnames = list(sample  = NULL,
+                                                    chain   = NULL,
+                                                    effect  = c('Prevalence',
+                                                                'ADiv',
+                                                                'Specificty')))
+                metaScalesPlot <- NULL
+                for(j in 1:NChains) {
+                    metaScalesPlot <- rbind(metaScalesPlot, metaScales[(warmup + 1):NMCSamples, j,])
+                }
+                pdf(file   = file.path(currplotdir, 'metaScales_boxes.pdf'),
+                    width  = 7,
+                    height = 7)
+                boxplot(metaScalesPlot,
+                        cex.axis = 0.5,
+                        las      = 2)
+                graphics.off()
+                
+                save(metaScales, file = file.path(currdatadir, 'metaScales.RData'))
+                ##
+                
+                ## ornstein-uhlenbeck parameters
+                OUAlphas <- array(extract(fit[[i]],
+                                          pars       = c('hostOUAlpha', 'microbeOUAlpha'),
                                           permuted   = F,
                                           inc_warmup = T),
                                   dim = c(NMCSamples,
                                           NChains,
-                                          3),
-                                  dimnames = list(sample  = NULL,
-                                                  chain   = NULL,
-                                                  effect  = c('Prevalence',
-                                                              'ADiv',
-                                                              'Specificty')))
-            metaVarPropsPlot <- NULL
-            for(j in 1:NChains) {
-                metaVarPropsPlot <- rbind(metaVarPropsPlot, metaVarProps[(warmup + 1):NMCSamples, j,])
-            }
-            pdf(file   = file.path(currplotdir, 'metaVarProps_boxes.pdf'),
-                width  = 7,
-                height = 7)
-            boxplot(metaVarPropsPlot,
-                    cex.axis = 0.5,
-                    las      = 2)
-            graphics.off()
-            
-            save(metaVarProps, file = file.path(currdatadir, 'metaVarProps.RData'))
-            ##
-            
-            ## actual scales of metavariance
-            metaScales <- array(extract(fit[[i]],
-                                        pars       = 'metaScales',
-                                        permuted   = F,
-                                        inc_warmup = T),
-                                dim = c(NMCSamples,
-                                        NChains,
-                                        3),
-                                dimnames = list(sample  = NULL,
-                                                chain   = NULL,
-                                                effect  = c('Prevalence',
-                                                            'ADiv',
-                                                            'Specificty')))
-            metaScalesPlot <- NULL
-            for(j in 1:NChains) {
-                metaScalesPlot <- rbind(metaScalesPlot, metaScales[(warmup + 1):NMCSamples, j,])
-            }
-            pdf(file   = file.path(currplotdir, 'metaScales_boxes.pdf'),
-                width  = 7,
-                height = 7)
-            boxplot(metaScalesPlot,
-                    cex.axis = 0.5,
-                    las      = 2)
-            graphics.off()
-            
-            save(metaScales, file = file.path(currdatadir, 'metaScales.RData'))
-            ##
-            
-            ## ornstein-uhlenbeck parameters
-            OUAlphas <- array(extract(fit[[i]],
-                                      pars       = c('hostOUAlpha', 'microbeOUAlpha'),
-                                      permuted   = F,
-                                      inc_warmup = T),
-                              dim = c(NMCSamples,
-                                      NChains,
-                                      2),
-                              dimnames = list(sample = NULL,
-                                              chain  = NULL,
-                                              alpha  = c('host', 'microbe')))
-            OUAlphaPlot <- NULL
-            for(j in 1:NChains) {
-                OUAlphaPlot <- rbind(OUAlphaPlot, OUAlphas[(warmup + 1):NMCSamples, j,])
-            }
-            pdf(file   = file.path(currplotdir, 'OUAlphas.pdf'),
-                width  = 7,
-                height = 7)
-            boxplot(OUAlphaPlot,
-                    xlab = 'Host or microbe',
-                    ylab = 'alpha')
-            graphics.off()
-            
-            save(OUAlphas, file = file.path(currdatadir, 'OUAlphas.RData'))
-            ##
+                                          2),
+                                  dimnames = list(sample = NULL,
+                                                  chain  = NULL,
+                                                  alpha  = c('host', 'microbe')))
+                OUAlphaPlot <- NULL
+                for(j in 1:NChains) {
+                    OUAlphaPlot <- rbind(OUAlphaPlot, OUAlphas[(warmup + 1):NMCSamples, j,])
+                }
+                pdf(file   = file.path(currplotdir, 'OUAlphas.pdf'),
+                    width  = 7,
+                    height = 7)
+                boxplot(OUAlphaPlot,
+                        xlab = 'Host or microbe',
+                        ylab = 'alpha')
+                graphics.off()
+                
+                save(OUAlphas, file = file.path(currdatadir, 'OUAlphas.RData'))
+                ##
         
+            }, error = function(e) print(e))
         }
         
         if(sumVarMods) {
@@ -596,69 +601,190 @@ summarizeLcGLM <- function(combineTrees  = T,
                 }
             }
             
+            newMicrobeNHs <- array(extract(fit[[i]],
+                                    pars       = 'newMicrobeNHs',
+                                    permuted   = F,
+                                    inc_warmup = T),
+                            dim = c(NMCSamples,
+                                    NChains,
+                                    NMicrobeNodes,
+                                    2),
+                            dimnames = list(sample      = NULL,
+                                            chain       = NULL,
+                                            microbenode = substr(colnames(microbeAncestors),
+                                                                 2,
+                                                                 nchar(colnames(microbeAncestors))),
+                                            node        = NULL))
+            ##
+            
+            newEdgeDraws <- array(NA,
+                                  dim = c(NMCSamples,
+                                          NChains,
+                                          NMicrobeNodes),
+                                  dimnames = list(sample      = NULL,
+                                                  chain       = NULL,
+                                                  microbenode = substr(colnames(microbeAncestors),
+                                                                       2,
+                                                                       nchar(colnames(microbeAncestors)))))
+            for(j in 1:NMCSamples) {
+                for(k in 1:NChains) {
+                    newEdgeDraws[j,k,] <- apply(newMicrobeNHs[j,k,,], 1, function(x) abs(x[[1]] - x[[2]]))
+                }
+            }
+            
+            newEdges <- apply(newEdgeDraws, 3, mean)
+            
+            finalMicrobeTree.newEdges <- finalMicrobeTree
+            finalMicrobeTree.newEdges$edge.length <- newEdges[order(microbeTreeDetails$edgeOrder)]
+            ##
+            
+            newHostNHs <- array(extract(fit[[i]],
+                                        pars       = 'newHostNHs',
+                                        permuted   = F,
+                                        inc_warmup = T),
+                                dim = c(NMCSamples,
+                                        NChains,
+                                        NHostNodes,
+                                        2),
+                                dimnames = list(sample      = NULL,
+                                                chain       = NULL,
+                                                hostnode    = colnames(hostAncestors[[i]]),
+                                                node        = NULL))
+            ##
+            
+            newEdgeDraws <- array(NA,
+                                  dim = c(NMCSamples,
+                                          NChains,
+                                          NHostNodes),
+                                  dimnames = list(sample      = NULL,
+                                                  chain       = NULL,
+                                                  hostnode    = colnames(hostAncestors[[i]])))
+            for(j in 1:NMCSamples) {
+                for(k in 1:NChains) {
+                    newEdgeDraws[j,k,] <- apply(newHostNHs[j,k,,], 1, function(x) abs(x[[1]] - x[[2]]))
+                }
+            }
+            
+            newEdges <- apply(newEdgeDraws, 3, mean)
+
+            hostTreesSampled.newEdges <- hostTreesSampled[[i]]
+            hostTreesSampled.newEdges$edge.length <- newEdges[order(hostTreeDetails[[i]]$edgeOrder)]
+            ##
+            
+            plotmicrobetree <- ladderize(multi2di(force.ultrametric(finalMicrobeTree.newEdges)))
+            plotmicrobetree2 <- plotmicrobetree
+            newMicrobeNames <- plotmicrobetree$tip.label
+            names(newMicrobeNames) <- paste0('t', 1:length(plotmicrobetree$tip.label))
+            plotmicrobetree2$tip.label <- names(newMicrobeNames)
+            hclmicrobetree <- as.hclust(plotmicrobetree2)
+            write.dna(newMicrobeNames,
+                      file   = file.path(currdatadir, 'seqnames.fasta'),
+                      format = 'fasta',
+                      nbcol  = -1,
+                      colw   = 10000)
+            plothosttree <- ladderize(multi2di(force.ultrametric(hostTreesSampled.newEdges), random = F), right = F)
+            hclhosttree <- as.hclust(plothosttree)
+            
             dir.create(file.path(currtabledir, 'phyloVarianceEffects'), recursive = T)
                             
-            for(contrast in names(contrastFuns)) {
-                
-                cat(paste0('\n\tVariance modifiers (', contrast, ')\n\t'))
-                cat(paste0(as.character(Sys.time()), '\n'))
-                
-                ##
-                hostMat <- contrastFuns[[contrast]][['host']](NHostNodes,
-                                                              hostTreesSampled[[i]],
-                                                              NHostTips,
-                                                              hostTreesSampled[[i]]$tip.label)
-                microbeMat <- t(contrastFuns[[contrast]][['microbe']](NMicrobeNodes,
-                                                                      finalMicrobeTree,
-                                                                      NMicrobeTips,
-                                                                      microbeTips))
-                ##
-                
-                ## sum the effects
-                matMult <- array(NA,
-                                 dim = c(NMCSamples,
-                                         NChains,
-                                         NHostNodes + 1,
-                                         NMicrobeNodes + 1),
-                                 dimnames = list(sample      = NULL,
-                                                 chain       = NULL,
-                                                 hostnode    = c('microbePrevalence',
-                                                                 colnames(hostAncestors[[i]])),
-                                                 microbenode = c('alphaDiversity',
-                                                                 colnames(microbeAncestors))))
-                                     
-                for(j in 1:NMCSamples) {
-                    for(k in 1:NChains) {
-                        matMult[j,k,,] <- hostMat %*%
-                                          phyloLogVarMultScaled[j,k,,] %*%
-                                          microbeMat
+            for(contrast in names(contrastLevels)) {
+                tryCatch({
+                    
+                    cat(paste0('\n\tVariance modifiers (', contrast, ')\n\t'))
+                    cat(paste0(as.character(Sys.time()), '\n'))
+                    
+                    ##
+                    hostMat <- Matrix(makeContrastMat(NHostNodes,
+                                                      hostTreesSampled[[i]],
+                                                      NHostTips,
+                                                      hostTreesSampled[[i]]$tip.label,
+                                                      contrastLevels[[contrast]][['host']]))
+                    microbeMat <- Matrix(t(makeContrastMat(NMicrobeNodes,
+                                                           finalMicrobeTree,
+                                                           NMicrobeTips,
+                                                           microbeTips,
+                                                           contrastLevels[[contrast]][['microbe']])))
+                    ##
+                    
+                    ## sum the effects
+                    matMult <- array(NA,
+                                     dim = c(NMCSamples,
+                                             NChains,
+                                             NHostNodes + 1,
+                                             NMicrobeNodes + 1),
+                                     dimnames = list(sample      = NULL,
+                                                     chain       = NULL,
+                                                     hostnode    = c('microbePrevalence',
+                                                                     colnames(hostAncestors[[i]])),
+                                                     microbenode = c('alphaDiversity',
+                                                                     colnames(microbeAncestors))))
+                                         
+                    for(j in 1:NMCSamples) {
+                        for(k in 1:NChains) {
+                            matMult[j,k,,] <- as.matrix(hostMat %*%
+                                                        phyloLogVarMultScaled[j,k,,] %*%
+                                                        microbeMat)
+                        }
                     }
-                }
-                
-                allRes <- NULL
-                for(j in 1:(NHostNodes + 1)) {
-                    temp <- monitor(array(matMult[,,j,],
-                                          dim = c(NMCSamples,
-                                                  NChains,
-                                                  NMicrobeNodes + 1)),
-                                    warmup = warmup,
-                                    probs  = c(0.05, 0.95),
-                                    print  = F)
-                    temp <- cbind(hostNode = c('microbePrevalence',
-                                               paste0('host_', colnames(hostAncestors[[i]])))[[j]], temp)
-                    rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
-                    allRes <- rbind(allRes, temp)
-                    statusUpdate(j, NHostNodes)
-                }
-                
-                cat('microbeNode\t', file = file.path(currtabledir, 'phyloVarianceEffects', paste0(contrast, '.txt')))
-                write.table(allRes,
-                            file   = file.path(currtabledir, 'phyloVarianceEffects', paste0(contrast, '.txt')),
-                            sep    = '\t',
-                            quote  = F,
-                            append = T)
-                ##
-                
+                    
+                    allRes <- NULL
+                    for(j in 1:(NHostNodes + 1)) {
+                        temp <- monitor(array(matMult[,,j,],
+                                              dim = c(NMCSamples,
+                                                      NChains,
+                                                      NMicrobeNodes + 1)),
+                                        warmup = warmup,
+                                        probs  = c(0.05, 0.95),
+                                        print  = F)
+                        temp <- cbind(hostNode = c('microbePrevalence',
+                                                   paste0('host_', colnames(hostAncestors[[i]])))[[j]], temp)
+                        rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
+                        allRes <- rbind(allRes, temp)
+                        statusUpdate(j, NHostNodes)
+                    }
+                    
+                    cat('microbeNode\t', file = file.path(currtabledir, 'phyloVarianceEffects', paste0(contrast, '.txt')))
+                    write.table(allRes,
+                                file   = file.path(currtabledir, 'phyloVarianceEffects', paste0(contrast, '.txt')),
+                                sep    = '\t',
+                                quote  = F,
+                                append = T)
+                    ##
+                    
+                    allRes <- matrix(NA, nrow = NMicrobeNodes + 1, ncol = NHostNodes + 1)
+                    for(j in 1:(NHostNodes + 1)) {
+                        for(k in 1:(NMicrobeNodes + 1)) {
+                            allRes[k,j] <- mean(matMult[,,j,k])
+                        }
+                    }
+                    rownames(allRes) <- c('alphaDiversity',
+                                          substr(colnames(microbeAncestors),
+                                                 2,
+                                                 nchar(colnames(microbeAncestors))))
+                    colnames(allRes) <- c('microbePrevalence', colnames(hostAncestors[[i]]))
+                    ##
+                    
+                    save(allRes, file = file.path(currdatadir, paste0('variance_heatmap_', contrast, '.RData')))
+
+                    plotFilt <- as.matrix(allRes[plotmicrobetree$tip.label, plothosttree$tip.label])
+                    rownames(plotFilt) <- names(newMicrobeNames)
+                    
+                    pdf(file   = file.path(currplotdir,
+                                           paste0('variance_heatmap_',
+                                                  contrast,
+                                                  '.pdf')),
+                        width  = 10,
+                        height = 10)
+                    heatmap(plotFilt,
+                            Rowv   = as.dendrogram(hclmicrobetree),
+                            Colv   = as.dendrogram(hclhosttree),
+                            col    = plotcolorsVar,
+                            cexCol = 0.2,
+                            cexRow = 0.1,
+                            scale  = 'none')
+                    graphics.off()
+                    
+                }, error = function(e) print(e))
             }
         }
         
@@ -708,67 +834,72 @@ summarizeLcGLM <- function(combineTrees  = T,
                              
             dir.create(file.path(currtabledir, 'nodeEffects'), recursive = T)
             
-            for(contrast in names(contrastFuns)) {
-                
-                cat(paste0('\n\tNode effects (', contrast, ')\n\t'))
-                cat(paste0(as.character(Sys.time()), '\n'))
-                
-                matMult <- array(NA,
-                                 dim = c(NMCSamples,
-                                         NChains,
-                                         NHostNodes + NEffects + NSumTo0 + 1,
-                                         NMicrobeNodes + 1),
-                                 dimnames = list(sample = NULL,
-                                                 chain = NULL,
-                                                 hostnode = effectNames,
-                                                 microbenode = c('alphaDiversity',
-                                                                 colnames(microbeAncestors))))
-                ##
-                
-                ##build a temporary model matrix
-                hostMat <- diag(NHostNodes + NEffects + NSumTo0 + 1)
-                hostMat[(NEffects + 2):(NEffects + NHostNodes + 1),
-                        (NEffects + 2):(NEffects + NHostNodes + 1)] <- contrastFuns[[contrast]][['host']](NHostNodes,
-                                                                                                          hostTreesSampled[[i]],
-                                                                                                          NHostTips,
-                                                                                                          hostTreesSampled[[i]]$tip.label)[-1, -1]
-                microbeMat <- t(contrastFuns[[contrast]][['microbe']](NMicrobeNodes,
-                                                                      finalMicrobeTree,
-                                                                      NMicrobeTips,
-                                                                      microbeTips))
-                ##
-                
-                for(j in 1:NMCSamples) {
-                    for(k in 1:NChains) {
-                        matMult[j,k,,] <- hostMat %*%
-                                          rbind(scaledMicrobeNodeEffects[j,k,,],
-                                                baseLevelEffects[j,k,,]) %*%
-                                          microbeMat
+            for(contrast in names(contrastLevels)) {
+                tryCatch({
+                    
+                    cat(paste0('\n\tNode effects (', contrast, ')\n\t'))
+                    cat(paste0(as.character(Sys.time()), '\n'))
+                    
+                    matMult <- array(NA,
+                                     dim = c(NMCSamples,
+                                             NChains,
+                                             NHostNodes + NEffects + NSumTo0 + 1,
+                                             NMicrobeNodes + 1),
+                                     dimnames = list(sample = NULL,
+                                                     chain = NULL,
+                                                     hostnode = effectNames,
+                                                     microbenode = c('alphaDiversity',
+                                                                     colnames(microbeAncestors))))
+                    ##
+                    
+                    ##build a temporary model matrix
+                    hostMat <- diag(NHostNodes + NEffects + NSumTo0 + 1)
+                    hostMat[(NEffects + 2):(NEffects + NHostNodes + 1),
+                            (NEffects + 2):(NEffects + NHostNodes + 1)] <- makeContrastMat(NHostNodes,
+                                                                                           hostTreesSampled[[i]],
+                                                                                           NHostTips,
+                                                                                           hostTreesSampled[[i]]$tip.label,
+                                                                                           contrastLevels[[contrast]][['host']])[-1, -1]
+                    hostMat <- Matrix(hostMat)
+                    microbeMat <- Matrix(t(makeContrastMat(NMicrobeNodes,
+                                                           finalMicrobeTree,
+                                                           NMicrobeTips,
+                                                           microbeTips,
+                                                           contrastLevels[[contrast]][['microbe']])))
+                    ##
+                    
+                    for(j in 1:NMCSamples) {
+                        for(k in 1:NChains) {
+                            matMult[j,k,,] <- as.matrix(hostMat %*%
+                                                        rbind(scaledMicrobeNodeEffects[j,k,,],
+                                                              baseLevelEffects[j,k,,]) %*%
+                                                        microbeMat)
+                        }
                     }
-                }
-                
-                allRes <- NULL
-                for(j in 1:(NHostNodes + NEffects + NSumTo0 + 1)) {
-                    temp <- monitor(array(matMult[,,j,],
-                                          dim = c(NMCSamples,
-                                                  NChains,
-                                                  NMicrobeNodes + 1)),
-                                    warmup = warmup,
-                                    probs  = c(0.05, 0.95),
-                                    print  = F)
-                    temp <- cbind(hostEffect = effectNames[[j]], temp)
-                    rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
-                    allRes <- rbind(allRes, temp)
-                    statusUpdate(j, NHostNodes + NEffects + NSumTo0 + 1)
-                }
-                
-                cat('microbeNode\t', file = file.path(currtabledir, 'nodeEffects', paste0(contrast, '.txt')))
-                write.table(allRes,
-                            file   = file.path(currtabledir, 'nodeEffects', paste0(contrast, '.txt')),
-                            sep    = '\t',
-                            quote  = F,
-                            append = T)
-                ##
+                    
+                    allRes <- NULL
+                    for(j in 1:(NHostNodes + NEffects + NSumTo0 + 1)) {
+                        temp <- monitor(array(matMult[,,j,],
+                                              dim = c(NMCSamples,
+                                                      NChains,
+                                                      NMicrobeNodes + 1)),
+                                        warmup = warmup,
+                                        probs  = c(0.05, 0.95),
+                                        print  = F)
+                        temp <- cbind(hostEffect = effectNames[[j]], temp)
+                        rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
+                        allRes <- rbind(allRes, temp)
+                        statusUpdate(j, NHostNodes + NEffects + NSumTo0 + 1)
+                    }
+                    
+                    cat('microbeNode\t', file = file.path(currtabledir, 'nodeEffects', paste0(contrast, '.txt')))
+                    write.table(allRes,
+                                file   = file.path(currtabledir, 'nodeEffects', paste0(contrast, '.txt')),
+                                sep    = '\t',
+                                quote  = F,
+                                append = T)
+                    ##
+                }, error = function(e) print(e))
             }
         }
     }
@@ -823,9 +954,7 @@ runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, variat
         }
         
         subdir <- file.path(outdir, 'resampled_from_prior')
-        dir.create(subdir, recursive = T)
-        save.image(file.path(subdir, 'setup.RData'))
-
+        
         cat('\nSampling from prior\n')
     } else if(shuffleData) {
 
@@ -836,8 +965,6 @@ runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, variat
         }
         
         subdir <- file.path(outdir, 'resampled_with_randomObs')
-        dir.create(subdir, recursive = T)
-        save.image(file.path(subdir, 'setup.RData'))
 
         cat('\nSampling from shuffled data\n')
     } else if(shuffleSamples) {
@@ -850,18 +977,19 @@ runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, variat
         }
         
         subdir <- file.path(outdir, 'resampled_with_randomSamples')
-        dir.create(subdir, recursive = T)
-        save.image(file.path(subdir, 'setup.RData'))
         
         cat('\nSampling from shuffled samples\n')
     } else {
         
         subdir <- file.path(outdir, 'primary_sampling')
-        dir.create(subdir, recursive = T)
-        save.image(file.path(subdir, 'setup.RData'))
         
         cat('\nSampling from model\n')
     }
+    
+    dir.create(subdir, recursive = T)
+    save(list = c(ls(envir = sys.frame(0)),
+                  ls(envir = sys.frame(1))),
+         file = file.path(subdir, 'setup.RData'))
     
     cat(paste0(as.character(Sys.time()), '\n'))
 
@@ -908,6 +1036,6 @@ runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, variat
 
     ## summarize the model fit
     environment(summarizeLcGLM) <- environment()
-    summarizeLcGLM()
+    tryCatch(summarizeLcGLM(), error = function(e) print(e))
 }
 ## fin

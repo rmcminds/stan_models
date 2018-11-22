@@ -11,10 +11,12 @@ library(paleotree)
 library(parallel)
 library(ggplot2)
 library(RColorBrewer)
+library(Matrix)
+
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
-source(file.path('scripts', 'lcGLM_functions.r'))
 
+source(file.path('scripts', 'lcGLM_functions.r'))
 
 microbeTreePath <- 'raw_data/gg_constrained_fastttree.tre' #ML microbial phylogeny
 hostTreePath <- 'raw_data/combined_trees.newick' #set of Bayesian draws of host species phylogeny
@@ -35,11 +37,11 @@ minSamps <- 1 # minimum number of samples that a sequence variant is present in 
 
 ## model options
 aveStDPriorExpect <- 1.0
-aveStDMetaPriorExpect <- 0.1
+aveStDMetaPriorExpect <- 1.0
 hostOUAlphaPriorExpect <- 1.0
 microbeOUAlphaPriorExpect <- 1.0
-stDLogitHostPriorExpect <- 0.1
-stDLogitMicrobePriorExpect <- 0.1
+stDLogitHostPriorExpect <- 1.0
+stDLogitMicrobePriorExpect <- 1.0
 globalScale <- 100
 NTrees <- 1 ## number of random trees to sample and to fit the model to
 groupedFactors <- list(location           = c('ocean', 'ocean_area', 'reef_name'),
