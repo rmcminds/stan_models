@@ -76,13 +76,14 @@ statusUpdate <- function(iter, N) {
     }
 }
 
-summarizeLcGLM <- function(combineTrees  = T,
-                           separateTrees = T,
-                           whichTrees    = NULL,
-                           plotTrees     = T,
-                           sumScales     = T,
-                           sumVarMods    = T,
-                           sumEffects    = T,
+summarizeLcGLM <- function(combineTrees    = T,
+                           separateTrees   = T,
+                           whichTrees      = NULL,
+                           plotTrees       = T,
+                           sumScales       = T,
+                           sumVarMods      = T,
+                           sumEffects      = T,
+                           tipNamesAreSeqs = F,
                            contrastLevels  = list(vsParent                     = list(host    = 0,
                                                                                       microbe = 0),
                                                   vsGrandparent                = list(host    = 1,
@@ -229,7 +230,7 @@ summarizeLcGLM <- function(combineTrees  = T,
             ##
             
             ## plot heatmap of cophylogenetic patterns
-            plotmicrobetree <- ladderize(multi2di(force.ultrametric(finalMicrobeTree)))
+            plotmicrobetree <- ladderize(multi2di(force.ultrametric(finalMicrobeTree), random = F))
             hclmicrobetree <- as.hclust(plotmicrobetree)
             # for each sample in the data, assign its mitotype to a vector
             hostvect <- sampleMap[[i]][,sampleTipKey]
@@ -671,17 +672,21 @@ summarizeLcGLM <- function(combineTrees  = T,
             hostTreesSampled.newEdges$edge.length <- newEdges[order(hostTreeDetails[[i]]$edgeOrder)]
             ##
             
-            plotmicrobetree <- ladderize(multi2di(force.ultrametric(finalMicrobeTree.newEdges)))
-            plotmicrobetree2 <- plotmicrobetree
-            newMicrobeNames <- plotmicrobetree$tip.label
-            names(newMicrobeNames) <- paste0('t', 1:length(plotmicrobetree$tip.label))
-            plotmicrobetree2$tip.label <- names(newMicrobeNames)
-            hclmicrobetree <- as.hclust(plotmicrobetree2)
-            write.dna(newMicrobeNames,
-                      file   = file.path(currdatadir, 'seqnames.fasta'),
-                      format = 'fasta',
-                      nbcol  = -1,
-                      colw   = 10000)
+            plotmicrobetree <- ladderize(multi2di(force.ultrametric(finalMicrobeTree.newEdges), random = F))
+            if(tipNamesAreSeqs) {
+                plotmicrobetree2 <- plotmicrobetree
+                newMicrobeNames <- plotmicrobetree$tip.label
+                names(newMicrobeNames) <- paste0('t', 1:length(plotmicrobetree$tip.label))
+                plotmicrobetree2$tip.label <- names(newMicrobeNames)
+                write.dna(newMicrobeNames,
+                          file   = file.path(currdatadir, 'seqnames.fasta'),
+                          format = 'fasta',
+                          nbcol  = -1,
+                          colw   = 10000)
+                hclmicrobetree <- as.hclust(plotmicrobetree2)
+            } else {
+                hclmicrobetree <- as.hclust(plotmicrobetree)
+            }
             plothosttree <- ladderize(multi2di(force.ultrametric(hostTreesSampled.newEdges), random = F), right = F)
             hclhosttree <- as.hclust(plothosttree)
             
@@ -754,7 +759,7 @@ summarizeLcGLM <- function(combineTrees  = T,
                     allRes <- matrix(NA, nrow = NMicrobeNodes + 1, ncol = NHostNodes + 1)
                     for(j in 1:(NHostNodes + 1)) {
                         for(k in 1:(NMicrobeNodes + 1)) {
-                            allRes[k,j] <- mean(matMult[,,j,k])
+                            allRes[k,j] <- median(matMult[,,j,k])
                         }
                     }
                     rownames(allRes) <- c('alphaDiversity',
@@ -767,7 +772,9 @@ summarizeLcGLM <- function(combineTrees  = T,
                     save(allRes, file = file.path(currdatadir, paste0('variance_heatmap_', contrast, '.RData')))
 
                     plotFilt <- as.matrix(allRes[plotmicrobetree$tip.label, plothosttree$tip.label])
-                    rownames(plotFilt) <- names(newMicrobeNames)
+                    if(tipNamesAreSeqs) {
+                        rownames(plotFilt) <- names(newMicrobeNames)
+                    }
                     
                     pdf(file   = file.path(currplotdir,
                                            paste0('variance_heatmap_',
