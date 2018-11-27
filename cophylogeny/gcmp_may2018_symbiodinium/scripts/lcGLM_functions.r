@@ -944,6 +944,11 @@ makeDiagnosticPlots <- function(...) {
 
 runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, variational = F, ...) {
     
+    if(exists('fit')) {
+        rm(fit)
+        gc()
+    }
+    
     if(variational) {
         NMCSamples <- 1000
         warmup <- 0
@@ -997,7 +1002,7 @@ runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, variat
     save(list = c(ls(envir = sys.frame(0)),
                   ls(envir = sys.frame(1))),
          file = file.path(subdir, 'setup.RData'))
-    
+        
     cat(paste0(as.character(Sys.time()), '\n'))
 
     ## run the model!
@@ -1006,24 +1011,26 @@ runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, variat
             setTimeLimit(timeLimit)
             tryCatch({
                 if(!variational) {
-                stan(file     = modelPath,
-                     data     = standat[[i]],
-                     control  = list(adapt_delta   = adapt_delta,
-                                     max_treedepth = max_treedepth),
-                     iter     = NIterations,
-                     thin     = thin,
-                     chains   = NChains,
-                     seed     = seed,
-                     chain_id = (NChains * (i - 1) + (1:NChains)),
-                     pars     = c('rawMicrobeNodeEffects', 'sampleTipEffects'),
-                     include  = FALSE,
-                     init_r   = init_r)
+                stan(file            = modelPath,
+                     data            = standat[[i]],
+                     control         = list(adapt_delta   = adapt_delta,
+                                            max_treedepth = max_treedepth),
+                     iter            = NIterations,
+                     thin            = thin,
+                     chains          = NChains,
+                     seed            = seed,
+                     chain_id        = (NChains * (i - 1) + (1:NChains)),
+                     pars            = c('rawerMicrobeNodeEffects', 'rawMicrobeNodeEffects', 'sampleTipEffects'),
+                     include         = FALSE,
+                     init_r          = init_r,
+                     sample_file     = file.path(subdir, paste0('samples_chain', i, '.csv')),
+                     diagnostic_file = file.path(subdir, paste0('diagnostics_chain', i, '.csv')))
                 } else {
                     vb(stan_model(file = modelPath),
                        data     = standat[[i]],
                        iter     = 25000,
                        seed     = seed,
-                       pars     = c('rawMicrobeNodeEffects', 'sampleTipEffects'),
+                       pars     = c('rawerMicrobeNodeEffects', 'rawMicrobeNodeEffects', 'sampleTipEffects'),
                        include  = FALSE,
                        init_r   = init_r,
                        sample_file = file.path(subdir, 'samples.csv'))

@@ -49,7 +49,6 @@ data {
     matrix[NHostNodes, NHostNodes] hostParents;
     vector[NHostNodes - NHostTips] hostLogitNH;
     vector[NMicrobeNodes - NMicrobeTips] microbeLogitNH;
-    real<lower=0> globalScale;
 }
 transformed data {
     int NSubfactorGammas = 0;
@@ -90,7 +89,6 @@ transformed parameters {
     matrix<lower=0>[NHostNodes, NMicrobeNodes] phyloVarRaw;
     matrix<lower=0>[NHostNodes, NMicrobeNodes] phyloScales;
     matrix[NEffects + NHostNodes + 1, NMicrobeNodes + 1] scaledMicrobeNodeEffects;
-    matrix[NSamples, NMicrobeTips] sampleTipEffects;
     real dirichSubFact_lpdf = 0;
     {
         int rawStart = 1;
@@ -182,7 +180,7 @@ transformed parameters {
                            * microbeTipAncestorsT[2:,])));
     scaledMicrobeNodeEffects
         = append_col(
-                append_row(globalScale,
+                append_row(1.0,
                            append_row(subfactLevelMat * segment(scales, 1, NSubfactors),
                                       hostScales)),
                 append_row(
@@ -192,9 +190,9 @@ transformed parameters {
                     * microbeScales,
                     phyloScales))
           .* rawMicrobeNodeEffects;
-    sampleTipEffects = modelMat * (scaledMicrobeNodeEffects * microbeTipAncestorsT);
 }
 model {
+    matrix[NSamples, NMicrobeTips] sampleTipEffects;
     vector[NObs] logit_ratios;
     aveStD ~ exponential(1.0 / aveStDPriorExpect);
     target += dirichSubFact_lpdf;
@@ -210,8 +208,10 @@ model {
     phyloLogVarMultPrev ~ normal(0,1);
     phyloLogVarMultADiv ~ normal(0,1);
     to_vector(phyloLogVarMultRaw) ~ normal(0,1);
-    to_vector(rawMicrobeNodeEffects) ~ normal(0,1);
+    to_vector(rawMicrobeNodeEffects)[2:] ~ normal(0,1);
+    rawMicrobeNodeEffects[1,1] ~ logistic(0,1);
     to_vector(baseLevelMat * rawMicrobeNodeEffects[2:(NEffects + 1),]) ~ normal(0,1);
+    sampleTipEffects = modelMat * (scaledMicrobeNodeEffects * microbeTipAncestorsT);
     for (n in 1:NObs)
         logit_ratios[n] = sampleTipEffects[sampleNames[n], microbeTipNames[n]];
     present ~ bernoulli_logit(logit_ratios);
