@@ -94,9 +94,9 @@ transformed parameters {
     row_vector<lower=0>[NMicrobeNodes] microbeDivergence;
     row_vector<lower=0>[NMicrobeNodes] microbeScales;
     vector<lower=0>[NHostNodes] hostOUExpectedVariance;
-    row_vector[NMicrobeNodes] hostRateShifts;
+    vector[NHostNodes] hostRateShifts;
     vector<lower=0>[NHostNodes] hostRates;
-    row_vector[NMicrobeNodes] hostDivergenceVariance;
+    vector[NHostNodes] hostDivergenceVariance;
     vector<lower=0>[NHostNodes] hostDivergence;
     vector<lower=0>[NHostNodes] hostScales;
     matrix<lower=0>[NHostNodes, NMicrobeNodes] cophyloExpectedVariance;
