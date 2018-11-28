@@ -32,8 +32,7 @@ dir.create(file.path(currtabledir, 'nodeEffects'), recursive = T)
 dir.create(file.path(currtabledir, 'phyloVarianceEffects'), recursive = T)
 dir.create(currdatadir, recursive = T)
 
-contrastLevels  = list(vsRoot                  = 'vsRoot',
-                       vsParent                = 0,
+contrastLevels  = list(vsParent                = 0,
                        vsGrandparent           = 1,
                        vsGreatgrandparent      = 2,
                        vsGreatgreatgrandparent = 3)
@@ -104,7 +103,7 @@ for(contrast in names(contrastLevels)) {
         for(tree1 in 1:(NTrees - 1)) {
             for(node1 in 1:length(hostNodes)) {
                 x <- node1
-                for(i in 1:(nLevels + 1)) {
+                for(i in 1:(contrastLevels[[contrast]] + 1)) {
                     x <- c(Ancestors(hostTreesSampled[[tree1]], x[[1]], 'parent'), x)
                 }
                 containingNodes1 <- min(x)
@@ -125,7 +124,7 @@ for(contrast in names(contrastLevels)) {
                     
                     isMatch <- sapply(hostNodes, function(node2) {
                         y <- node2
-                        for(i in 1:(nLevels + 1)) {
+                        for(i in 1:(contrastLevels[[contrast]] + 1)) {
                             y <- c(Ancestors(hostTreesSampled[[tree2]], y[[1]], 'parent'), y)
                         }
                         containingNodes2 <- min(y)
@@ -138,13 +137,13 @@ for(contrast in names(contrastLevels)) {
                                              nodeIntersect)
                                              
                         containingUnion <- union(hostTreesSampled[[tree1]]$tip.label[Descendants(hostTreesSampled[[tree1]],
-                                                                                                 containingNodes1[[node1]])[[1]]],
+                                                                                                 containingNodes1)[[1]]],
                                                  hostTreesSampled[[tree2]]$tip.label[Descendants(hostTreesSampled[[tree2]],
-                                                                                                 containingNodes2[[node2]])[[1]]])
+                                                                                                 containingNodes2)[[1]]])
                         containingIntersect <- intersect(hostTreesSampled[[tree1]]$tip.label[Descendants(hostTreesSampled[[tree1]],
-                                                                                                         containingNodes1[[node1]])[[1]]],
+                                                                                                         containingNodes1)[[1]]],
                                                          hostTreesSampled[[tree2]]$tip.label[Descendants(hostTreesSampled[[tree2]],
-                                                                                                         containingNodes2[[node2]])[[1]]])
+                                                                                                         containingNodes2)[[1]]])
                         containingDiffs <- setdiff(containingUnion,
                                                    containingIntersect)
                         
