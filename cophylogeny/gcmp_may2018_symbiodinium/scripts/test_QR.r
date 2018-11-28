@@ -41,7 +41,7 @@ hostOUAlphaPriorExpect <- 1.0
 microbeOUAlphaPriorExpect <- 1.0
 stDLogitHostPriorExpect <- 1.0
 stDLogitMicrobePriorExpect <- 1.0
-NTrees <- 10 ## number of random trees to sample and to fit the model to
+NTrees <- 2 ## number of random trees to sample and to fit the model to
 groupedFactors <- list(location           = c('ocean', 'ocean_area', 'reef_name'),
                        date               = 'concatenated_date',
                        colony             = 'colony_name',

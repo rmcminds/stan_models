@@ -51,6 +51,9 @@ data {
     vector[NMicrobeNodes - NMicrobeTips] microbeLogitNH;
 }
 transformed data {
+    matrix[NEffects + NHostNodes + 1, NEffects + NHostNodes + 1] modelMatR_inv
+        = inverse(qr_R(modelMat')[1:(NEffects + NHostNodes + 1), ]
+                  / sqrt(NEffects + NHostNodes));
     int NSubfactorGammas = 0;
     int NSubfactors = sum(NSubPerFactor);
     for(i in 1:NFactors) {
@@ -74,7 +77,7 @@ parameters {
     row_vector[NMicrobeNodes] phyloLogVarMultPrev;
     vector[NHostNodes] phyloLogVarMultADiv;
     matrix[NHostNodes, NMicrobeNodes] phyloLogVarMultRaw;
-    matrix[NEffects + NHostNodes + 1, NMicrobeNodes + 1] rawMicrobeNodeEffects;
+    matrix[NEffects + NHostNodes + 1, NMicrobeNodes + 1] rawMicrobeNodeEffects_tilde;
 }
 transformed parameters {
     simplex[2 * NSubfactors + 3] subfactProps;
@@ -89,6 +92,7 @@ transformed parameters {
     matrix<lower=0>[NHostNodes, NMicrobeNodes] phyloVarRaw;
     matrix<lower=0>[NHostNodes, NMicrobeNodes] phyloScales;
     matrix[NEffects + NHostNodes + 1, NMicrobeNodes + 1] scaledMicrobeNodeEffects;
+    matrix[NEffects + NHostNodes + 1, NMicrobeNodes + 1] rawMicrobeNodeEffects = modelMatR_ast_inverse * rawMicrobeNodeEffects_tilde;
     real dirichSubFact_lpdf = 0;
     {
         int rawStart = 1;
