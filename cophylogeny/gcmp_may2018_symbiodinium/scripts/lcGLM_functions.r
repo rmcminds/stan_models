@@ -536,69 +536,105 @@ summarizeLcGLM <- function(combineTrees    = T,
         
         if(sumVarMods) {
             
-            if(!exists('metaScales')) {
-                metaScales <- array(extract(fit[[i]],
-                            pars       = 'metaScales',
-                            permuted   = F,
-                            inc_warmup = T),
-                    dim = c(NMCSamples,
-                            NChains,
-                            3),
-                    dimnames = list(sample  = NULL,
-                                    chain   = NULL,
-                                    effect  = c('Prevalence',
-                                                'ADiv',
-                                                'Specificty')))
+            ## extract variance modifier terms from the fit model
+            microbeRateShifts <- array(extract(fit[[i]],
+                                  pars       = 'microbeRateShifts',
+                                  permuted   = F,
+                                  inc_warmup = T),
+                          dim = c(NMCSamples,
+                                  NChains,
+                                  NMicrobeNodes),
+                          dimnames = list(sample  = NULL,
+                                          chain   = NULL,
+                                          taxnode = colnames(microbeAncestors)))
+            
+            hostRateShifts <- array(extract(fit[[i]],
+                                       pars       = 'hostRateShifts',
+                                       permuted   = F,
+                                       inc_warmup = T),
+                               dim = c(NMCSamples,
+                                       NChains,
+                                       NHostNodes),
+                               dimnames = list(sample  = NULL,
+                                               chain   = NULL,
+                                               taxnode = colnames(hostAncestors[[i]])))
+            
+            cophyloRateShifts <- array(extract(fit[[i]],
+                                  pars       = 'cophyloRateShifts',
+                                  permuted   = F,
+                                  inc_warmup = T),
+                          dim = c(NMCSamples,
+                                  NChains,
+                                  NHostNodes,
+                                  NMicrobeNodes),
+                          dimnames = list(sample      = NULL,
+                                          chain       = NULL,
+                                          hostnode    = colnames(hostAncestors[[i]]),
+                                          microbenode = colnames(microbeAncestors)))
+            ##
+            
+            allRates <- array(NA,
+                              dim = c(NMCSamples,
+                                      NChains,
+                                      NHostNodes + 1,
+                                      NMicrobeNodes + 1))
+            for(j in 1:NMCSamples) {
+                for(k in 1:NChains) {
+                    allRates[j,k,,] <- rbind(c(0,
+                                               microbeRateShifts[j,k,]),
+                                             cbind(hostRateShifts[j,k,],
+                                                   cophyloRateShifts[j,k,,]))
+                }
             }
             
             ## extract variance modifier terms from the fit model
-            phyloLogVarMultPrev <- array(extract(fit[[i]],
-                                                 pars       = 'phyloLogVarMultPrev',
-                                                 permuted   = F,
-                                                 inc_warmup = T),
-                                         dim = c(NMCSamples,
-                                                 NChains,
-                                                 NMicrobeNodes),
-                                         dimnames = list(sample  = NULL,
-                                                         chain   = NULL,
-                                                         taxnode = colnames(microbeAncestors)))
+            microbeDivergence <- array(extract(fit[[i]],
+                                  pars       = 'microbeDivergence',
+                                  permuted   = F,
+                                  inc_warmup = T),
+                          dim = c(NMCSamples,
+                                  NChains,
+                                  NMicrobeNodes),
+                          dimnames = list(sample  = NULL,
+                                          chain   = NULL,
+                                          taxnode = colnames(microbeAncestors)))
             
-            phyloLogVarMultADiv <- array(extract(fit[[i]],
-                                                 pars       = 'phyloLogVarMultADiv',
-                                                 permuted   = F,
-                                                 inc_warmup = T),
-                                         dim = c(NMCSamples,
-                                                 NChains,
-                                                 NHostNodes),
-                                         dimnames = list(sample  = NULL,
-                                                         chain   = NULL,
-                                                         taxnode = colnames(hostAncestors[[i]])))
+            hostDivergence <- array(extract(fit[[i]],
+                                       pars       = 'hostDivergence',
+                                       permuted   = F,
+                                       inc_warmup = T),
+                               dim = c(NMCSamples,
+                                       NChains,
+                                       NHostNodes),
+                               dimnames = list(sample  = NULL,
+                                               chain   = NULL,
+                                               taxnode = colnames(hostAncestors[[i]])))
             
-            phyloLogVarMultRaw <- array(extract(fit[[i]],
-                                                pars       = 'phyloLogVarMultRaw',
-                                                permuted   = F,
-                                                inc_warmup = T),
-                                        dim = c(NMCSamples,
-                                                NChains,
-                                                NHostNodes,
-                                                NMicrobeNodes),
-                                        dimnames = list(sample      = NULL,
-                                                        chain       = NULL,
-                                                        hostnode    = colnames(hostAncestors[[i]]),
-                                                        microbenode = colnames(microbeAncestors)))
+            coDivergence <- array(extract(fit[[i]],
+                                  pars       = 'coDivergence',
+                                  permuted   = F,
+                                  inc_warmup = T),
+                          dim = c(NMCSamples,
+                                  NChains,
+                                  NHostNodes,
+                                  NMicrobeNodes),
+                          dimnames = list(sample      = NULL,
+                                          chain       = NULL,
+                                          hostnode    = colnames(hostAncestors[[i]]),
+                                          microbenode = colnames(microbeAncestors)))
             ##
             
-            phyloLogVarMultScaled <- array(NA,
-                                           dim = c(NMCSamples,
-                                                   NChains,
-                                                   NHostNodes + 1,
-                                                   NMicrobeNodes + 1))
+            allDivergence <- array(NA,
+                              dim = c(NMCSamples,
+                                      NChains,
+                                      NHostNodes + 1,
+                                      NMicrobeNodes + 1))
             for(j in 1:NMCSamples) {
                 for(k in 1:NChains) {
-                    phyloLogVarMultScaled[j,k,,] <- rbind(c(0,
-                                                            phyloLogVarMultPrev[j,k,] * metaScales[j,k,1]),
-                                                         cbind(phyloLogVarMultADiv[j,k,] * metaScales[j,k,2],
-                                                               phyloLogVarMultRaw[j,k,,] * metaScales[j,k,3]))
+                    allDivergence[j,k,,] <- rbind(c(0,
+                                               microbeDivergence[j,k,]),
+                                             cbind(hostDivergence[j,k,],
+                                                   coDivergence[j,k,,]))
                 }
             }
             
@@ -711,7 +747,7 @@ summarizeLcGLM <- function(combineTrees    = T,
                                                            contrastLevels[[contrast]][['microbe']])))
                     ##
                     
-                    ## sum the effects
+                    ## sum the effects of rate shifts
                     matMult <- array(NA,
                                      dim = c(NMCSamples,
                                              NChains,
@@ -727,7 +763,7 @@ summarizeLcGLM <- function(combineTrees    = T,
                     for(j in 1:NMCSamples) {
                         for(k in 1:NChains) {
                             matMult[j,k,,] <- as.matrix(hostMat %*%
-                                                        phyloLogVarMultScaled[j,k,,] %*%
+                                                        allRates[j,k,,] %*%
                                                         microbeMat)
                         }
                     }
@@ -748,9 +784,9 @@ summarizeLcGLM <- function(combineTrees    = T,
                         statusUpdate(j, NHostNodes)
                     }
                     
-                    cat('microbeNode\t', file = file.path(currtabledir, 'phyloVarianceEffects', paste0(contrast, '.txt')))
+                    cat('microbeNode\t', file = file.path(currtabledir, 'rateShifts', paste0(contrast, '.txt')))
                     write.table(allRes,
-                                file   = file.path(currtabledir, 'phyloVarianceEffects', paste0(contrast, '.txt')),
+                                file   = file.path(currtabledir, 'rateShifts', paste0(contrast, '.txt')),
                                 sep    = '\t',
                                 quote  = F,
                                 append = T)
@@ -778,6 +814,86 @@ summarizeLcGLM <- function(combineTrees    = T,
                     
                     pdf(file   = file.path(currplotdir,
                                            paste0('variance_heatmap_',
+                                                  contrast,
+                                                  '.pdf')),
+                        width  = 10,
+                        height = 10)
+                    heatmap(plotFilt,
+                            Rowv   = as.dendrogram(hclmicrobetree),
+                            Colv   = as.dendrogram(hclhosttree),
+                            col    = plotcolorsVar,
+                            cexCol = 0.2,
+                            cexRow = 0.1,
+                            scale  = 'none')
+                    graphics.off()
+                    
+                    ## sum the effects of divergence
+                    matMult <- array(NA,
+                                     dim = c(NMCSamples,
+                                             NChains,
+                                             NHostNodes + 1,
+                                             NMicrobeNodes + 1),
+                                     dimnames = list(sample      = NULL,
+                                                     chain       = NULL,
+                                                     hostnode    = c('microbePrevalence',
+                                                                     colnames(hostAncestors[[i]])),
+                                                     microbenode = c('alphaDiversity',
+                                                                     colnames(microbeAncestors))))
+                                         
+                    for(j in 1:NMCSamples) {
+                        for(k in 1:NChains) {
+                            matMult[j,k,,] <- as.matrix(hostMat %*%
+                                                        allDivergences[j,k,,] %*%
+                                                        microbeMat)
+                        }
+                    }
+                    
+                    allRes <- NULL
+                    for(j in 1:(NHostNodes + 1)) {
+                        temp <- monitor(array(matMult[,,j,],
+                                              dim = c(NMCSamples,
+                                                      NChains,
+                                                      NMicrobeNodes + 1)),
+                                        warmup = warmup,
+                                        probs  = c(0.05, 0.95),
+                                        print  = F)
+                        temp <- cbind(hostNode = c('microbePrevalence',
+                                                   paste0('host_', colnames(hostAncestors[[i]])))[[j]], temp)
+                        rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
+                        allRes <- rbind(allRes, temp)
+                        statusUpdate(j, NHostNodes)
+                    }
+                    
+                    cat('microbeNode\t', file = file.path(currtabledir, 'divergenceEffects', paste0(contrast, '.txt')))
+                    write.table(allRes,
+                                file   = file.path(currtabledir, 'divergenceEffects', paste0(contrast, '.txt')),
+                                sep    = '\t',
+                                quote  = F,
+                                append = T)
+                    ##
+                    
+                    allRes <- matrix(NA, nrow = NMicrobeNodes + 1, ncol = NHostNodes + 1)
+                    for(j in 1:(NHostNodes + 1)) {
+                        for(k in 1:(NMicrobeNodes + 1)) {
+                            allRes[k,j] <- median(matMult[,,j,k])
+                        }
+                    }
+                    rownames(allRes) <- c('alphaDiversity',
+                                          substr(colnames(microbeAncestors),
+                                                 2,
+                                                 nchar(colnames(microbeAncestors))))
+                    colnames(allRes) <- c('microbePrevalence', colnames(hostAncestors[[i]]))
+                    ##
+                    
+                    save(allRes, file = file.path(currdatadir, paste0('divergenceEffects_heatmap_', contrast, '.RData')))
+
+                    plotFilt <- as.matrix(allRes[plotmicrobetree$tip.label, plothosttree$tip.label])
+                    if(tipNamesAreSeqs) {
+                        rownames(plotFilt) <- names(newMicrobeNames)
+                    }
+                    
+                    pdf(file   = file.path(currplotdir,
+                                           paste0('divergenceEffects_',
                                                   contrast,
                                                   '.pdf')),
                         width  = 10,
