@@ -16,7 +16,7 @@ library(Matrix)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
-outdir <- 'output/2018-11-25_14-33-54'
+outdir <- 'output/2018-11-25_13-52-47'
 subdir <- file.path(outdir, 'primary_sampling')
 
 load(file.path(subdir, 'setup.RData'))
@@ -36,6 +36,8 @@ contrastLevels  = list(vsParent                = 0,
                        vsGrandparent           = 1,
                        vsGreatgrandparent      = 2,
                        vsGreatgreatgrandparent = 3)
+
+contrastLevels  = list(vsRoot = 'vsRoot')
 
 for(contrast in names(contrastLevels)) {
 
@@ -102,7 +104,7 @@ for(contrast in names(contrastLevels)) {
         allMatches <- NULL
         for(tree1 in 1:(NTrees - 1)) {
             for(node1 in 1:length(hostNodes)) {
-                x <- node1
+                x <- hostNodes[[node1]]
                 for(i in 1:(contrastLevels[[contrast]] + 1)) {
                     x <- c(Ancestors(hostTreesSampled[[tree1]], x[[1]], 'parent'), x)
                 }

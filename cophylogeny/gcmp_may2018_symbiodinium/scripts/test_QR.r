@@ -13,6 +13,7 @@ library(ggplot2)
 library(RColorBrewer)
 library(picante)
 library(Matrix)
+library(MASS)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
@@ -41,7 +42,7 @@ hostOUAlphaPriorExpect <- 1.0
 microbeOUAlphaPriorExpect <- 1.0
 stDLogitHostPriorExpect <- 1.0
 stDLogitMicrobePriorExpect <- 1.0
-NTrees <- 2 ## number of random trees to sample and to fit the model to
+NTrees <- 10 ## number of random trees to sample and to fit the model to
 groupedFactors <- list(location           = c('ocean', 'ocean_area', 'reef_name'),
                        date               = 'concatenated_date',
                        colony             = 'colony_name',
@@ -50,7 +51,7 @@ groupedFactors <- list(location           = c('ocean', 'ocean_area', 'reef_name'
 ##
 
 ## Stan options
-init_r <- 2
+init_r <- 0.5
 NCores <- NTrees
 NChains <- 1 ## this is per tree; since I'm doing a large number of trees in parallel i'll just do one chain for each
 NIterations <- 2^(12) ## will probably need >10,000? maybe start with 2, check convergence, double it, check, double, check, double, etc.?
@@ -311,9 +312,14 @@ for(j in sumconts) {
 rownames(subfactLevelMat) <- colnames(modelMat)[2:ncol(modelMat)]
 ##
 
+microbeAncestorsR_invT <- t(ginv(qr.R(qr(microbeAncestors)) / sqrt(NMicrobeNodes - 1)))
+microbeTipAncestorsR_invT <- t(ginv(qr.R(qr(rbind(1, cbind(1, microbeAncestors)))) / sqrt(NMicrobeNodes)))
+
 ## collect data to feed to stan
 standat <- list()
 for (i in 1:NTrees) {
+    modelMatR_inv <- ginv(qr.R(qr(cbind(modelMat, hostAncestorsExpanded[[i]]))) / sqrt(NSamples - 1))
+    hostAncestorsR_inv <- ginv(qr.R(qr(hostAncestors[[i]])) / sqrt(NHostNodes - 1))
     standat[[i]] <- list(NSamples                       = NSamples,
                          NObs                           = NObs,
                          NMicrobeNodes                  = NMicrobeNodes,
@@ -326,11 +332,15 @@ for (i in 1:NTrees) {
                          microbeTipNames                = microbeTipNames,
                          subfactLevelMat                = subfactLevelMat,
                          modelMat                       = cbind(modelMat, hostAncestorsExpanded[[i]]),
+                         modelMatR_inv                  = modelMatR_inv,
                          NSumTo0                        = NSumTo0,
                          baseLevelMat                   = baseLevelMat,
                          microbeAncestorsT              = t(microbeAncestors),
-                         microbeTipAncestorsT           = t(cbind(1, microbeAncestors[1:NMicrobeTips, ])),
+                         microbeAncestorsR_invT         = microbeAncestorsR_invT,
+                         microbeTipAncestorsT           = t(cbind(1, microbeAncestors[1:NMicrobeTips,])),
+                         microbeTipAncestorsR_invT      = microbeTipAncestorsR_invT,
                          hostAncestors                  = hostAncestors[[i]],
+                         hostAncestorsR_inv             = hostAncestorsR_inv,
                          hostTipAncestors               = hostAncestors[[i]][1:NHostTips, ],
                          microbeParents                 = microbeTreeDetails$pm,
                          hostParents                    = hostTreeDetails[[i]]$pm,
