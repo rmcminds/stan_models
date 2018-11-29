@@ -552,8 +552,8 @@ summarizeLcGLM <- function(combineTrees    = T,
             }
             
             ## extract variance modifier terms from the fit model
-            phyloLogVarMultPrev <- array(extract(fit[[i]],
-                                                 pars       = 'phyloLogVarMultPrev',
+            microbeMetaVarRaw <- array(extract(fit[[i]],
+                                                 pars       = 'microbeMetaVarRaw',
                                                  permuted   = F,
                                                  inc_warmup = T),
                                          dim = c(NMCSamples,
@@ -563,8 +563,8 @@ summarizeLcGLM <- function(combineTrees    = T,
                                                          chain   = NULL,
                                                          taxnode = colnames(microbeAncestors)))
             
-            phyloLogVarMultADiv <- array(extract(fit[[i]],
-                                                 pars       = 'phyloLogVarMultADiv',
+            hostMetaVarRaw <- array(extract(fit[[i]],
+                                                 pars       = 'hostMetaVarRaw',
                                                  permuted   = F,
                                                  inc_warmup = T),
                                          dim = c(NMCSamples,
@@ -574,8 +574,8 @@ summarizeLcGLM <- function(combineTrees    = T,
                                                          chain   = NULL,
                                                          taxnode = colnames(hostAncestors[[i]])))
             
-            phyloLogVarMultRaw <- array(extract(fit[[i]],
-                                                pars       = 'phyloLogVarMultRaw',
+            cophyloMetaVarRaw <- array(extract(fit[[i]],
+                                                pars       = 'cophyloMetaVarRaw',
                                                 permuted   = F,
                                                 inc_warmup = T),
                                         dim = c(NMCSamples,
@@ -596,9 +596,9 @@ summarizeLcGLM <- function(combineTrees    = T,
             for(j in 1:NMCSamples) {
                 for(k in 1:NChains) {
                     phyloLogVarMultScaled[j,k,,] <- rbind(c(0,
-                                                            phyloLogVarMultPrev[j,k,] * metaScales[j,k,1]),
-                                                         cbind(phyloLogVarMultADiv[j,k,] * metaScales[j,k,2],
-                                                               phyloLogVarMultRaw[j,k,,] * metaScales[j,k,3]))
+                                                            microbeMetaVarRaw[j,k,]),
+                                                         cbind(hostMetaVarRaw[j,k,],
+                                                               cophyloMetaVarRaw[j,k,,]))
                 }
             }
             

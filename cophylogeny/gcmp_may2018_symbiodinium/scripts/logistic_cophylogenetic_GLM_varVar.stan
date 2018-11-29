@@ -86,12 +86,14 @@ transformed parameters {
     vector<lower=0>[3] metaScales;
     matrix[NMicrobeNodes, 2] newMicrobeNHs;
     matrix[NHostNodes, 2] newHostNHs;
-    row_vector<lower=0>[NMicrobeNodes] microbeVarRaw;
-    row_vector<lower=0>[NMicrobeNodes] microbeScales;
-    vector<lower=0>[NHostNodes] hostVarRaw;
-    vector<lower=0>[NHostNodes] hostScales;
-    matrix<lower=0>[NHostNodes, NMicrobeNodes] phyloVarRaw;
-    matrix<lower=0>[NHostNodes, NMicrobeNodes] phyloScales;
+    row_vector<lower=0>[NMicrobeNodes] microbeOUEdges;
+    row_vector[NMicrobeNodes] microbeMetaVarRaw;
+    row_vector<lower=0>[NMicrobeNodes] microbeVar;
+    vector<lower=0>[NHostNodes] hostOUEdges;
+    vector[NHostNodes] hostMetaVarRaw;
+    vector<lower=0>[NHostNodes] hostVar;
+    matrix[NHostNodes, NMicrobeNodes] cophyloMetaVarRaw;
+    matrix<lower=0>[NHostNodes, NMicrobeNodes] phyloVar;
     matrix[NEffects + NHostNodes + 1, NMicrobeNodes + 1] scaledMicrobeNodeEffects;
     row_vector[NMicrobeNodes] phyloLogVarMultPrev = phyloLogVarMultPrev_tilde
                                                     * microbeAncestorsR_invT;
@@ -156,53 +158,65 @@ transformed parameters {
                     microbeLogitNH + stDLogitMicrobe
                                      * stDLogitMicrobePriorExpect
                                      * phyloLogitVarMicrobe);
-    microbeVarRaw
-        = rescaleOU(newMicrobeNHs, microbeOUAlpha)'
-          .* exp((phyloLogVarMultPrev
-                  * metaScales[1])
+    microbeOUEdges
+        = rescaleOU(newMicrobeNHs, microbeOUAlpha)';
+    microbeMetaVarRaw
+        = metaScales[1]
+          * sqrt(microbeOUEdges)
+            .* phyloLogVarMultPrev;
+    microbeVar
+        = microbeOUEdges
+          .* exp(microbeMetaVarRaw
                  * microbeAncestorsT);
-    microbeScales
-        = sqrt(microbeVarRaw
-               / mean(microbeVarRaw * microbeTipAncestorsT[2:,]));
+    microbeVar
+        = microbeVar
+          / mean(microbeVar * microbeTipAncestorsT[2:,]);
     newHostNHs
         = makeNHMat(hostParents,
                     NHostTips,
                     hostLogitNH + stDLogitHost
                                   * stDLogitHostPriorExpect
                                   * phyloLogitVarHost);
-    hostVarRaw
-        = rescaleOU(newHostNHs, hostOUAlpha)
+    hostOUEdges
+        = rescaleOU(newHostNHs, hostOUAlpha);
+    hostMetaVarRaw
+        = metaScales[2]
+          * sqrt(hostOUEdges)
+            .* phyloLogVarMultADiv;
+    hostVar
+        = hostOUEdges
           .* exp(hostAncestors
-              * (phyloLogVarMultADiv
-                 * metaScales[2]));
-    hostScales
-        = scales[2 * NSubfactors + 1]
-          * sqrt(hostVarRaw
-                 / mean(hostTipAncestors * hostVarRaw));
-
-    phyloVarRaw
+                 * hostMetaVarRaw);
+    hostVar
+        = hostVar
+          / mean(hostTipAncestors * hostVar);
+    cophyloMetaVarRaw
+        = metaScales[3]
+          * sqrt(hostOUEdges * microbeOUEdges)
+            .* phyloLogVarMultRaw;
+    phyloVar
         = exp(hostAncestors
-              * (phyloLogVarMultRaw
-                 * metaScales[3])
-              * microbeAncestorsT)
-          .* (hostVarRaw * microbeVarRaw);
-    phyloScales
-        = scales[2 * NSubfactors + 2]
-          * sqrt(phyloVarRaw
-                 / mean(hostTipAncestors
-                        * (phyloVarRaw
-                           * microbeTipAncestorsT[2:,])));
+              * cophyloMetaVarRaw
+                * microbeAncestorsT)
+          .* (hostVar * microbeVar);
+    phyloVar
+        = phyloVar
+          / mean(hostTipAncestors
+                 * phyloVar
+                   * microbeTipAncestorsT[2:,]);
     scaledMicrobeNodeEffects
         = append_col(
                 append_row(1.0,
                            append_row(subfactLevelMat * segment(scales, 1, NSubfactors),
-                                      hostScales)),
+                                      scales[2 * NSubfactors + 1]
+                                      * sqrt(hostVar))),
                 append_row(
                     append_row(
                         scales[2 * NSubfactors + 3],
                         subfactLevelMat * segment(scales, NSubfactors + 1, NSubfactors))
-                    * microbeScales,
-                    phyloScales))
+                    * sqrt(microbeVar),
+                    scales[2 * NSubfactors + 2]
+                    * sqrt(phyloVar)))
           .* rawMicrobeNodeEffects;
 }
 model {
