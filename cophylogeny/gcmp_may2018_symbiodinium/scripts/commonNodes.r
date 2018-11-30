@@ -16,7 +16,7 @@ library(Matrix)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
-outdir <- 'output/2018-11-25_14-33-54'
+outdir <- 'output/2018-11-28_12-38-31'
 subdir <- file.path(outdir, 'primary_sampling')
 
 load(file.path(subdir, 'setup.RData'))
@@ -32,10 +32,10 @@ dir.create(file.path(currtabledir, 'nodeEffects'), recursive = T)
 dir.create(file.path(currtabledir, 'phyloVarianceEffects'), recursive = T)
 dir.create(currdatadir, recursive = T)
 
-contrastLevels  = list(vsParent                = 0,
+contrastLevels  = list(vsGreatgreatgrandparent = 3,
+                       vsParent                = 0,
                        vsGrandparent           = 1,
-                       vsGreatgrandparent      = 2,
-                       vsGreatgreatgrandparent = 3)
+                       vsGreatgrandparent      = 2)
 
 for(contrast in names(contrastLevels)) {
 
@@ -102,11 +102,11 @@ for(contrast in names(contrastLevels)) {
         allMatches <- NULL
         for(tree1 in 1:(NTrees - 1)) {
             for(node1 in 1:length(hostNodes)) {
-                x <- node1
+                x <- hostNodes[[node1]]
                 for(i in 1:(contrastLevels[[contrast]] + 1)) {
                     x <- c(Ancestors(hostTreesSampled[[tree1]], x[[1]], 'parent'), x)
                 }
-                containingNodes1 <- min(x)
+                containingNodes1 <- min(x[x > length(hostTreesSampled[[tree1]]$tip.label)])
                 for(tree2 in (tree1 + 1):NTrees) {
                     treeDiff <- setdiff(union(hostTreesSampled[[tree1]]$tip.label,
                                               hostTreesSampled[[tree2]]$tip.label),
@@ -123,11 +123,13 @@ for(contrast in names(contrastLevels)) {
                     }
                     
                     isMatch <- sapply(hostNodes, function(node2) {
+                        print(node2)
                         y <- node2
                         for(i in 1:(contrastLevels[[contrast]] + 1)) {
                             y <- c(Ancestors(hostTreesSampled[[tree2]], y[[1]], 'parent'), y)
                         }
-                        containingNodes2 <- min(y)
+                        containingNodes2 <- min(y[y > length(hostTreesSampled[[tree2]]$tip.label)])
+                        print(containingNodes2)
                         
                         nodeUnion <- union(hostTreesSampled[[tree1]]$tip.label[Descendants(hostTreesSampled[[tree1]], hostNodes[[node1]])[[1]]],
                                            hostTreesSampled[[tree2]]$tip.label[Descendants(hostTreesSampled[[tree2]], node2)[[1]]])
