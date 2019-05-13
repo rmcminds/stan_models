@@ -217,6 +217,7 @@ generaOfUnknowns <- sapply(study.species.missing, function(x) strsplit(x, '_')[[
 
 ## generate multiple random samples of the map and trees
 sampleMap <- list()
+hostTreeSampleNumbers <- sample(1:length(hostTree), NTrees)
 hostTreesSampled <- list()
 hostTreeDetails <- list()
 for(i in 1:NTrees) {
@@ -240,7 +241,8 @@ for(i in 1:NTrees) {
     }
 
     #filter the tree only contain the sampled (or assigned) species
-    hostTreesSampled[[i]] <- ladderize(drop.tip(hostTree[[i]], hostTree[[i]]$tip.label[!hostTree[[i]]$tip.label %in% levels(sampleMap[[i]][,sampleTipKey])]))
+    hostTreesSampled[[i]] <- ladderize(drop.tip(hostTree[[hostTreeSampleNumbers[[i]]]],
+                                                hostTree[[hostTreeSampleNumbers[[i]]]]$tip.label[!hostTree[[hostTreeSampleNumbers[[i]]]]$tip.label %in% levels(sampleMap[[i]][,sampleTipKey])]))
     
     #get some tree stats for later use
     hostTreeDetails[[i]] <- getTreeDetails(hostTreesSampled[[i]])
