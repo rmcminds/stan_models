@@ -589,7 +589,7 @@ summarizeLcGLM <- function(combineTrees    = T,
             
             ## extract variance modifier terms from the fit model
             microbeDivergence <- array(extract(fit[[i]],
-                                  pars       = 'microbeDivergence',
+                                  pars       = 'microbeDivergenceVariance',
                                   permuted   = F,
                                   inc_warmup = T),
                           dim = c(NMCSamples,
@@ -600,7 +600,7 @@ summarizeLcGLM <- function(combineTrees    = T,
                                           taxnode = colnames(microbeAncestors)))
             
             hostDivergence <- array(extract(fit[[i]],
-                                       pars       = 'hostDivergence',
+                                       pars       = 'hostDivergenceVariance',
                                        permuted   = F,
                                        inc_warmup = T),
                                dim = c(NMCSamples,
@@ -611,7 +611,7 @@ summarizeLcGLM <- function(combineTrees    = T,
                                                taxnode = colnames(hostAncestors[[i]])))
             
             coDivergence <- array(extract(fit[[i]],
-                                  pars       = 'coDivergence',
+                                  pars       = 'coDivergenceVariance',
                                   permuted   = F,
                                   inc_warmup = T),
                           dim = c(NMCSamples,
@@ -638,23 +638,10 @@ summarizeLcGLM <- function(combineTrees    = T,
                 }
             }
             
-            newMicrobeNHs <- array(extract(fit[[i]],
-                                    pars       = 'newMicrobeNHs',
-                                    permuted   = F,
-                                    inc_warmup = T),
-                            dim = c(NMCSamples,
-                                    NChains,
-                                    NMicrobeNodes,
-                                    2),
-                            dimnames = list(sample      = NULL,
-                                            chain       = NULL,
-                                            microbenode = substr(colnames(microbeAncestors),
-                                                                 2,
-                                                                 nchar(colnames(microbeAncestors))),
-                                            node        = NULL))
-            ##
-            
-            newEdgeDraws <- array(NA,
+            newEdgeDraws <- array(extract(fit[[i]],
+                                          pars       = 'newMicrobeEdges',
+                                          permuted   = F,
+                                          inc_warmup = T),
                                   dim = c(NMCSamples,
                                           NChains,
                                           NMicrobeNodes),
@@ -663,46 +650,25 @@ summarizeLcGLM <- function(combineTrees    = T,
                                                   microbenode = substr(colnames(microbeAncestors),
                                                                        2,
                                                                        nchar(colnames(microbeAncestors)))))
-            for(j in 1:NMCSamples) {
-                for(k in 1:NChains) {
-                    newEdgeDraws[j,k,] <- apply(newMicrobeNHs[j,k,,], 1, function(x) abs(x[[1]] - x[[2]]))
-                }
-            }
-            
-            newEdges <- apply(newEdgeDraws, 3, mean)
+                                                                       
+            newEdges <- apply(newEdgeDraws, 3, function(x) mean(x[(warmup + 1):NMCSamples]))
             
             finalMicrobeTree.newEdges <- finalMicrobeTree
             finalMicrobeTree.newEdges$edge.length <- newEdges[order(microbeTreeDetails$edgeOrder)]
             ##
             
-            newHostNHs <- array(extract(fit[[i]],
-                                        pars       = 'newHostNHs',
-                                        permuted   = F,
-                                        inc_warmup = T),
-                                dim = c(NMCSamples,
-                                        NChains,
-                                        NHostNodes,
-                                        2),
-                                dimnames = list(sample      = NULL,
-                                                chain       = NULL,
-                                                hostnode    = colnames(hostAncestors[[i]]),
-                                                node        = NULL))
-            ##
-            
-            newEdgeDraws <- array(NA,
+            newEdgeDraws <- array(extract(fit[[i]],
+                                  pars       = 'newHostEdges',
+                                  permuted   = F,
+                                  inc_warmup = T),
                                   dim = c(NMCSamples,
                                           NChains,
                                           NHostNodes),
                                   dimnames = list(sample      = NULL,
                                                   chain       = NULL,
                                                   hostnode    = colnames(hostAncestors[[i]])))
-            for(j in 1:NMCSamples) {
-                for(k in 1:NChains) {
-                    newEdgeDraws[j,k,] <- apply(newHostNHs[j,k,,], 1, function(x) abs(x[[1]] - x[[2]]))
-                }
-            }
-            
-            newEdges <- apply(newEdgeDraws, 3, mean)
+
+            newEdges <- apply(newEdgeDraws, 3, function(x) mean(x[(warmup + 1):NMCSamples]))
 
             hostTreesSampled.newEdges <- hostTreesSampled[[i]]
             hostTreesSampled.newEdges$edge.length <- newEdges[order(hostTreeDetails[[i]]$edgeOrder)]
@@ -784,9 +750,9 @@ summarizeLcGLM <- function(combineTrees    = T,
                         statusUpdate(j, NHostNodes)
                     }
                     
-                    cat('microbeNode\t', file = file.path(currtabledir, 'rateShifts', paste0(contrast, '.txt')))
+                    cat('microbeNode\t', file = file.path(currtabledir, 'phyloVarianceEffects', paste0('rateShifts_', contrast, '.txt')))
                     write.table(allRes,
-                                file   = file.path(currtabledir, 'rateShifts', paste0(contrast, '.txt')),
+                                file   = file.path(currtabledir, 'phyloVarianceEffects', paste0('rateShifts_', contrast, '.txt')),
                                 sep    = '\t',
                                 quote  = F,
                                 append = T)
@@ -843,7 +809,7 @@ summarizeLcGLM <- function(combineTrees    = T,
                     for(j in 1:NMCSamples) {
                         for(k in 1:NChains) {
                             matMult[j,k,,] <- as.matrix(hostMat %*%
-                                                        allDivergences[j,k,,] %*%
+                                                        allDivergence[j,k,,] %*%
                                                         microbeMat)
                         }
                     }
@@ -864,9 +830,9 @@ summarizeLcGLM <- function(combineTrees    = T,
                         statusUpdate(j, NHostNodes)
                     }
                     
-                    cat('microbeNode\t', file = file.path(currtabledir, 'divergenceEffects', paste0(contrast, '.txt')))
+                    cat('microbeNode\t', file = file.path(currtabledir, 'phyloVarianceEffects', paste0('divergenceEffects_', contrast, '.txt')))
                     write.table(allRes,
-                                file   = file.path(currtabledir, 'divergenceEffects', paste0(contrast, '.txt')),
+                                file   = file.path(currtabledir, 'phyloVarianceEffects', paste0('divergenceEffects_',  contrast, '.txt')),
                                 sep    = '\t',
                                 quote  = F,
                                 append = T)

@@ -86,7 +86,9 @@ transformed parameters {
     vector<lower=0>[2 * NSubfactors + 3] scales;
     vector<lower=0>[3] metaScales;
     matrix[NMicrobeNodes, 2] newMicrobeNHs;
+    row_vector<lower=0>[NMicrobeNodes] newMicrobeEdges;
     matrix[NHostNodes, 2] newHostNHs;
+    vector<lower=0>[NHostNodes] newHostEdges;
     row_vector<lower=0>[NMicrobeNodes] microbeOUExpectedVariance;
     row_vector[NMicrobeNodes] microbeRateShifts;
     row_vector<lower=0>[NMicrobeNodes] microbeRates;
@@ -159,12 +161,15 @@ transformed parameters {
                     microbeLogitNH + stDLogitMicrobe
                                      * stDLogitMicrobePriorExpect
                                      * phyloLogitVarMicrobe);
+    newMicrobeEdges
+        = (newMicrobeNHs[,2] - newMicrobeNHs[,1])';
     microbeOUExpectedVariance
         = rescaleOU(newMicrobeNHs, microbeOUAlpha)';
     microbeRateShifts
-        = phyloLogVarMultPrev
-          * metaScales[1]
-            * codivVsCophyMetaVarProps[1,1];
+        = sqrt(newMicrobeEdges)
+          .* phyloLogVarMultPrev
+             * metaScales[1]
+               * codivVsCophyMetaVarProps[1,1];
     microbeRates
         = microbeOUExpectedVariance
           .* exp(microbeRateShifts
@@ -174,9 +179,10 @@ transformed parameters {
           * microbeRates
           / mean(microbeRates * microbeTipAncestorsT[2:,]);
     microbeDivergenceVariance
-        = phyloLogVarDivPrev
-          * metaScales[1]
-            * codivVsCophyMetaVarProps[1,2];
+        = sqrt(newMicrobeEdges)
+          .* phyloLogVarDivPrev
+             * metaScales[1]
+               * codivVsCophyMetaVarProps[1,2];
     microbeDivergence
         = exp(microbeDivergenceVariance
               * microbeAncestorsT);
@@ -192,12 +198,15 @@ transformed parameters {
                     hostLogitNH + stDLogitHost
                                   * stDLogitHostPriorExpect
                                   * phyloLogitVarHost);
+    newHostEdges
+        = newHostNHs[,2] - newHostNHs[,1];
     hostOUExpectedVariance
         = rescaleOU(newHostNHs, hostOUAlpha);
     hostRateShifts
-        = phyloLogVarMultADiv
-          * metaScales[2]
-            * codivVsCophyMetaVarProps[2,1];
+        = sqrt(newHostEdges)
+          .* phyloLogVarMultADiv
+             * metaScales[2]
+               * codivVsCophyMetaVarProps[2,1];
     hostRates
         = hostOUExpectedVariance
           .* exp(hostAncestors
@@ -207,9 +216,10 @@ transformed parameters {
           * hostRates
           / mean(hostTipAncestors * hostRates);
     hostDivergenceVariance
-        = phyloLogVarDivADiv
-          * metaScales[2]
-            * codivVsCophyMetaVarProps[2,2];
+        = sqrt(newHostEdges)
+          .* phyloLogVarDivADiv
+             * metaScales[2]
+               * codivVsCophyMetaVarProps[2,2];
     hostDivergence
         = exp(hostAncestors
               * hostDivergenceVariance);
