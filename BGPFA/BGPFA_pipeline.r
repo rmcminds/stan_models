@@ -973,10 +973,10 @@ latent_props_raw_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) bacteriaFi
                                    sapply(1:N, function(x) if(I[3,x]) transcr_inits[I_cs[3,x],]),
                                    sapply(1:N, function(x) if(I[4,x]) itsFilt_inits[I_cs[4,x],])))
 
-rho_inits <- matrix(8 * 2 * gamma((K_linear+1)/2.0) / gamma(K_linear/2.0), nrow = K_linear, ncol = KG)
-rho_inits[1:2,1] <- 0.0001
-rho_inits[3:4,2] <- 0.0001
-rho_inits[5:6,] <- 0.001
+rho_Z_inits <- matrix(8 * 2 * gamma((K_linear+1)/2.0) / gamma(K_linear/2.0), nrow = K_linear, ncol = KG)
+rho_Z_inits[1:2,1] <- 0.0001
+rho_Z_inits[3:4,2] <- 0.0001
+rho_Z_inits[5:6,] <- 0.001
 
 init <- list(latent_props_raw = latent_props_raw_inits,
              intercepts = intercepts_inits,
@@ -989,12 +989,12 @@ init <- list(latent_props_raw = latent_props_raw_inits,
              dataset_scales = rep(1, 2*D+R+C),
              nu_factors_raw = matrix(10, nrow=2*D+R+C, ncol=K),
              weight_scales = matrix(global_scale_prior * 0.05, nrow=2*D+R+C, ncol=K),
-             siteDecay = as.array(rep(mean(distSites[lower.tri(distSites)]), K)),
+             rhoSites = as.array(rep(mean(distSites[lower.tri(distSites)]), K)),
              siteProp = as.array(rep(0.001, K)),
              Z_raw = matrix(rnorm((K_linear+KG*K_gp)*N) * 0.001, nrow=K_linear+KG*K_gp),
              W_raw = matrix(rnorm((VOBplus+sum(Mplus[1:D])+D) * K) * 0.001, ncol=K),
              missingP = rep(-1,nMP),
-             rho = rho_inits,
+             rhoZ = matrix(0.0001, nrow = K_linear, ncol = KG),
              inv_log_less_contamination = -logMaxContam,
              contaminant_overDisp = rep(1,D))
 
@@ -1012,7 +1012,7 @@ print(sampling_commands[[engine]])
 print(date())
 system(sampling_commands[[engine]])
 
-importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','log_post','dataset_scales','var_scales','weight_scales','nu_factors','siteDecay', 'siteProp', 'covSites', 'binary_count_dataset_intercepts','log_less_contamination','contaminant_overDisp','rho')
+importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','log_post','dataset_scales','var_scales','weight_scales','nu_factors','rhoSites', 'siteProp', 'covSites', 'binary_count_dataset_intercepts','log_less_contamination','contaminant_overDisp','rhoZ')
 source(file.path(Sys.getenv('HOME'), 'scripts/read_stan_csv_subset.r'))
 stan.fit.vb <- read_stan_csv_subset(file.path(output_prefix, paste0('samples_',engine,'.txt')),
                                     params = importparams)
