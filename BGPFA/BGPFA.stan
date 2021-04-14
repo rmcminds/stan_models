@@ -1,5 +1,5 @@
 functions {
-    real generalized_normal_lupdf(row_vector y, real mu, real alpha, real beta) {
+    real generalized_normal_lpdf(row_vector y, real mu, real alpha, real beta) {
         return sum(log(beta) - log(2) - log(alpha) - lgamma(inv(beta)) - exp(beta * log(fabs(y-mu)/alpha)));
     }
     real ff(int k, int j) {
@@ -336,7 +336,7 @@ model {
     target += cauchy_lupdf(binary_count_dataset_intercepts | 0, 2.5);
     target += student_t_lupdf(global_effect_scale | 2, 0, global_scale_prior);
     target += student_t_lupdf(latent_scales | 2, 0, global_effect_scale);
-    target += generalized_normal_lupdf(inv_log_less_contamination | 0, logMaxContam, 15);
+    target += generalized_normal_lpdf(inv_log_less_contamination | 0, logMaxContam, 15);
     target += student_t_lupdf(contaminant_overDisp | 5, 0, 1);
     target += std_normal_lupdf(to_vector(Z[1:K_linear,]));
     target += inv_gamma_lupdf(to_vector(rho) | 1 / K_linear, 2);
