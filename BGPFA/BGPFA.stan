@@ -1,4 +1,3 @@
-//regularize toward orthogonal matrix (https://openreview.net/references/pdf?id=HkuVu3ige)
 functions {
     real generalized_normal_lupdf(row_vector y, real mu, real alpha, real beta) {
         return sum(log(beta) - log(2) - log(alpha) - lgamma(inv(beta)) - exp(beta * log(fabs(y-mu)/alpha)));
