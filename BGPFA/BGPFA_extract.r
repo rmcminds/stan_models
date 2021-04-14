@@ -138,20 +138,20 @@ binary_count_dataset_intercepts.vb <- apply(binary_count_dataset_intercepts.vb, 
 
 DRC <- D+R+C
 
-siteDecay.vb <- extract(stan.fit.vb, pars='siteDecay', permuted=FALSE)
-siteDecay.vb <- apply(siteDecay.vb, 3, sumfunc)
+rhoSites.vb <- extract(stan.fit.vb, pars='rhoSites', permuted=FALSE)
+rhoSites.vb <- apply(rhoSites.vb, 3, sumfunc)
 
 covSites.vb <- extract(stan.fit.vb, pars='covSites', permuted=FALSE)
 covSites.vb <- apply(covSites.vb, 3, sumfunc)
 dim(covSites.vb) <- c(K,nSites,nSites)
 covSites.vb <- covSites.vb[axisOrder,,]
 
-if('rho' %in% importparams) {
-    rho.vb <- extract(stan.fit.vb, pars='rho', permuted=FALSE)
+if('rhoZ' %in% importparams) {
+    rhoZ.vb <- extract(stan.fit.vb, pars='rhoZ', permuted=FALSE)
     if(exists('KG')) {
-        rho.vb <- array(apply(rho.vb, 3, sumfunc),dim=c(K_linear,KG))[axisOrder[axisOrder <= K_linear],]
+        rhoZ.vb <- array(apply(rhoZ.vb, 3, sumfunc),dim=c(K_linear,KG))[axisOrder[axisOrder <= K_linear],]
     } else {
-        rho.vb <- apply(rho.vb, 3, sumfunc)[axisOrder[axisOrder <= K_linear]]
+        rhoZ.vb <- apply(rhoZ.vb, 3, sumfunc)[axisOrder[axisOrder <= K_linear]]
     }
 }
 
