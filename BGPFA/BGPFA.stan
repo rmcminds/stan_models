@@ -100,7 +100,7 @@ data {
     real gammaRateFact;
     real gammaShapeFact;
     vector[choose(M[size(M)],2)] distSites;
-    real siteDecayPrior;
+    real rhoSitesPrior;
     int nVarsWGroups;
     matrix[N,nVarGroups] samp2group;
     int varsWGroupsInds[nVarsWGroups];
@@ -120,7 +120,7 @@ transformed data {
     int MMplus[DRC]; // size of model matrix for higher level variables
     int sumMMplus[DRC+1]; // Cumulative size of model matrices for higher level variables
     int sumMc[C_vars+1]; // Cumulative number of categorical levels
-    real rhoScale = 2 * tgamma((K_linear+1)/2.0) / tgamma(K_linear/2.0);
+    real meanDistZ = 2 * tgamma((K_linear+1)/2.0) / tgamma(K_linear/2.0);
     int nmulti = 0;
     int sumID[D];
     int IDInds[D,N+nVarGroups];
@@ -261,9 +261,9 @@ parameters {
     vector[nmulti] multinomial_nuisance;
     vector<upper=0>[nMP] missingP;
     matrix<lower=0>[DRC+D,K] nu_factors_raw;
-    vector<lower=0>[K] siteDecay;
+    vector<lower=0>[K] rhoSites;
     vector<lower=0, upper=1>[K] siteProp;
-    matrix<lower=0>[K_linear,KG] rho;
+    matrix<lower=0>[K_linear,KG] rhoZ;
     vector<upper=0>[D] inv_log_less_contamination;
     vector<lower=0>[D] contaminant_overDisp;
 }
@@ -311,13 +311,13 @@ transformed parameters {
         //covSites[k]
         //    = fill_sym(siteProp[k]
         //               * square(weight_scales[DRC,k])
-        //               * circular_matern(distSites, ms, inv(siteDecay[k]), ffKJ, chooseRJ),
+        //               * circular_matern(distSites, ms, inv(rhoSites[k]), ffKJ, chooseRJ),
         //               M[size(M)],
         //               square(weight_scales[DRC,k]) + 1e-10);
         covSites[k]
             = fill_sym(siteProp[k]
                        * square(weight_scales[DRC,k])
-                       * exp(-distSites / siteDecay[k]),
+                       * exp(-distSites / rhoSites[k]),
                        M[size(M)],
                        square(weight_scales[DRC,k]) + 1e-10);
     }
@@ -330,7 +330,7 @@ model {
     int multinomPlace = 1;
     target += inv_gamma_lupdf(to_vector(nu_factors_raw) | gammaShapeFact,gammaRateFact);
     target += std_normal_lupdf(dataset_scales);
-    target += inv_gamma_lupdf(siteDecay | 5, 5 * siteDecayPrior);
+    target += inv_gamma_lupdf(rhoSites | 5, 5 * rhoSitesPrior);
     target += cauchy_lupdf(intercepts | priorInterceptCenters, 2.5 * priorInterceptScales);
     target += cauchy_lupdf(binary_count_intercepts | binary_count_intercept_centers, 2.5);
     target += cauchy_lupdf(binary_count_dataset_intercepts | 0, 2.5);
@@ -339,10 +339,10 @@ model {
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, logMaxContam, 15);
     target += student_t_lupdf(contaminant_overDisp | 5, 0, 1);
     target += std_normal_lupdf(to_vector(Z[1:K_linear,]));
-    target += inv_gamma_lupdf(to_vector(rho) | 1.0 / K_linear, 2);
+    target += inv_gamma_lupdf(to_vector(rhoZ) | 1.0 / K_linear, 2);
     for(g in 1:KG) {
         target += multi_gp_cholesky_lupdf(Z[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g),] |
-                                          L_cov_exp_quad_ARD(Z[1:K_linear,], rho[,g], 1e-10),
+                                          L_cov_exp_quad_ARD(Z[1:K_linear,], rhoZ[,g], 1e-10),
                                           ones_vector(K_gp));
     }
     for(drc in 1:DRC) {
