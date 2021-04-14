@@ -958,7 +958,7 @@ data <- list(N = N,
              gammaShapeFact      = gammaShapeFact,
              gammaRateFact       = gammaRateFact,
              distSites           = distSites[lower.tri(distSites)],
-             siteDecayPrior      = mean(distSites[lower.tri(distSites)]),
+             rhoSitesPrior       = mean(distSites[lower.tri(distSites)]),
              nVarGroups          = nVarGroups,
              nVarsWGroups        = nVarsWGroups,
              samp2group          = samp2group,
@@ -973,10 +973,10 @@ latent_props_raw_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) bacteriaFi
                                    sapply(1:N, function(x) if(I[3,x]) transcr_inits[I_cs[3,x],]),
                                    sapply(1:N, function(x) if(I[4,x]) itsFilt_inits[I_cs[4,x],])))
 
-rho_Z_inits <- matrix(8 * 2 * gamma((K_linear+1)/2.0) / gamma(K_linear/2.0), nrow = K_linear, ncol = KG)
-rho_Z_inits[1:2,1] <- 0.0001
-rho_Z_inits[3:4,2] <- 0.0001
-rho_Z_inits[5:6,] <- 0.001
+rhoZ_inits <- matrix(8 * 2 * gamma((K_linear+1)/2.0) / gamma(K_linear/2.0), nrow = K_linear, ncol = KG)
+rhoZ_inits[1:2,1] <- 0.0001
+rhoZ_inits[3:4,2] <- 0.0001
+rhoZ_inits[5:6,] <- 0.001
 
 init <- list(latent_props_raw = latent_props_raw_inits,
              intercepts = intercepts_inits,
