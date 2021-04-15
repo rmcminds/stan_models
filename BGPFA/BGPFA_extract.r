@@ -1,7 +1,7 @@
 library(rstan)
 library(phangorn)
 library(RColorBrewer)
-source(file.path(Sys.getenv('HOME'), 'scripts/tara/my_triplot.r'))
+source(file.path(model_dir, 'my_triplot.r'))
 
 monteCarloP <- function(x, pn='p') {
     if(pn == 'n') {
