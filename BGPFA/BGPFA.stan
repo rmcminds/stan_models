@@ -339,7 +339,7 @@ model {
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, logMaxContam, 15);
     target += student_t_lupdf(contaminant_overDisp | 5, 0, 1);
     target += std_normal_lupdf(to_vector(Z[1:K_linear,]));
-    target += inv_gamma_lupdf(to_vector(rhoZ) | 1.0 / K_linear, 2.0 / K_gp^(1.0 / K_linear));
+    target += inv_gamma_lupdf(to_vector(rhoZ) | 1.0 / K_linear, 3.0 / K_gp);
     for(g in 1:KG) {
         target += multi_gp_cholesky_lupdf(Z[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g),] |
                                           L_cov_exp_quad_ARD(Z[1:K_linear,], rhoZ[,g], 1e-10),
