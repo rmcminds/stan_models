@@ -32,6 +32,7 @@ preprocess_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/intermediate/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
 engine <- 'advi'
+opencl <- FALSE
 output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
 dir.create(output_prefix, recursive = TRUE)
 
@@ -47,24 +48,24 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                           'max_depth=7',
                                           'num_warmup=300',
                                           'num_samples=100',
-                                          'opencl platform=0 device=1',
+                                          ('opencl platform=0 device=1')[opencl],
                                           sep=' '),
                           advi = paste(paste0('./', model_name),
-                                      paste0('data file=', file.path(output_prefix, 'data.json')),
-                                      paste0('init=', file.path(output_prefix, 'inits.json')),
-                                      'output',
-                                      paste0('file=', file.path(output_prefix, 'samples_advi.txt')),
-                                      paste0('refresh=', 100),
-                                      'method=variational algorithm=meanfield',
-                                      'grad_samples=1',
-                                      'elbo_samples=100',
-                                      'iter=30000',
-                                      'eta=0.1',
-                                      'adapt engaged=0',
-                                      'tol_rel_obj=0.0001',
-                                      'output_samples=200',
-                                      #'opencl platform=0 device=1',
-                                      sep=' '))
+                                       paste0('data file=', file.path(output_prefix, 'data.json')),
+                                       paste0('init=', file.path(output_prefix, 'inits.json')),
+                                       'output',
+                                       paste0('file=', file.path(output_prefix, 'samples_advi.txt')),
+                                       paste0('refresh=', 100),
+                                       'method=variational algorithm=meanfield',
+                                       'grad_samples=1',
+                                       'elbo_samples=100',
+                                       'iter=30000',
+                                       'eta=0.1',
+                                       'adapt engaged=0',
+                                       'tol_rel_obj=0.0001',
+                                       'output_samples=200',
+                                       ('opencl platform=0 device=1')[opencl],
+                                       sep=' '))
 
 sample_data <- read.table(file.path(input_prefix, 'Stephane/20201008/TARA-PACIFIC_samples-provenance_20200731d.txt'), sep='\t', skip=1, header=T, comment.char='', stringsAsFactors=TRUE)
 sample_data$species <- NA
@@ -1006,9 +1007,8 @@ write_stan_json(init, file.path(output_prefix, 'inits.json'))
 write_stan_json(data, file.path(output_prefix, 'data.json'))
 
 setwd(cmdstan_path())
-#system(paste0('make STAN_OPENCL=true ', file.path(model_dir, model_name)))
-system(paste0('make ', file.path(model_dir, model_name)))
-
+system(paste0(c('make ', 'make STAN_OPENCL=true ')[opencl+1], file.path(model_dir, model_name)))
+                                          
 setwd(model_dir)
 print(sampling_commands[[engine]])
 print(date())
