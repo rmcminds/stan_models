@@ -1008,7 +1008,7 @@ write_stan_json(data, file.path(output_prefix, 'data.json'))
 
 setwd(cmdstan_path())
 system(paste0(c('make ', 'make STAN_OPENCL=true ')[opencl+1], file.path(model_dir, model_name)))
-                                          
+
 setwd(model_dir)
 print(sampling_commands[[engine]])
 print(date())
