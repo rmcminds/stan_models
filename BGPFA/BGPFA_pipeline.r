@@ -9,6 +9,8 @@ library(phytools)
 library(MASS)
 library(geosphere)
 library(DESeq2)
+utilities_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utilities/')
+source(file.path(utilities_dir, 'read_stan_csv_subset.r'))
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 logit <- function(p) log(p/(1-p))
@@ -1013,7 +1015,7 @@ print(date())
 system(sampling_commands[[engine]])
 
 importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','log_post','dataset_scales','var_scales','weight_scales','nu_factors','rhoSites', 'siteProp', 'covSites', 'binary_count_dataset_intercepts','log_less_contamination','contaminant_overDisp','rhoZ')
-source(file.path(Sys.getenv('HOME'), 'scripts/read_stan_csv_subset.r'))
+
 stan.fit.vb <- read_stan_csv_subset(file.path(output_prefix, paste0('samples_',engine,'.txt')),
                                     params = importparams)
 
