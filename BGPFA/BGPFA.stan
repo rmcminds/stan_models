@@ -106,7 +106,7 @@ data {
     int varsWGroupsInds[nVarsWGroups];
     int ms; // Matern smoothness parameter for sites
     real nu_residuals;
-    vector[D] log_inv_max_contam; // prior expectation of contamination rate
+    vector[D] inv_log_max_contam; // prior expectation of contamination rate
 }
 transformed data {
     int K = K_linear + KG * K_gp;
@@ -336,7 +336,7 @@ model {
     target += cauchy_lupdf(binary_count_dataset_intercepts | 0, 2.5);
     target += student_t_lupdf(global_effect_scale | 2, 0, global_scale_prior);
     target += student_t_lupdf(latent_scales | 2, 0, global_effect_scale);
-    target += generalized_normal_lpdf(inv_log_less_contamination | 0, log_inv_max_contam, 15);
+    target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, 15);
     target += std_normal_lupdf(contaminant_overDisp);
     target += std_normal_lupdf(to_vector(Z[1:K_linear,]));
     target += inv_gamma_lupdf(to_vector(rhoZ) | 1.0 / K_linear, 6.0 / K_gp);
