@@ -922,10 +922,10 @@ varlabsM <- c(colnames(bacteriaFilt), colnames(euksFilt), colnames(transcr), col
 
 varsWGroupsInds <- c(sapply(colnames(fabT1agg), function(x) which(x==varlabsM)), sapply(colnames(fabT2agg), function(x) which(x==varlabsM)))
 
-logMaxContam <- log(2) + log(c(max(apply(diag(1/rowSums(bacteriaFilt)) %*% bacteriaFilt, 2, function(x) max(x[x>0]) / min(x[x>0]))),
-                               max(apply(diag(1/rowSums(euksFilt)) %*% euksFilt, 2, function(x) max(x[x>0]) / min(x[x>0]))),
-                               max(apply(diag(1/rowSums(transcr)) %*% transcr, 2, function(x) max(x[x>0]) / min(x[x>0]))),
-                               max(apply(diag(1/rowSums(itsFilt)) %*% itsFilt, 2, function(x) max(x[x>0]) / min(x[x>0])))))
+inv_log_max_contam <- 1 / (log(2) + log(c(max(apply(diag(1/rowSums(bacteriaFilt)) %*% bacteriaFilt, 2, function(x) max(x[x>0]) / min(x[x>0]))),
+                                          max(apply(diag(1/rowSums(euksFilt)) %*% euksFilt, 2, function(x) max(x[x>0]) / min(x[x>0]))),
+                                          max(apply(diag(1/rowSums(transcr)) %*% transcr, 2, function(x) max(x[x>0]) / min(x[x>0]))),
+                                          max(apply(diag(1/rowSums(itsFilt)) %*% itsFilt, 2, function(x) max(x[x>0]) / min(x[x>0]))))))
 
 data <- list(N = N,
              D = D,
@@ -968,7 +968,7 @@ data <- list(N = N,
              varsWGroupsInds     = varsWGroupsInds,
              ms                  = site_smoothness,
              nu_residuals        = nu_residuals,
-             logMaxContam        = logMaxContam)
+             inv_log_max_contam        = inv_log_max_contam)
 
 #### create initiliazations
 latent_props_raw_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) bacteriaFilt_inits[I_cs[1,x],]),
