@@ -60,7 +60,7 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                        'grad_samples=1',
                                        'elbo_samples=100',
                                        'iter=30000',
-                                       'eta=0.3',
+                                       'eta=1',
                                        'adapt engaged=0',
                                        'tol_rel_obj=0.001',
                                        'output_samples=200',
@@ -968,7 +968,7 @@ data <- list(N = N,
              varsWGroupsInds     = varsWGroupsInds,
              ms                  = site_smoothness,
              nu_residuals        = nu_residuals,
-             inv_log_max_contam        = inv_log_max_contam)
+             inv_log_max_contam  = inv_log_max_contam)
 
 #### create initiliazations
 latent_props_raw_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) bacteriaFilt_inits[I_cs[1,x],]),
@@ -993,7 +993,7 @@ init <- list(latent_props_raw = latent_props_raw_inits,
              W_raw = matrix(rnorm((VOBplus+sum(Mplus[1:D])+D) * K) * 0.001, ncol=K),
              missingP = rep(-1,nMP),
              rhoZ = matrix(0.0001, nrow = K_linear, ncol = KG),
-             inv_log_less_contamination = -logMaxContam,
+             inv_log_less_contamination = -1/inv_log_max_contam,
              contaminant_overDisp = rep(1,D))
 
 save.image(file.path(output_prefix, 'setup.RData'))
