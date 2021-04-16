@@ -993,7 +993,7 @@ init <- list(latent_props_raw = latent_props_raw_inits,
              W_raw = matrix(rnorm((VOBplus+sum(Mplus[1:D])+D) * K) * 0.001, ncol=K),
              missingP = rep(-1,nMP),
              rhoZ = matrix(0.0001, nrow = K_linear, ncol = KG),
-             inv_log_less_contamination = -1/inv_log_max_contam,
+             inv_log_less_contamination = -inv_log_max_contam,
              contaminant_overDisp = rep(1,D))
 
 save.image(file.path(output_prefix, 'setup.RData'))
