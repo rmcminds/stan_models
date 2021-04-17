@@ -399,7 +399,8 @@ model {
     for(d in 1:D) {
         matrix[M[d],sumID[d]] predicted
             = rep_matrix(intercepts[(sumM[d] + 1):(sumM[d] + M[d])], sumID[d])
-              + W[(sumM[d] + 1):(sumM[d] + M[d]),] * Z_Z_higher[,IDInds[d,1:sumID[d]]];
+              + W[(sumM[d] + 1):(sumM[d] + M[d]),]
+                * Z_Z_higher[,IDInds[d,1:sumID[d]]];
         matrix[M[d],sumID[d]] prevalence
             = rep_matrix(binary_count_dataset_intercepts[d]
                          + segment(binary_count_intercepts, sumM[d] + 1, M[d]),
