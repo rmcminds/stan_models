@@ -88,17 +88,17 @@ data {
     int<lower=0> H; // Total number of continuous observations
     vector[H] P; // continuous data
     real<lower=0> global_scale_prior;
-    vector<lower=0>[sum(Mplus)] priorScales;
-    vector<lower=0>[sum(M)] priorInterceptScales;
-    vector[sum(M)] priorInterceptCenters;
+    vector<lower=0>[sum(Mplus)] prior_scales;
+    vector<lower=0>[sum(M)] prior_intercept_scales;
+    vector[sum(M)] prior_intercept_centers;
     vector[sum(M[1:D])] binary_count_intercept_centers;
     int<lower=0> sizeMM;
     vector[sizeMM] mm; // model matrix for higher level variables
     int<lower=0> nMP; // number of P measured as -inf
     int<lower=0> indMP[nMP]; // indices for missing Ps
-    real pMax[nMP]; // lowest measured value for the variable corresponding to a missing P
-    real gammaRateFact;
-    real gammaShapeFact;
+    real P_max[nMP]; // lowest measured value for the variable corresponding to a missing P
+    real rate_gamma_fact;
+    real shape_gamma_fact;
     vector[choose(M[size(M)],2)] dist_sites;
     real rho_sites_prior;
     int nVarsWGroups;
@@ -276,13 +276,13 @@ transformed parameters {
     matrix[K,nVarGroups] Z_higher;
     vector<lower=0>[VOBplus+Vplus+D] var_scales
         = sds
-          .* append_row(priorScales,
+          .* append_row(prior_scales,
                         ones_vector(Vplus+D));
     matrix<lower=2>[DRC,K] nu_factors = nu_factors_raw + 2;
     cov_matrix[M[size(M)]] cov_sites[K];
     matrix[VOBplus+Vplus+D,K] W_norm = svd_U(W_raw) * diag_post_multiply(svd_V(W_raw)', sqrt(columns_dot_self(W_raw)));
     matrix[K_linear + KG * K_gp, N] Z = diag_pre_multiply(sqrt(rows_dot_self(Z_raw)), svd_V(Z_raw')) * svd_U(Z_raw')';
-    for(miss in 1:nMP) P_filled[indMP[miss]] = P_missing[miss] + p_max[miss];
+    for(miss in 1:nMP) P_filled[indMP[miss]] = P_missing[miss] + P_max[miss];
     for(drc in 1:DRC) {
         W[(sumM[drc] + 1):(sumM[drc] + M[drc]),]
             = diag_pre_multiply(segment(var_scales, sumMplus[drc] + 1, M[drc]),
@@ -329,10 +329,10 @@ model {
     int Pplace = 1;
     int Yplace = 1;
     int multinomPlace = 1;
-    target += inv_gamma_lupdf(to_vector(nu_factors_raw) | gammaShapeFact,gammaRateFact);
+    target += inv_gamma_lupdf(to_vector(nu_factors_raw) | shape_gamma_fact, rate_gamma_fact);
     target += std_normal_lupdf(dataset_scales);
-    target += inv_gamma_lupdf(rhoSites | 5, 5 * rhoSitesPrior);
-    target += cauchy_lupdf(intercepts | priorInterceptCenters, 2.5 * priorInterceptScales);
+    target += inv_gamma_lupdf(rho_sites | 5, 5 * rho_sites_prior);
+    target += cauchy_lupdf(intercepts | prior_intercept_centers, 2.5 * prior_intercept_scales);
     target += cauchy_lupdf(binary_count_intercepts | binary_count_intercept_centers, 2.5);
     target += cauchy_lupdf(binary_count_dataset_intercepts | 0, 2.5);
     target += student_t_lupdf(global_effect_scale | 2, 0, global_scale_prior);
