@@ -262,7 +262,7 @@ parameters {
     matrix<lower=0>[DRC+D,K] weight_scales;
     vector[VOB] intercepts;
     vector[V] binary_count_intercepts;
-    vector[F] latent_props_raw;
+    vector[F] abundance_true_vector;
     vector[D] binary_count_dataset_intercepts;
     vector[nmulti] multinomial_nuisance;
     vector<upper=0>[nMP] P_missing;
@@ -406,13 +406,13 @@ model {
                          sumID[d])
               + W_binary_counts[(sumM[d] + 1):(sumM[d] + M[d]),]
                 * Z_Z_higher[,IDInds[d,1:sumID[d]]];
-        vector[M[d]] contamination
+        vector[M[d]] abundance_contam
             = segment(intercepts, sumM[d] + 1, M[d])
               + log_inv_logit(binary_count_dataset_intercepts[d]
                               + segment(binary_count_intercepts, sumM[d] + 1, M[d]))
               + log_less_contamination[d];
         if(Mplus[d] > M[d]) {
-            vector[M[d]] noise[sumID[d]] = to_vector_array(to_matrix(segment(latent_props_raw, Xplace, M[d] * sumID[d]), M[d], sumID[d]));
+            vector[M[d]] abundance_true[sumID[d]] = to_vector_array(to_matrix(segment(abundance_true_vector, Xplace, M[d] * sumID[d]), M[d], sumID[d]));
             int nObs = 1;
             matrix[M[d],M[d]] cov
                 = add_diag(tcrossprod(diag_post_multiply(
@@ -422,7 +422,7 @@ model {
                                    segment(var_scales, sumMplus[d] + M[d] + 1, Mplus[d] - M[d]))),
                            square(segment(var_scales, sumMplus[d] + 1, M[d])) + 1e-10);
             vector[M[d]] phi = inv_square(contaminant_overDisp[d]) * inv(diagonal(cov));
-            target += multi_student_t_lupdf(noise |
+            target += multi_student_t_lupdf(abundance_true |
                                             nu_residuals,
                                             to_vector_array(predicted),
                                             cov);
@@ -430,18 +430,18 @@ model {
                 for(m in 1:M[d]) {
                     target += log_sum_exp(log1m_inv_logit(logit_prob_present[m,n])
                                           + neg_binomial_2_log_lpmf(X[Xplace + m - 1] |
-                                                                    contamination[m] + multinomial_nuisance[multinomPlace],
+                                                                    abundance_contam[m] + multinomial_nuisance[multinomPlace],
                                                                     phi[m]), //estimated abundance if true negative
                                             log_inv_logit(logit_prob_present[m,n])
                                             + poisson_log_lpmf(X[Xplace + m - 1] |
-                                                               log_sum_exp(contamination[m], noise[n,m]) + multinomial_nuisance[multinomPlace])); //estimated abundance if true positive
+                                                               log_sum_exp(abundance_contam[m], abundance_true[n,m]) + multinomial_nuisance[multinomPlace])); //estimated abundance if true positive
                 }
                 multinomPlace += 1;
                 Xplace += M[d];
             }
         } else {
             vector[M[d]] phi = inv_square(contaminant_overDisp[d] * segment(var_scales, sumMplus[d] + 1, M[d]));
-            target += student_t_lupdf(segment(latent_props_raw, Xplace, M[d] * sumID[d]) |
+            target += student_t_lupdf(segment(abundance_true_vector, Xplace, M[d] * sumID[d]) |
                                       nu_residuals,
                                       to_vector(predicted),
                                       to_vector(rep_matrix(segment(var_scales, sumMplus[d] + 1, M[d]), sumID[d])));
@@ -449,11 +449,11 @@ model {
                 for(m in 1:M[d]) {
                     target += log_sum_exp(log1m_inv_logit(logit_prob_present[m,n])
                                           + neg_binomial_2_log_lpmf(X[Xplace + m - 1] |
-                                                                    contamination[m] + multinomial_nuisance[multinomPlace],
+                                                                    abundance_contam[m] + multinomial_nuisance[multinomPlace],
                                                                     phi[m]), //estimated abundance if true negative
                                             log_inv_logit(logit_prob_present[m,n])
                                             + poisson_log_lpmf(X[Xplace + m - 1] |
-                                                               log_sum_exp(contamination[m], latent_props_raw[Xplace + m]) + multinomial_nuisance[multinomPlace])); //estimated abundance if true positive
+                                                               log_sum_exp(abundance_contam[m], abundance_true_vector[Xplace + m]) + multinomial_nuisance[multinomPlace])); //estimated abundance if true positive
                 }
                 multinomPlace += 1;
                 Xplace += M[d];
@@ -462,7 +462,7 @@ model {
     } // count likelihood
     for(r in 1:R) {
         if(Mplus[D+r] > M[D+r]) {
-            vector[max(nMat[r,])] noise[N+nVarGroups];
+            vector[max(nMat[r,])] observed[N+nVarGroups];
             matrix[M[D+r],M[D+r]] cov
                 = add_diag(tcrossprod(diag_post_multiply(
                                    to_matrix(segment(mm, sumMMplus[D+r] + 1, MMplus[D+r]),
@@ -482,7 +482,7 @@ model {
                 }
                 if(nMat[r,matchInds[r,n]] > 0) {
                     int inds[nMat[r,matchInds[r,n]]] = segInds2[r,matchInds[r,n],1:nMat[r,matchInds[r,n]]];
-                    noise[n,1:nMat[r,matchInds[r,n]]] = segment(P_filled, Pplace, sumIR[r,n])[inds];
+                    observed[n,1:nMat[r,matchInds[r,n]]] = segment(P_filled, Pplace, sumIR[r,n])[inds];
                 }
                 Pplace += sumIR[r,n];
             }
@@ -493,7 +493,7 @@ model {
                         = to_vector_array(rep_matrix(intercepts[(sumM[D+r] + 1):(sumM[D+r+1])][inds], nMatches[r,m])
                                           + W[(sumM[D+r] + 1):(sumM[D+r] + M[D+r]),][inds,]
                                           * Z_Z_higher[,matchIndsInv[r,m,1:nMatches[r,m]]]);
-                    target += multi_student_t_lupdf(noise[matchIndsInv[r,m,1:nMatches[r,m]],1:nMat[r,m]] |
+                    target += multi_student_t_lupdf(observed[matchIndsInv[r,m,1:nMatches[r,m]],1:nMat[r,m]] |
                                                     nu_residuals,
                                                     predicted,
                                                     cov[inds,inds]);
@@ -517,35 +517,35 @@ model {
         for(n in 1:(N+nVarGroups)) {
             if(IC[cv,n]) {
                 if(Mc[cv] > 1) {
-                    vector[Mc[cv]] seg
+                    vector[Mc[cv]] predicted
                         = log_softmax(segment(intercepts, V + O + sumMc[cv] + 1, Mc[cv])
                                       + W[(V + O + sumMc[cv] + 1):(V + O + sumMc[cv] + Mc[cv]),]
                                         * Z_Z_higher[,n]);
-                    vector[Mc[cv]] segY = segment(Y, Yplace, Mc[cv]);
+                    vector[Mc[cv]] observed = segment(Y, Yplace, Mc[cv]);
                     real terms = 0;
                     for(c in 1:Mc[cv]) {
-                        if(segY[c] > 0) {
+                        if(observed[c] > 0) {
                             if(terms == 0) {
-                                terms = log(segY[c]) + seg[c];
+                                terms = log(observed[c]) + predicted[c];
                             } else {
-                                terms = log_sum_exp(terms, log(segY[c]) + seg[c]);
+                                terms = log_sum_exp(terms, log(observed[c]) + predicted[c]);
                             }
                         }
                     }
                     target += terms;
                 } else {
-                    real seg
+                    real predicted
                         = intercepts[V + O + sumMc[cv] + 1]
                           + W[V + O + sumMc[cv] + 1,]
                             * Z_Z_higher[,n];
                     if(Y[Yplace] == 1) {
-                        target += log_inv_logit(seg);
+                        target += log_inv_logit(predicted);
                     } else if(Y[Yplace] == 0) {
-                        target += log1m_inv_logit(seg);
+                        target += log1m_inv_logit(predicted);
                     } else {
                         target += log_mix(Y[Yplace],
-                                          log_inv_logit(seg),
-                                          log1m_inv_logit(seg));
+                                          log_inv_logit(predicted),
+                                          log1m_inv_logit(predicted));
                     }
                 }
                 Yplace += Mc[cv];

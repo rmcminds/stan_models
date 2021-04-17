@@ -973,12 +973,12 @@ data <- list(N = N,
              inv_log_max_contam  = inv_log_max_contam)
 
 #### create initiliazations
-latent_props_raw_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) bacteriaFilt_inits[I_cs[1,x],]),
-                                   sapply(1:N, function(x) if(I[2,x]) euksFilt_inits[I_cs[2,x],]),
-                                   sapply(1:N, function(x) if(I[3,x]) transcr_inits[I_cs[3,x],]),
-                                   sapply(1:N, function(x) if(I[4,x]) itsFilt_inits[I_cs[4,x],])))
+abundance_true_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) bacteriaFilt_inits[I_cs[1,x],]),
+                                        sapply(1:N, function(x) if(I[2,x]) euksFilt_inits[I_cs[2,x],]),
+                                        sapply(1:N, function(x) if(I[3,x]) transcr_inits[I_cs[3,x],]),
+                                        sapply(1:N, function(x) if(I[4,x]) itsFilt_inits[I_cs[4,x],])))
 
-init <- list(latent_props_raw = latent_props_raw_inits,
+init <- list(abundance_true_vector = abundance_true_vector_inits,
              intercepts = intercepts_inits,
              binary_count_intercepts = binary_count_intercepts_inits,
              binary_count_dataset_intercepts = rep(0,D),
