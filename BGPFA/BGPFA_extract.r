@@ -76,7 +76,7 @@ sumfunc <- median
 #sumfunc <- function(x) x[length(x)]
 #sumfunc <- function(x) x[maxind]
 
-labs <- c(varlabs, paste0(varlabs[1:sum(Mplus[1:D])],'.binary'), paste0('countDatasetBinaryInt_',1:D))
+labs <- c(varlabs, paste0(varlabs[1:sum(Mplus[1:D])],'.binary'), paste0('binary_count_dataset_int_',1:D))
 
 lps <- extract(stan.fit.vb, pars='log_post', permuted=FALSE)[,1,1]
 maxind <- min(which(lps == max(lps)))
@@ -138,20 +138,20 @@ binary_count_dataset_intercepts.vb <- apply(binary_count_dataset_intercepts.vb, 
 
 DRC <- D+R+C
 
-rhoSites.vb <- extract(stan.fit.vb, pars='rhoSites', permuted=FALSE)
-rhoSites.vb <- apply(rhoSites.vb, 3, sumfunc)
+rho_sites.vb <- extract(stan.fit.vb, pars='rho_sites', permuted=FALSE)
+rho_sites.vb <- apply(rho_sites.vb, 3, sumfunc)
 
-covSites.vb <- extract(stan.fit.vb, pars='covSites', permuted=FALSE)
-covSites.vb <- apply(covSites.vb, 3, sumfunc)
-dim(covSites.vb) <- c(K,nSites,nSites)
-covSites.vb <- covSites.vb[axisOrder,,]
+cov_sites.vb <- extract(stan.fit.vb, pars='cov_sites', permuted=FALSE)
+cov_sites.vb <- apply(cov_sites.vb, 3, sumfunc)
+dim(cov_sites.vb) <- c(K,nSites,nSites)
+cov_sites.vb <- cov_sites.vb[axisOrder,,]
 
-if('rhoZ' %in% importparams) {
-    rhoZ.vb <- extract(stan.fit.vb, pars='rhoZ', permuted=FALSE)
+if('rho_Z' %in% importparams) {
+    rho_Z.vb <- extract(stan.fit.vb, pars='rho_Z', permuted=FALSE)
     if(exists('KG')) {
-        rhoZ.vb <- array(apply(rhoZ.vb, 3, sumfunc),dim=c(K_linear,KG))[axisOrder[axisOrder <= K_linear],]
+        rho_Z.vb <- array(apply(rho_Z.vb, 3, sumfunc),dim=c(K_linear,KG))[axisOrder[axisOrder <= K_linear],]
     } else {
-        rhoZ.vb <- apply(rhoZ.vb, 3, sumfunc)[axisOrder[axisOrder <= K_linear]]
+        rho_Z.vb <- apply(rho_Z.vb, 3, sumfunc)[axisOrder[axisOrder <= K_linear]]
     }
 }
 
@@ -172,7 +172,7 @@ nullfunc <- function() {
     drivers <- mytriplot(Z.vb, W_norm.vb, Z.vb, 1,2, as.factor(filtData[allsamples,]$species), labs, 50, TRUE, NULL, NULL, FALSE, TRUE, anysig)
 
     i <- 1
-    hist((var_scales.vb / priorScales/dataset_scales.vb[i])[(sum(Mplus[1:(i-1)])+1):sum(Mplus[1:i])])
+    hist((var_scales.vb / prior_scales / dataset_scales.vb[i])[(sum(Mplus[1:(i-1)])+1):sum(Mplus[1:i])])
 
     labs[negsig[,1]]
     labs[possig[,1]]
