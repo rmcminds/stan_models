@@ -99,8 +99,8 @@ data {
     real pMax[nMP]; // lowest measured value for the variable corresponding to a missing P
     real gammaRateFact;
     real gammaShapeFact;
-    vector[choose(M[size(M)],2)] distSites;
-    real rhoSitesPrior;
+    vector[choose(M[size(M)],2)] dist_sites;
+    real rho_sites_prior;
     int nVarsWGroups;
     matrix[N,nVarGroups] samp2group;
     int varsWGroupsInds[nVarsWGroups];
@@ -120,7 +120,8 @@ transformed data {
     int MMplus[DRC]; // size of model matrix for higher level variables
     int sumMMplus[DRC+1]; // Cumulative size of model matrices for higher level variables
     int sumMc[C_vars+1]; // Cumulative number of categorical levels
-    real meanDistZ = 2 * tgamma((K_linear+1)/2.0) / tgamma(K_linear/2.0);
+    real rho_Z_shape = 1.0 / K_linear;
+    real rho_Z_scale = 6.0 / K_gp; // * 2 * tgamma((K_linear+1)/2.0) / tgamma(K_linear/2.0);
     int nmulti = 0;
     int sumID[D];
     int IDInds[D,N+nVarGroups];
@@ -259,16 +260,16 @@ parameters {
     vector[F] latent_props_raw;
     vector[D] binary_count_dataset_intercepts;
     vector[nmulti] multinomial_nuisance;
-    vector<upper=0>[nMP] missingP;
+    vector<upper=0>[nMP] P_missing;
     matrix<lower=0>[DRC+D,K] nu_factors_raw;
-    vector<lower=0>[K] rhoSites;
-    vector<lower=0, upper=1>[K] siteProp;
-    matrix<lower=0>[K_linear,KG] rhoZ;
+    vector<lower=0>[K] rho_sites;
+    vector<lower=0, upper=1>[K] site_prop;
+    matrix<lower=0>[K_linear,KG] rho_Z;
     vector<upper=0>[D] inv_log_less_contamination;
     vector<lower=0>[D] contaminant_overDisp;
 }
 transformed parameters {
-    vector[H] PFilled = P;
+    vector[H] P_filled = P;
     vector<upper=0>[D] log_less_contamination = inv(inv_log_less_contamination);
     matrix[VOB,K] W;
     matrix[V,K] W_binary_counts;
@@ -278,10 +279,10 @@ transformed parameters {
           .* append_row(priorScales,
                         ones_vector(Vplus+D));
     matrix<lower=2>[DRC,K] nu_factors = nu_factors_raw + 2;
-    cov_matrix[M[size(M)]] covSites[K];
+    cov_matrix[M[size(M)]] cov_sites[K];
     matrix[VOBplus+Vplus+D,K] W_norm = svd_U(W_raw) * diag_post_multiply(svd_V(W_raw)', sqrt(columns_dot_self(W_raw)));
     matrix[K_linear + KG * K_gp, N] Z = diag_pre_multiply(sqrt(rows_dot_self(Z_raw)), svd_V(Z_raw')) * svd_U(Z_raw')';
-    for(miss in 1:nMP) PFilled[indMP[miss]] = missingP[miss] + pMax[miss];
+    for(miss in 1:nMP) P_filled[indMP[miss]] = P_missing[miss] + p_max[miss];
     for(drc in 1:DRC) {
         W[(sumM[drc] + 1):(sumM[drc] + M[drc]),]
             = diag_pre_multiply(segment(var_scales, sumMplus[drc] + 1, M[drc]),
@@ -308,16 +309,16 @@ transformed parameters {
     }
     Z_higher = Z * samp2group;
     for(k in 1:K) {
-        //covSites[k]
-        //    = fill_sym(siteProp[k]
+        //cov_sites[k]
+        //    = fill_sym(site_prop[k]
         //               * square(weight_scales[DRC,k])
-        //               * circular_matern(distSites, ms, inv(rhoSites[k]), ffKJ, chooseRJ),
+        //               * circular_matern(dist_sites, ms, inv(rho_sites[k]), ffKJ, chooseRJ),
         //               M[size(M)],
         //               square(weight_scales[DRC,k]) + 1e-10);
-        covSites[k]
-            = fill_sym(siteProp[k]
+        cov_sites[k]
+            = fill_sym(site_prop[k]
                        * square(weight_scales[DRC,k])
-                       * exp(-distSites / rhoSites[k]),
+                       * exp(-dist_sites / rho_sites[k]),
                        M[size(M)],
                        square(weight_scales[DRC,k]) + 1e-10);
     }
@@ -339,10 +340,10 @@ model {
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, 15);
     target += std_normal_lupdf(contaminant_overDisp);
     target += std_normal_lupdf(to_vector(Z[1:K_linear,]));
-    target += inv_gamma_lupdf(to_vector(rhoZ) | 1.0 / K_linear, 6.0 / K_gp);
+    target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);
     for(g in 1:KG) {
         target += multi_gp_cholesky_lupdf(Z[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g),] |
-                                          L_cov_exp_quad_ARD(Z[1:K_linear,], rhoZ[,g], 1e-10),
+                                          L_cov_exp_quad_ARD(Z[1:K_linear,], rho_Z[,g], 1e-10),
                                           ones_vector(K_gp));
     }
     for(drc in 1:DRC) {
@@ -370,7 +371,7 @@ model {
         target += multi_student_t_lupdf(W_norm[(sumMplus[DRC] + 1):(sumMplus[DRC] + M[DRC]),k] |
                                         nu_factors[DRC,k],
                                         rep_vector(0,M[DRC]),
-                                        covSites[k]
+                                        cov_sites[k]
                                         * sqrt(nu_factors_raw[DRC,k] / nu_factors[DRC,k]));
         target += student_t_lupdf(W_norm[(sumMplus[DRC] + M[DRC] + 1):(sumMplus[DRC] + Mplus[DRC]),k] |
                                   nu_factors[DRC,k],
@@ -391,7 +392,7 @@ model {
         }
     }
     for(d in 1:D) {
-        matrix[M[d],sumID[d]] predictTemp
+        matrix[M[d],sumID[d]] predict_temp
             = rep_matrix(intercepts[(sumM[d] + 1):(sumM[d] + M[d])], sumID[d])
               + W[(sumM[d] + 1):(sumM[d] + M[d]),] * Z_Z_higher[,IDInds[d,1:sumID[d]]];
         matrix[M[d],sumID[d]] logit_prob_present
@@ -419,7 +420,7 @@ model {
             vector[M[d]] phi = inv_square(contaminant_overDisp[d]) * inv(diagonal(cov));
             for(n in 1:sumID[d]) {
                 noise[n] = segment(latent_props_raw, Xplace, M[d]);
-                predicted[n] = predictTemp[,n];
+                predicted[n] = predict_temp[,n];
                 for(m in 1:M[d]) {
                     target += log_sum_exp(log1m_inv_logit(logit_prob_present[m,n])
                                           + neg_binomial_2_log_lpmf(X[Xplace + m - 1] |
@@ -451,7 +452,7 @@ model {
                 }
                 target += student_t_lupdf(seg |
                                           nu_residuals,
-                                          predictTemp[,n],
+                                          predict_temp[,n],
                                           segment(var_scales, sumMplus[d] + 1, M[d]));
                 multinomPlace += 1;
                 Xplace += M[d];
@@ -471,7 +472,7 @@ model {
             for(n in 1:(N+nVarGroups)) {
                 if(nIsolate[r,n] > 0) {
                     int inds[nIsolate[r,n]] = IRInds[r,n,1:sumIR[r,n]][segInds1[r,n,1:nIsolate[r,n]]];
-                    target += student_t_lupdf(segment(PFilled, Pplace, sumIR[r,n])[segInds1[r,n,1:nIsolate[r,n]]] |
+                    target += student_t_lupdf(segment(P_filled, Pplace, sumIR[r,n])[segInds1[r,n,1:nIsolate[r,n]]] |
                                               nu_residuals,
                                               intercepts[(sumM[D+r] + 1):sumM[D+r+1]][inds]
                                               + W[(sumM[D+r] + 1):sumM[D+r+1],][inds,]
@@ -480,20 +481,20 @@ model {
                 }
                 if(nMat[r,matchInds[r,n]] > 0) {
                     int inds[nMat[r,matchInds[r,n]]] = segInds2[r,matchInds[r,n],1:nMat[r,matchInds[r,n]]];
-                    noise[n,1:nMat[r,matchInds[r,n]]] = segment(PFilled, Pplace, sumIR[r,n])[inds];
+                    noise[n,1:nMat[r,matchInds[r,n]]] = segment(P_filled, Pplace, sumIR[r,n])[inds];
                 }
                 Pplace += sumIR[r,n];
             }
             for(m in 1:nUniqueR[r]) {
                 if(nMat[r,m] > 0) {
                     int inds[nMat[r,m]] = uniqueRInds[r,m,1:sumIRUnique[r,m]][segInds2[r,m,1:nMat[r,m]]];
-                    matrix[nMat[r,m],nMatches[r,m]] predictTemp
+                    matrix[nMat[r,m],nMatches[r,m]] predict_temp
                         = rep_matrix(intercepts[(sumM[D+r] + 1):(sumM[D+r+1])][inds], nMatches[r,m])
                           + W[(sumM[D+r] + 1):(sumM[D+r] + M[D+r]),][inds,]
                             * Z_Z_higher[,matchIndsInv[r,m,1:nMatches[r,m]]];
                     vector[nMat[r,m]] predicted[nMatches[r,m]];
                     for(n in 1:nMatches[r,m]) {
-                        predicted[n] = predictTemp[,n];
+                        predicted[n] = predict_temp[,n];
                     }
                     target += multi_student_t_lupdf(noise[matchIndsInv[r,m,1:nMatches[r,m]],1:nMat[r,m]] |
                                                     nu_residuals,
@@ -504,7 +505,7 @@ model {
         } else {
             for(n in 1:(N+nVarGroups)) {
                 if(sumIR[r,n] > 0) {
-                    target += student_t_lupdf(segment(PFilled, Pplace, sumIR[r,n]) |
+                    target += student_t_lupdf(segment(P_filled, Pplace, sumIR[r,n]) |
                                               nu_residuals,
                                               intercepts[(sumM[D+r] + 1):sumM[D+r+1]][IRInds[r,n,1:sumIR[r,n]]]
                                               + W[(sumM[D+r] + 1):sumM[D+r+1],][IRInds[r,n,1:sumIR[r,n]],]
