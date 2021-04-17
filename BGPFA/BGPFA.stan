@@ -411,9 +411,11 @@ model {
               + log_inv_logit(binary_count_dataset_intercepts[d]
                               + segment(binary_count_intercepts, sumM[d] + 1, M[d]))
               + log_less_contamination[d];
+        matrix[M[d],sumID[d]] abundance_true
+            = to_matrix(segment(abundance_true_vector, Xplace, M[d] * sumID[d]),
+                        M[d], sumID[d]);
+        vector[M[d]] phi;
         if(Mplus[d] > M[d]) {
-            vector[M[d]] abundance_true[sumID[d]] = to_vector_array(to_matrix(segment(abundance_true_vector, Xplace, M[d] * sumID[d]), M[d], sumID[d]));
-            int nObs = 1;
             matrix[M[d],M[d]] cov
                 = add_diag(tcrossprod(diag_post_multiply(
                                    to_matrix(segment(mm, sumMMplus[d] + 1, MMplus[d]),
@@ -421,43 +423,30 @@ model {
                                              Mplus[d] - M[d]),
                                    segment(var_scales, sumMplus[d] + M[d] + 1, Mplus[d] - M[d]))),
                            square(segment(var_scales, sumMplus[d] + 1, M[d])) + 1e-10);
-            vector[M[d]] phi = inv_square(contaminant_overdisp[d]) * inv(diagonal(cov));
-            target += multi_student_t_lupdf(abundance_true |
+            target += multi_student_t_lupdf(to_vector_array(abundance_true) |
                                             nu_residuals,
                                             to_vector_array(predicted),
                                             cov);
-            for(n in 1:sumID[d]) {
-                for(m in 1:M[d]) {
-                    target += log_sum_exp(log1m_inv_logit(prevalence[m,n])
-                                          + neg_binomial_2_log_lpmf(X[Xplace + m - 1] |
-                                                                    abundance_contam[m] + multinomial_nuisance[multinomPlace],
-                                                                    phi[m]), //estimated abundance if true negative
-                                            log_inv_logit(prevalence[m,n])
-                                            + poisson_log_lpmf(X[Xplace + m - 1] |
-                                                               log_sum_exp(abundance_contam[m], abundance_true[n,m]) + multinomial_nuisance[multinomPlace])); //estimated abundance if true positive
-                }
-                multinomPlace += 1;
-                Xplace += M[d];
-            }
+            phi = inv_square(contaminant_overdisp[d]) * inv(diagonal(cov));
         } else {
-            vector[M[d]] phi = inv_square(contaminant_overdisp[d] * segment(var_scales, sumMplus[d] + 1, M[d]));
-            target += student_t_lupdf(segment(abundance_true_vector, Xplace, M[d] * sumID[d]) |
+            target += student_t_lupdf(to_vector(abundance_true) |
                                       nu_residuals,
                                       to_vector(predicted),
                                       to_vector(rep_matrix(segment(var_scales, sumMplus[d] + 1, M[d]), sumID[d])));
-            for(n in 1:sumID[d]) {
-                for(m in 1:M[d]) {
-                    target += log_sum_exp(log1m_inv_logit(prevalence[m,n])
-                                          + neg_binomial_2_log_lpmf(X[Xplace + m - 1] |
-                                                                    abundance_contam[m] + multinomial_nuisance[multinomPlace],
-                                                                    phi[m]), //estimated abundance if true negative
-                                            log_inv_logit(prevalence[m,n])
-                                            + poisson_log_lpmf(X[Xplace + m - 1] |
-                                                               log_sum_exp(abundance_contam[m], abundance_true_vector[Xplace + m - 1]) + multinomial_nuisance[multinomPlace])); //estimated abundance if true positive
-                }
-                multinomPlace += 1;
-                Xplace += M[d];
+            phi = inv_square(contaminant_overdisp[d] * segment(var_scales, sumMplus[d] + 1, M[d]));
+        }
+        for(n in 1:sumID[d]) {
+            for(m in 1:M[d]) {
+                target += log_sum_exp(log1m_inv_logit(prevalence[m,n])
+                                      + neg_binomial_2_log_lpmf(X[Xplace + m - 1] |
+                                                                abundance_contam[m] + multinomial_nuisance[multinomPlace],
+                                                                phi[m]), //estimated abundance if true negative
+                                        log_inv_logit(prevalence[m,n])
+                                        + poisson_log_lpmf(X[Xplace + m - 1] |
+                                                           log_sum_exp(abundance_contam[m], abundance_true[m,n]) + multinomial_nuisance[multinomPlace])); //estimated abundance if true positive
             }
+            multinomPlace += 1;
+            Xplace += M[d];
         }
     } // count likelihood
     for(r in 1:R) {
