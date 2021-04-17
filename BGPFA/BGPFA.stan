@@ -63,6 +63,11 @@ functions {
         cov[N,N] = 1 + delta;
         return cholesky_decompose(symmetrize_from_lower_tri(cov));
     }
+    vector to_vector_array(matrix x) {
+        vector[rows(x)] vectors[cols(x)];
+        for(j in 1:cols(x)) vectors[j] = x[,j];
+        return(vectors);
+    }
 }
 data {
     int<lower=0> N; // Number of samples
@@ -392,7 +397,7 @@ model {
         }
     }
     for(d in 1:D) {
-        matrix[M[d],sumID[d]] predict_temp
+        matrix[M[d],sumID[d]] predicted
             = rep_matrix(intercepts[(sumM[d] + 1):(sumM[d] + M[d])], sumID[d])
               + W[(sumM[d] + 1):(sumM[d] + M[d]),] * Z_Z_higher[,IDInds[d,1:sumID[d]]];
         matrix[M[d],sumID[d]] logit_prob_present
@@ -407,8 +412,7 @@ model {
                               + segment(binary_count_intercepts, sumM[d] + 1, M[d]))
               + log_less_contamination[d];
         if(Mplus[d] > M[d]) {
-            vector[M[d]] noise[sumID[d]];
-            vector[M[d]] predicted[sumID[d]];
+            vector[M[d]] noise[sumID[d]] = to_vector_array(to_matrix(segment(latent_props_raw, Xplace, M[d] * sumID[d]), M[d], sumID[d]));
             int nObs = 1;
             matrix[M[d],M[d]] cov
                 = add_diag(tcrossprod(diag_post_multiply(
@@ -418,9 +422,11 @@ model {
                                    segment(var_scales, sumMplus[d] + M[d] + 1, Mplus[d] - M[d]))),
                            square(segment(var_scales, sumMplus[d] + 1, M[d])) + 1e-10);
             vector[M[d]] phi = inv_square(contaminant_overDisp[d]) * inv(diagonal(cov));
+            target += multi_student_t_lupdf(noise |
+                                            nu_residuals,
+                                            to_vector_array(predicted),
+                                            cov);
             for(n in 1:sumID[d]) {
-                noise[n] = segment(latent_props_raw, Xplace, M[d]);
-                predicted[n] = predict_temp[,n];
                 for(m in 1:M[d]) {
                     target += log_sum_exp(log1m_inv_logit(logit_prob_present[m,n])
                                           + neg_binomial_2_log_lpmf(X[Xplace + m - 1] |
@@ -433,14 +439,13 @@ model {
                 multinomPlace += 1;
                 Xplace += M[d];
             }
-            target += multi_student_t_lupdf(noise |
-                                            nu_residuals,
-                                            predicted,
-                                            cov);
         } else {
             vector[M[d]] phi = inv_square(contaminant_overDisp[d] * segment(var_scales, sumMplus[d] + 1, M[d]));
+            target += student_t_lupdf(segment(latent_props_raw, Xplace, M[d] * sumID[d]) |
+                                      nu_residuals,
+                                      to_vector(predicted),
+                                      to_vector(rep_matrix(segment(var_scales, sumMplus[d] + 1, M[d]), sumID[d]));
             for(n in 1:sumID[d]) {
-                vector[M[d]] seg = segment(latent_props_raw, Xplace, M[d]);
                 for(m in 1:M[d]) {
                     target += log_sum_exp(log1m_inv_logit(logit_prob_present[m,n])
                                           + neg_binomial_2_log_lpmf(X[Xplace + m - 1] |
@@ -448,12 +453,8 @@ model {
                                                                     phi[m]), //estimated abundance if true negative
                                             log_inv_logit(logit_prob_present[m,n])
                                             + poisson_log_lpmf(X[Xplace + m - 1] |
-                                                               log_sum_exp(contamination[m], seg[m]) + multinomial_nuisance[multinomPlace])); //estimated abundance if true positive
+                                                               log_sum_exp(contamination[m], latent_props_raw[Xplace + m]) + multinomial_nuisance[multinomPlace])); //estimated abundance if true positive
                 }
-                target += student_t_lupdf(seg |
-                                          nu_residuals,
-                                          predict_temp[,n],
-                                          segment(var_scales, sumMplus[d] + 1, M[d]));
                 multinomPlace += 1;
                 Xplace += M[d];
             }
@@ -488,14 +489,10 @@ model {
             for(m in 1:nUniqueR[r]) {
                 if(nMat[r,m] > 0) {
                     int inds[nMat[r,m]] = uniqueRInds[r,m,1:sumIRUnique[r,m]][segInds2[r,m,1:nMat[r,m]]];
-                    matrix[nMat[r,m],nMatches[r,m]] predict_temp
-                        = rep_matrix(intercepts[(sumM[D+r] + 1):(sumM[D+r+1])][inds], nMatches[r,m])
-                          + W[(sumM[D+r] + 1):(sumM[D+r] + M[D+r]),][inds,]
-                            * Z_Z_higher[,matchIndsInv[r,m,1:nMatches[r,m]]];
-                    vector[nMat[r,m]] predicted[nMatches[r,m]];
-                    for(n in 1:nMatches[r,m]) {
-                        predicted[n] = predict_temp[,n];
-                    }
+                    vector[nMat[r,m]] predicted[nMatches[r,m]]
+                        = to_vector_array(rep_matrix(intercepts[(sumM[D+r] + 1):(sumM[D+r+1])][inds], nMatches[r,m])
+                                          + W[(sumM[D+r] + 1):(sumM[D+r] + M[D+r]),][inds,]
+                                          * Z_Z_higher[,matchIndsInv[r,m,1:nMatches[r,m]]]);
                     target += multi_student_t_lupdf(noise[matchIndsInv[r,m,1:nMatches[r,m]],1:nMat[r,m]] |
                                                     nu_residuals,
                                                     predicted,
