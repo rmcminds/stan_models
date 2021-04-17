@@ -116,8 +116,8 @@ if('log_less_contamination' %in% importparams) {
 }
 
 if('contaminant_overDisp' %in% importparams) {
-    contaminant_overDisp.vb <- extract(stan.fit.vb, pars='contaminant_overDisp', permuted=FALSE)
-    contaminant_overDisp.vb <- apply(contaminant_overDisp.vb, 3, sumfunc)
+    contaminant_overdisp.vb <- extract(stan.fit.vb, pars='contaminant_overdisp', permuted=FALSE)
+    contaminant_overdisp.vb <- apply(contaminant_overdisp.vb, 3, sumfunc)
 }
 
 Z_all <- extract(stan.fit.vb, pars='Z', permuted=FALSE)
