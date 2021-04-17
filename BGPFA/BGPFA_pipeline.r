@@ -22,8 +22,8 @@ K_gp <- 20
 KG <- 2
 K <- K_linear + KG * K_gp
 global_scale_prior = 2.5
-gammaRateFact = 10
-gammaShapeFact = 2
+rate_gamma_fact = 10
+shape_gamma_fact = 2
 site_smoothness <- 2
 nu_residuals <- 25
 
@@ -468,11 +468,11 @@ for(i in dupsites) {
 longlat <- longlat[levels(filtData$site),]
 
 missinglonglat <- apply(longlat,1,function(x) any(is.na(x)))
-distSites <- geosphere:::distm(longlat[!missinglonglat,], fun = function(x,y) geosphere:::distVincentySphere(x,y,1))
+dist_sites <- geosphere:::distm(longlat[!missinglonglat,], fun = function(x,y) geosphere:::distVincentySphere(x,y,1))
 for(i in which(missinglonglat)) {
-    distSites <- rbind(distSites[1:(i-1),],1,distSites[i:nrow(distSites),])
-    distSites <- cbind(distSites[,1:(i-1)],1,distSites[,i:ncol(distSites)])
-    distSites[i,i] <- 0
+    dist_sites <- rbind(dist_sites[1:(i-1),],1,dist_sites[i:nrow(dist_sites),])
+    dist_sites <- cbind(dist_sites[,1:(i-1)],1,dist_sites[,i:ncol(dist_sites)])
+    dist_sites[i,i] <- 0
 }
 
 siteMat <- model.matrix(~0+site, data=filtData)
@@ -606,7 +606,7 @@ Y <- unlist(c(sapply(1:length(Msnp), function(var) unlist(sapply(1:(N+nVarGroups
                                                    })))))
 
 indMP <- which(is.infinite(P))
-pMax <- sapply(names(indMP), function(x) {
+P_max <- sapply(names(indMP), function(x) {
     temp <- biomarkersLog[,x]
     min(temp[!is.infinite(temp)], na.rm=TRUE)
 })
@@ -875,43 +875,43 @@ multinomial_nuisance_inits <- c(bacteriaFilt_nuisance_inits,
 biomarkersInv <- t(ginv(cbind(diag(ncol(biomarkersLog_inits)),biomarkermat)))
 fabT1aggMatInv <- t(ginv(cbind(diag(ncol(fabT1agg)),fabT1aggMat)))
 
-priorScales <- c(apply(bacteriaFilt_inits %*% t(ginv(cbind(1,diag(ncol(bacteriaFilt_inits)),bactPhyMat))[-1,]),2,sd),
-                 apply(euksFilt_inits %*% t(ginv(cbind(1,diag(ncol(euksFilt_inits)),eukPhyMat))[-1,]),2,sd),
-                 apply(transcr_inits, 2, sd),
-                 apply(itsFilt_inits %*% t(ginv(cbind(1,diag(ncol(itsFilt_inits)),itsMat))[-1,]),2,sd),
-                 apply(sapply(1:ncol(biomarkersInv), function(x) matrix(biomarkersLog_inits[,biomarkersInv[,x]!=0],nrow=nrow(biomarkersLog_inits)) %*% biomarkersInv[biomarkersInv[,x]!=0,x]),2,sd,na.rm=TRUE),
-                 apply(t2log %*% t(ginv(cbind(diag(ncol(t2log)),t2Mat))),2,sd),
-                 apply(t3log %*% t(ginv(cbind(diag(ncol(t3log)),t3Mat))),2,sd),
-                 apply(sapply(1:ncol(fabT1aggMatInv), function(x) matrix(fabT1agg[,fabT1aggMatInv[,x]!=0],nrow=nrow(fabT1agg)) %*% fabT1aggMatInv[fabT1aggMatInv[,x]!=0,x]),2,sd,na.rm=TRUE),
-                 apply(fabT2agg,2,sd,na.rm=TRUE),
-                 rep(1,ncol(snpmat)),
-                 rep(1,ncol(hostphotomat2)),
-                 rep(1,ncol(hostphotoHigherMat)),
-                 rep(1,ncol(envphotomat2)),
-                 rep(1,ncol(envphotoHigherMat)),
-                 rep(1,ncol(mmSpec)),
-                 rep(1,ncol(snpSVDmat)),
-                 rep(1,ncol(snpSVDHigherMat)),
-                 rep(1,ncol(siteMat)),
-                 rep(1,ncol(siteHigherMat)))
+prior_scales <- c(apply(bacteriaFilt_inits %*% t(ginv(cbind(1,diag(ncol(bacteriaFilt_inits)),bactPhyMat))[-1,]),2,sd),
+                  apply(euksFilt_inits %*% t(ginv(cbind(1,diag(ncol(euksFilt_inits)),eukPhyMat))[-1,]),2,sd),
+                  apply(transcr_inits, 2, sd),
+                  apply(itsFilt_inits %*% t(ginv(cbind(1,diag(ncol(itsFilt_inits)),itsMat))[-1,]),2,sd),
+                  apply(sapply(1:ncol(biomarkersInv), function(x) matrix(biomarkersLog_inits[,biomarkersInv[,x]!=0],nrow=nrow(biomarkersLog_inits)) %*% biomarkersInv[biomarkersInv[,x]!=0,x]),2,sd,na.rm=TRUE),
+                  apply(t2log %*% t(ginv(cbind(diag(ncol(t2log)),t2Mat))),2,sd),
+                  apply(t3log %*% t(ginv(cbind(diag(ncol(t3log)),t3Mat))),2,sd),
+                  apply(sapply(1:ncol(fabT1aggMatInv), function(x) matrix(fabT1agg[,fabT1aggMatInv[,x]!=0],nrow=nrow(fabT1agg)) %*% fabT1aggMatInv[fabT1aggMatInv[,x]!=0,x]),2,sd,na.rm=TRUE),
+                  apply(fabT2agg,2,sd,na.rm=TRUE),
+                  rep(1,ncol(snpmat)),
+                  rep(1,ncol(hostphotomat2)),
+                  rep(1,ncol(hostphotoHigherMat)),
+                  rep(1,ncol(envphotomat2)),
+                  rep(1,ncol(envphotoHigherMat)),
+                  rep(1,ncol(mmSpec)),
+                  rep(1,ncol(snpSVDmat)),
+                  rep(1,ncol(snpSVDHigherMat)),
+                  rep(1,ncol(siteMat)),
+                  rep(1,ncol(siteHigherMat)))
 
-priorInterceptScales <- c(apply(bacteriaFilt_inits,2,sd),
-                          apply(euksFilt_inits,2,sd),
-                          apply(transcr_inits,2, sd),
-                          apply(itsFilt_inits,2,sd),
-                          apply(biomarkersLog_inits,2,sd,na.rm=TRUE),
-                          apply(t2log,2,sd),
-                          apply(t3log,2,sd),
-                          apply(fabT1agg,2,sd,na.rm=TRUE),
-                          apply(fabT2agg,2,sd,na.rm=TRUE),
-                          rep(1,ncol(snpmat)),
-                          rep(1,ncol(hostphotomat2)),
-                          rep(1,ncol(envphotomat2)),
-                          rep(1,ncol(mmSpec)),
-                          rep(1,ncol(snpSVDmat)),
-                          rep(1,ncol(siteMat)))
+prior_intercept_scales <- c(apply(bacteriaFilt_inits,2,sd),
+                            apply(euksFilt_inits,2,sd),
+                            apply(transcr_inits,2, sd),
+                            apply(itsFilt_inits,2,sd),
+                            apply(biomarkersLog_inits,2,sd,na.rm=TRUE),
+                            apply(t2log,2,sd),
+                            apply(t3log,2,sd),
+                            apply(fabT1agg,2,sd,na.rm=TRUE),
+                            apply(fabT2agg,2,sd,na.rm=TRUE),
+                            rep(1,ncol(snpmat)),
+                            rep(1,ncol(hostphotomat2)),
+                            rep(1,ncol(envphotomat2)),
+                            rep(1,ncol(mmSpec)),
+                            rep(1,ncol(snpSVDmat)),
+                            rep(1,ncol(siteMat)))
 
-priorInterceptCenters <- intercepts_inits
+prior_intercept_centers <- intercepts_inits
 binary_count_intercept_centers <- binary_count_intercepts_inits
 
 Mplus <- M + c(ncol(bactPhyMat), ncol(eukPhyMat), 0, ncol(itsMat), ncol(biomarkermat), ncol(t2Mat), ncol(t3Mat), ncol(fabT1aggMat), 0, 0, ncol(hostphotoHigherMat), ncol(envphotoHigherMat), 0, ncol(snpSVDHigherMat), ncol(siteHigherMat))
@@ -947,23 +947,23 @@ data <- list(N = N,
              P = P,
              C_vars = C_vars,
              Mc = Mc,
-             priorScales                    = priorScales,
-             priorInterceptScales           = priorInterceptScales,
-             priorInterceptCenters          = priorInterceptCenters,
+             prior_scales                   = prior_scales,
+             prior_intercept_scales         = prior_intercept_scales,
+             prior_intercept_centers        = prior_intercept_centers,
              binary_count_intercept_centers = binary_count_intercept_centers,
              sizeMM = sizeMM,
              mm     = mm,
              global_scale_prior = global_scale_prior,
              K_linear = K_linear,
-             K_gp  = K_gp,
-             KG    = KG,
-             nMP   = nMP,
-             indMP = indMP,
-             pMax  = pMax,
-             gammaShapeFact      = gammaShapeFact,
-             gammaRateFact       = gammaRateFact,
-             distSites           = distSites[lower.tri(distSites)],
-             rhoSitesPrior       = mean(distSites[lower.tri(distSites)]),
+             K_gp     = K_gp,
+             KG       = KG,
+             nMP      = nMP,
+             indMP    = indMP,
+             P_max    = P_max,
+             shape_gamma_fact    = shape_gamma_fact,
+             rate_gamma_fact     = rate_gamma_fact,
+             dist_sites          = dist_sites[lower.tri(dist_sites)],
+             rho_sites_prior     = mean(dist_sites[lower.tri(dist_sites)]),
              nVarGroups          = nVarGroups,
              nVarsWGroups        = nVarsWGroups,
              samp2group          = samp2group,
@@ -989,12 +989,12 @@ init <- list(latent_props_raw = latent_props_raw_inits,
              dataset_scales = rep(1, 2*D+R+C),
              nu_factors_raw = matrix(10, nrow=2*D+R+C, ncol=K),
              weight_scales = matrix(global_scale_prior * 0.05, nrow=2*D+R+C, ncol=K),
-             rhoSites = as.array(rep(mean(distSites[lower.tri(distSites)]), K)),
-             siteProp = as.array(rep(0.001, K)),
+             rho_sites = as.array(rep(mean(distSites[lower.tri(distSites)]), K)),
+             site_prop = as.array(rep(0.001, K)),
              Z_raw = matrix(rnorm((K_linear+KG*K_gp)*N) * 0.001, nrow=K_linear+KG*K_gp),
              W_raw = matrix(rnorm((VOBplus+sum(Mplus[1:D])+D) * K) * 0.001, ncol=K),
-             missingP = rep(-1,nMP),
-             rhoZ = matrix(0.0001, nrow = K_linear, ncol = KG),
+             P_missing = rep(-1,nMP),
+             rho_Z = matrix(0.0001, nrow = K_linear, ncol = KG),
              inv_log_less_contamination = -inv_log_max_contam,
              contaminant_overDisp = rep(1,D))
 
@@ -1011,7 +1011,7 @@ print(sampling_commands[[engine]])
 print(date())
 system(sampling_commands[[engine]])
 
-importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','log_post','dataset_scales','var_scales','weight_scales','nu_factors','rhoSites', 'siteProp', 'covSites', 'binary_count_dataset_intercepts','log_less_contamination','contaminant_overDisp','rhoZ')
+importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','log_post','dataset_scales','var_scales','weight_scales','nu_factors','rho_sites', 'site_prop', 'cov_sites', 'binary_count_dataset_intercepts','log_less_contamination','contaminant_overDisp','rho_Z')
 
 stan.fit.vb <- read_stan_csv_subset(file.path(output_prefix, paste0('samples_',engine,'.txt')),
                                     params = importparams)
