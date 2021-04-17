@@ -28,7 +28,7 @@ site_smoothness <- 2
 nu_residuals <- 25
 
 input_prefix <- file.path(Sys.getenv('HOME'), 'data/tara_unsupervised_analyses')
-if(exists(myargs)) {if(length(myargs)==1) {input_prefix <- myargs[[1]]}} else if(length(commandArgs(trailingOnly=TRUE)) > 0) {input_prefix <- commandArgs(trailingOnly=TRUE)[[1]]}
+if(exists('myargs')) {if(length(myargs)==1) {input_prefix <- myargs[[1]]}} else if(length(commandArgs(trailingOnly=TRUE)) > 0) {input_prefix <- commandArgs(trailingOnly=TRUE)[[1]]}
 preprocess_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/intermediate/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
