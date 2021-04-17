@@ -64,7 +64,7 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                        'iter=30000',
                                        'eta=0.1',
                                        'adapt engaged=0',
-                                       'tol_rel_obj=0.0001',
+                                       'tol_rel_obj=0.001',
                                        'output_samples=200',
                                        ('opencl platform=0 device=1')[opencl],
                                        sep=' '))
@@ -924,10 +924,10 @@ varlabsM <- c(colnames(bacteriaFilt), colnames(euksFilt), colnames(transcr), col
 
 varsWGroupsInds <- c(sapply(colnames(fabT1agg), function(x) which(x==varlabsM)), sapply(colnames(fabT2agg), function(x) which(x==varlabsM)))
 
-logMaxContam <- log(2) + log(c(max(apply(diag(1/rowSums(bacteriaFilt)) %*% bacteriaFilt, 2, function(x) max(x[x>0]) / min(x[x>0]))),
-                               max(apply(diag(1/rowSums(euksFilt)) %*% euksFilt, 2, function(x) max(x[x>0]) / min(x[x>0]))),
-                               max(apply(diag(1/rowSums(transcr)) %*% transcr, 2, function(x) max(x[x>0]) / min(x[x>0]))),
-                               max(apply(diag(1/rowSums(itsFilt)) %*% itsFilt, 2, function(x) max(x[x>0]) / min(x[x>0])))))
+inv_log_max_contam <- 1 / (log(2) + log(c(max(apply(diag(1/rowSums(bacteriaFilt)) %*% bacteriaFilt, 2, function(x) max(x[x>0]) / min(x[x>0]))),
+                                          max(apply(diag(1/rowSums(euksFilt)) %*% euksFilt, 2, function(x) max(x[x>0]) / min(x[x>0]))),
+                                          max(apply(diag(1/rowSums(transcr)) %*% transcr, 2, function(x) max(x[x>0]) / min(x[x>0]))),
+                                          max(apply(diag(1/rowSums(itsFilt)) %*% itsFilt, 2, function(x) max(x[x>0]) / min(x[x>0]))))))
 
 data <- list(N = N,
              D = D,
@@ -970,18 +970,13 @@ data <- list(N = N,
              varsWGroupsInds     = varsWGroupsInds,
              ms                  = site_smoothness,
              nu_residuals        = nu_residuals,
-             logMaxContam        = logMaxContam)
+             inv_log_max_contam  = inv_log_max_contam)
 
 #### create initiliazations
 latent_props_raw_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) bacteriaFilt_inits[I_cs[1,x],]),
                                    sapply(1:N, function(x) if(I[2,x]) euksFilt_inits[I_cs[2,x],]),
                                    sapply(1:N, function(x) if(I[3,x]) transcr_inits[I_cs[3,x],]),
                                    sapply(1:N, function(x) if(I[4,x]) itsFilt_inits[I_cs[4,x],])))
-
-rhoZ_inits <- matrix(8 * 2 * gamma((K_linear+1)/2.0) / gamma(K_linear/2.0), nrow = K_linear, ncol = KG)
-rhoZ_inits[1:2,1] <- 0.0001
-rhoZ_inits[3:4,2] <- 0.0001
-rhoZ_inits[5:6,] <- 0.001
 
 init <- list(latent_props_raw = latent_props_raw_inits,
              intercepts = intercepts_inits,
@@ -1000,7 +995,7 @@ init <- list(latent_props_raw = latent_props_raw_inits,
              W_raw = matrix(rnorm((VOBplus+sum(Mplus[1:D])+D) * K) * 0.001, ncol=K),
              missingP = rep(-1,nMP),
              rhoZ = matrix(0.0001, nrow = K_linear, ncol = KG),
-             inv_log_less_contamination = -logMaxContam,
+             inv_log_less_contamination = -inv_log_max_contam,
              contaminant_overDisp = rep(1,D))
 
 save.image(file.path(output_prefix, 'setup.RData'))
