@@ -453,7 +453,7 @@ model {
                                                                     phi[m]), //estimated abundance if true negative
                                             log_inv_logit(prevalence[m,n])
                                             + poisson_log_lpmf(X[Xplace + m - 1] |
-                                                               log_sum_exp(abundance_contam[m], abundance_true_vector[Xplace + m]) + multinomial_nuisance[multinomPlace])); //estimated abundance if true positive
+                                                               log_sum_exp(abundance_contam[m], abundance_true_vector[Xplace + m - 1]) + multinomial_nuisance[multinomPlace])); //estimated abundance if true positive
                 }
                 multinomPlace += 1;
                 Xplace += M[d];
