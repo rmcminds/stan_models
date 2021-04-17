@@ -610,7 +610,7 @@ P_max <- sapply(names(indMP), function(x) {
     temp <- biomarkersLog[,x]
     min(temp[!is.infinite(temp)], na.rm=TRUE)
 })
-nMP <- length(pMax)
+nMP <- length(P_max)
 
 P[is.infinite(P)] <- 0
 
@@ -989,7 +989,7 @@ init <- list(latent_props_raw = latent_props_raw_inits,
              dataset_scales = rep(1, 2*D+R+C),
              nu_factors_raw = matrix(10, nrow=2*D+R+C, ncol=K),
              weight_scales = matrix(global_scale_prior * 0.05, nrow=2*D+R+C, ncol=K),
-             rho_sites = as.array(rep(mean(distSites[lower.tri(distSites)]), K)),
+             rho_sites = as.array(rep(mean(dist_sites[lower.tri(dist_sites)]), K)),
              site_prop = as.array(rep(0.001, K)),
              Z_raw = matrix(rnorm((K_linear+KG*K_gp)*N) * 0.001, nrow=K_linear+KG*K_gp),
              W_raw = matrix(rnorm((VOBplus+sum(Mplus[1:D])+D) * K) * 0.001, ncol=K),

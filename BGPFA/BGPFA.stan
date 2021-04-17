@@ -63,10 +63,10 @@ functions {
         cov[N,N] = 1 + delta;
         return cholesky_decompose(symmetrize_from_lower_tri(cov));
     }
-    vector to_vector_array(matrix x) {
-        vector[rows(x)] vectors[cols(x)];
-        for(j in 1:cols(x)) vectors[j] = x[,j];
-        return(vectors);
+    vector[] to_vector_array(matrix x) {
+        vector[rows(x)] y[cols(x)];
+        for(j in 1:cols(x)) y[j] = x[,j];
+        return(y);
     }
 }
 data {
@@ -444,7 +444,7 @@ model {
             target += student_t_lupdf(segment(latent_props_raw, Xplace, M[d] * sumID[d]) |
                                       nu_residuals,
                                       to_vector(predicted),
-                                      to_vector(rep_matrix(segment(var_scales, sumMplus[d] + 1, M[d]), sumID[d]));
+                                      to_vector(rep_matrix(segment(var_scales, sumMplus[d] + 1, M[d]), sumID[d])));
             for(n in 1:sumID[d]) {
                 for(m in 1:M[d]) {
                     target += log_sum_exp(log1m_inv_logit(logit_prob_present[m,n])
