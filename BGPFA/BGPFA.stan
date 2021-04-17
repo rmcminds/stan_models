@@ -1,3 +1,4 @@
+//strong inspiration from https://www.cs.helsinki.fi/u/sakaya/tutorial/code/cca.R
 functions {
     real generalized_normal_lpdf(vector y, real mu, vector alpha, real beta) {
         return sum(log(beta) - log(2) - log(alpha) - lgamma(inv(beta)) - exp(beta * log(fabs(y-mu)./alpha)));
@@ -344,6 +345,8 @@ model {
     target += student_t_lupdf(latent_scales | 2, 0, global_effect_scale);
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, 15);
     target += std_normal_lupdf(contaminant_overdisp);
+    target += normal_lupdf(to_vector(W_raw) | to_vector(W_norm), 2.5);
+    target += normal_lupdf(to_vector(Z_raw) | to_vector(Z), 2.5);
     target += std_normal_lupdf(to_vector(Z[1:K_linear,]));
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);
     for(g in 1:KG) {
@@ -543,4 +546,3 @@ model {
         }
     } // categorical/binary likelihood allowing uncertain (real-valued) data
 }
-//strong inspiration from https://www.cs.helsinki.fi/u/sakaya/tutorial/code/cca.R
