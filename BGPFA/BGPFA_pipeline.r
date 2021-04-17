@@ -1,4 +1,4 @@
-##want to modify such that script can be separated from actual data (e.g. can publish pipeline on github without referencing anything specific about dataset)
+##want to modify such that script can be separated from actual data
 # make utility functions to reshape input data? simplification of code is necessary anyway
 library(rstan)
 library(cmdstanr)
@@ -9,7 +9,7 @@ library(phytools)
 library(MASS)
 library(geosphere)
 library(DESeq2)
-utilities_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utilities/')
+utilities_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utility/')
 source(file.path(utilities_dir, 'read_stan_csv_subset.r'))
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
@@ -28,12 +28,14 @@ site_smoothness <- 2
 nu_residuals <- 25
 
 input_prefix <- file.path(Sys.getenv('HOME'), 'data/tara_unsupervised_analyses')
+if(length(args)==1) {input_prefix <- args[[1]]} else if(length(commandArgs(trailingOnly=TRUE)) > 0) {input_prefix <- commandArgs(trailingOnly=TRUE)[[1]]}
 preprocess_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/intermediate/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
 engine <- 'advi'
 opencl <- FALSE
 output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
+
 dir.create(output_prefix, recursive = TRUE)
 
 sampling_commands <- list(sampling = paste(paste0('./', model_name),
@@ -1008,7 +1010,7 @@ write_stan_json(data, file.path(output_prefix, 'data.json'))
 
 setwd(cmdstan_path())
 system(paste0(c('make ', 'make STAN_OPENCL=true ')[opencl+1], file.path(model_dir, model_name)))
-                                          
+
 setwd(model_dir)
 print(sampling_commands[[engine]])
 print(date())
