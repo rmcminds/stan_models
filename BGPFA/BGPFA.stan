@@ -400,7 +400,7 @@ model {
         matrix[M[d],sumID[d]] predicted
             = rep_matrix(intercepts[(sumM[d] + 1):(sumM[d] + M[d])], sumID[d])
               + W[(sumM[d] + 1):(sumM[d] + M[d]),] * Z_Z_higher[,IDInds[d,1:sumID[d]]];
-        matrix[M[d],sumID[d]] logit_prob_present
+        matrix[M[d],sumID[d]] prevalence
             = rep_matrix(binary_count_dataset_intercepts[d]
                          + segment(binary_count_intercepts, sumM[d] + 1, M[d]),
                          sumID[d])
@@ -428,11 +428,11 @@ model {
                                             cov);
             for(n in 1:sumID[d]) {
                 for(m in 1:M[d]) {
-                    target += log_sum_exp(log1m_inv_logit(logit_prob_present[m,n])
+                    target += log_sum_exp(log1m_inv_logit(prevalence[m,n])
                                           + neg_binomial_2_log_lpmf(X[Xplace + m - 1] |
                                                                     abundance_contam[m] + multinomial_nuisance[multinomPlace],
                                                                     phi[m]), //estimated abundance if true negative
-                                            log_inv_logit(logit_prob_present[m,n])
+                                            log_inv_logit(prevalence[m,n])
                                             + poisson_log_lpmf(X[Xplace + m - 1] |
                                                                log_sum_exp(abundance_contam[m], abundance_true[n,m]) + multinomial_nuisance[multinomPlace])); //estimated abundance if true positive
                 }
@@ -447,11 +447,11 @@ model {
                                       to_vector(rep_matrix(segment(var_scales, sumMplus[d] + 1, M[d]), sumID[d])));
             for(n in 1:sumID[d]) {
                 for(m in 1:M[d]) {
-                    target += log_sum_exp(log1m_inv_logit(logit_prob_present[m,n])
+                    target += log_sum_exp(log1m_inv_logit(prevalence[m,n])
                                           + neg_binomial_2_log_lpmf(X[Xplace + m - 1] |
                                                                     abundance_contam[m] + multinomial_nuisance[multinomPlace],
                                                                     phi[m]), //estimated abundance if true negative
-                                            log_inv_logit(logit_prob_present[m,n])
+                                            log_inv_logit(prevalence[m,n])
                                             + poisson_log_lpmf(X[Xplace + m - 1] |
                                                                log_sum_exp(abundance_contam[m], abundance_true_vector[Xplace + m]) + multinomial_nuisance[multinomPlace])); //estimated abundance if true positive
                 }
