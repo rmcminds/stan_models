@@ -271,7 +271,7 @@ parameters {
     vector<lower=0, upper=1>[K] site_prop;
     matrix<lower=0>[K_linear,KG] rho_Z;
     vector<upper=0>[D] inv_log_less_contamination;
-    vector<lower=0>[D] contaminant_overDisp;
+    vector<lower=0>[D] contaminant_overdisp;
 }
 transformed parameters {
     vector[H] P_filled = P;
@@ -343,7 +343,7 @@ model {
     target += student_t_lupdf(global_effect_scale | 2, 0, global_scale_prior);
     target += student_t_lupdf(latent_scales | 2, 0, global_effect_scale);
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, 15);
-    target += std_normal_lupdf(contaminant_overDisp);
+    target += std_normal_lupdf(contaminant_overdisp);
     target += std_normal_lupdf(to_vector(Z[1:K_linear,]));
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);
     for(g in 1:KG) {
@@ -421,7 +421,7 @@ model {
                                              Mplus[d] - M[d]),
                                    segment(var_scales, sumMplus[d] + M[d] + 1, Mplus[d] - M[d]))),
                            square(segment(var_scales, sumMplus[d] + 1, M[d])) + 1e-10);
-            vector[M[d]] phi = inv_square(contaminant_overDisp[d]) * inv(diagonal(cov));
+            vector[M[d]] phi = inv_square(contaminant_overdisp[d]) * inv(diagonal(cov));
             target += multi_student_t_lupdf(abundance_true |
                                             nu_residuals,
                                             to_vector_array(predicted),
@@ -440,7 +440,7 @@ model {
                 Xplace += M[d];
             }
         } else {
-            vector[M[d]] phi = inv_square(contaminant_overDisp[d] * segment(var_scales, sumMplus[d] + 1, M[d]));
+            vector[M[d]] phi = inv_square(contaminant_overdisp[d] * segment(var_scales, sumMplus[d] + 1, M[d]));
             target += student_t_lupdf(segment(abundance_true_vector, Xplace, M[d] * sumID[d]) |
                                       nu_residuals,
                                       to_vector(predicted),
