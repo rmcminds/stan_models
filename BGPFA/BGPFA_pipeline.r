@@ -62,7 +62,7 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                        'grad_samples=1',
                                        'elbo_samples=100',
                                        'iter=30000',
-                                       'eta=1',
+                                       'eta=0.1',
                                        'adapt engaged=0',
                                        'tol_rel_obj=0.001',
                                        'output_samples=200',
@@ -978,6 +978,12 @@ abundance_true_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) bacte
                                         sapply(1:N, function(x) if(I[3,x]) transcr_inits[I_cs[3,x],]),
                                         sapply(1:N, function(x) if(I[4,x]) itsFilt_inits[I_cs[4,x],])))
 
+Z_raw <- matrix(rnorm((K_linear+KG*K_gp)*N) * 0.001, nrow=K_linear+KG*K_gp)
+Z_raw <- diag(sqrt(colSums(t(Z_raw)^2))) %*% svd(t(Z_raw))$v %*% t(svd(t(Z_raw))$u)
+
+W_raw <- matrix(rnorm((VOBplus+sum(Mplus[1:D])+D) * K) * 0.001, ncol=K)
+W_raw <- svd(W_raw)$u %*% t(svd(W_raw)$v) %*% diag(sqrt(colSums(W_raw^2)))
+
 init <- list(abundance_true_vector = abundance_true_vector_inits,
              intercepts = intercepts_inits,
              binary_count_intercepts = binary_count_intercepts_inits,
@@ -991,8 +997,8 @@ init <- list(abundance_true_vector = abundance_true_vector_inits,
              weight_scales = matrix(global_scale_prior * 0.05, nrow=2*D+R+C, ncol=K),
              rho_sites = as.array(rep(mean(dist_sites[lower.tri(dist_sites)]) * 0.001, K)),
              site_prop = as.array(rep(0.001, K)),
-             Z_raw = matrix(rnorm((K_linear+KG*K_gp)*N) * 0.001, nrow=K_linear+KG*K_gp),
-             W_raw = matrix(rnorm((VOBplus+sum(Mplus[1:D])+D) * K) * 0.001, ncol=K),
+             Z_raw = Z_raw,
+             W_raw = W_raw,
              P_missing = rep(-1,nMP),
              rho_Z = matrix(0.0001, nrow = K_linear, ncol = KG),
              inv_log_less_contamination = -inv_log_max_contam,
