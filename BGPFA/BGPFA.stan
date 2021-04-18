@@ -389,7 +389,7 @@ model {
                                   weight_scales[DRC,k]
                                   * sqrt(nu_factors_raw[DRC,k] / nu_factors[DRC,k]));
         target += normal_lupdf(W_raw[(sumMplus[DRC] + 1):(sumMplus[DRC] + Mplus[DRC]),k] |
-                               W_norm[(sumMplus[DRC] + 1):(sumMplus[DRC] + M[DRC]),k],
+                               W_norm[(sumMplus[DRC] + 1):(sumMplus[DRC] + Mplus[DRC]),k],
                                weight_scales[DRC,k]);
         for(d in 1:D) {
             target += student_t_lupdf(W_norm[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),k] |
