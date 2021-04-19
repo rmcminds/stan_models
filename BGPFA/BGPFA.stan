@@ -11,7 +11,7 @@ functions {
                    + lgamma(0.5 * (nu + K))
                    - lgamma(0.5 * nu)
                    - sum(log(diagonal(L))));
-        return(lp - 0.5 * (nu + K) * sum(log1p(columns_dot_self(L * (y - mu)) / nu))));
+        return(lp - 0.5 * (nu + K) * sum(log1p(columns_dot_self(L * (y - mu)) / nu)));
     }
     real ff(int k, int j) {
         if(j)
