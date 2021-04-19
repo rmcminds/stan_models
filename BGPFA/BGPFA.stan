@@ -7,12 +7,11 @@ functions {
         int N = cols(y);
         int K = cols(L);
         real lp
-            = - 0.5 * K * log(nu)
-              + lgamma(0.5 * (nu + K))
-              - lgamma(0.5 * nu)
-              - sum(log(diagonal(L)))
-              - 0.5 * (nu + K) * sum(log1p(columns_dot_self(L * (y - mu)) / nu));
-        return(lp);
+            = N * (- 0.5 * K * log(nu)
+                   + lgamma(0.5 * (nu + K))
+                   - lgamma(0.5 * nu)
+                   - sum(log(diagonal(L))));
+        return(lp - 0.5 * (nu + K) * sum(log1p(columns_dot_self(L * (y - mu)) / nu))));
     }
     real ff(int k, int j) {
         if(j)
@@ -269,7 +268,7 @@ parameters {
     matrix[VOBplus+Vplus+D,K] W_norm; // PCA variable loadings
     vector<lower=0>[VOBplus+Vplus+D] sds;
     real<lower=0> global_effect_scale;
-    vector<lower=0>[K] latent_scales;
+    row_vector<lower=0>[K] latent_scales;
     vector<lower=0>[DRC+D] dataset_scales;
     matrix<lower=0>[DRC+D,K] weight_scales;
     vector[VOB] intercepts;
@@ -349,6 +348,7 @@ model {
     target += cauchy_lupdf(binary_count_dataset_intercepts | 0, 2.5);
     target += student_t_lupdf(global_effect_scale | 2, 0, global_scale_prior);
     target += student_t_lupdf(latent_scales | 2, 0, global_effect_scale);
+    target += student_t_lupdf(to_vector(weight_scales) | 2, 0, to_vector(rep_matrix(latent_scales, DRC+D)));
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, 25);
     target += std_normal_lupdf(contaminant_overdisp);
     target += normal_lupdf(to_vector(W_norm) | to_vector(W_ortho), 0.25 * global_effect_scale);
@@ -374,7 +374,6 @@ model {
                                dataset_scales[DRC+d]);
     }
     for(k in 1:K) {
-        target += student_t_lupdf(weight_scales[,k] | 2, 0, latent_scales[k]);
         for(drc in 1:(DRC-1)) {
             target += student_t_lupdf(W_norm[(sumMplus[drc] + 1):(sumMplus[drc] + Mplus[drc]),k] |
                                       nu_factors[drc,k],
