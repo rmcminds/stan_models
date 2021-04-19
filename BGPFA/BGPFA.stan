@@ -3,6 +3,15 @@ functions {
     real generalized_normal_lpdf(vector y, real mu, vector alpha, real beta) {
         return sum(log(beta) - log(2) - log(alpha) - lgamma(inv(beta)) - exp(beta * log(fabs(y-mu)./alpha)));
     }
+    real multi_student_t_cholesky_lpdf(vector[] y, real nu, vector[] mu, matrix[] L) {
+        int N = size(y);
+        int K = cols(sigma);
+        real lp = -0.5*K*log(nu) + lgamma(0.5*(nu+K)) - lgamma(nu/2) - sum(log(diagonal(sigma)));
+        for(n in 1:N) {
+            lp -= 0.5 * (nu+K) * log1p(dot_self(L * (y[n] - u[n])) / nu);
+        }
+        return(lp);
+    }
     real ff(int k, int j) {
         if(j)
           return(falling_factorial(k,j));
@@ -321,7 +330,7 @@ transformed parameters {
 //                     * circular_matern(dist_sites, ms, inv(rho_sites[k]), ffKJ, chooseRJ),
                        * exp(-dist_sites / rho_sites[k]),
                        M[DRC],
-                       square(weight_scales[DRC,k] + 1e0));
+                       square(weight_scales[DRC,k]) + 1e-9);
     }
 }
 model {
@@ -345,7 +354,7 @@ model {
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);
     for(g in 1:KG) {
         target += multi_gp_cholesky_lupdf(Z[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g),] |
-                                          L_cov_exp_quad_ARD(Z[1:K_linear,], rho_Z[,g], 1e-10),
+                                          L_cov_exp_quad_ARD(Z[1:K_linear,], rho_Z[,g], 1e-9),
                                           ones_vector(K_gp));
     }
     for(drc in 1:DRC) {
@@ -373,11 +382,11 @@ model {
                                    W_norm[(sumMplus[drc] + 1):(sumMplus[drc] + Mplus[drc]),k],
                                    0.1 * weight_scales[drc,k]);
         }
-        target += multi_student_t_lupdf(W_norm[(sumMplus[DRC] + 1):(sumMplus[DRC] + M[DRC]),k] |
-                                        nu_factors[DRC,k],
-                                        rep_vector(0,M[DRC]),
-                                        cov_sites[k]
-                                        * nu_factors_raw[DRC,k] / nu_factors[DRC,k]);
+        target += multi_student_t_cholesky_lpdf(W_norm[(sumMplus[DRC] + 1):(sumMplus[DRC] + M[DRC]),k] |
+                                                nu_factors[DRC,k],
+                                                rep_vector(0,M[DRC]),
+                                                cholesky_decompose(cov_sites[k])
+                                                * sqrt(nu_factors_raw[DRC,k] / nu_factors[DRC,k]));
         target += student_t_lupdf(W_norm[(sumMplus[DRC] + M[DRC] + 1):(sumMplus[DRC] + Mplus[DRC]),k] |
                                   nu_factors[DRC,k],
                                   0,
@@ -432,11 +441,11 @@ model {
                                              M[d],
                                              Mplus[d] - M[d]),
                                    segment(var_scales, sumMplus[d] + M[d] + 1, Mplus[d] - M[d]))),
-                           square(segment(var_scales, sumMplus[d] + 1, M[d]) + 1e0));
-            target += multi_student_t_lupdf(to_vector_array(abundance_true) |
-                                            nu_residuals,
-                                            to_vector_array(predicted),
-                                            cov);
+                           square(segment(var_scales, sumMplus[d] + 1, M[d])) + 1e-9);
+            target += multi_student_t_cholesky_lpdf(to_vector_array(abundance_true) |
+                                                    nu_residuals,
+                                                    to_vector_array(predicted),
+                                                    cholesky_decompose(cov));
             phi = inv_square(contaminant_overdisp[d]) * inv(diagonal(cov));
         } else {
             target += student_t_lupdf(to_vector(abundance_true) |
@@ -468,7 +477,7 @@ model {
                                              M[D+r],
                                              Mplus[D+r] - M[D+r]),
                                    segment(var_scales, sumMplus[D+r] + M[D+r] + 1, Mplus[D+r] - M[D+r]))),
-                           square(segment(var_scales, sumMplus[D+r] + 1, M[D+r]) + 1e0));
+                           square(segment(var_scales, sumMplus[D+r] + 1, M[D+r])) + 1e-9);
             for(n in 1:(N+nVarGroups)) {
                 if(nIsolate[r,n] > 0) {
                     int inds[nIsolate[r,n]] = IRInds[r,n,1:sumIR[r,n]][segInds1[r,n,1:nIsolate[r,n]]];
@@ -492,10 +501,10 @@ model {
                         = to_vector_array(rep_matrix(intercepts[(sumM[D+r] + 1):(sumM[D+r+1])][inds], nMatches[r,m])
                                           + W[(sumM[D+r] + 1):(sumM[D+r] + M[D+r]),][inds,]
                                           * Z_Z_higher[,matchIndsInv[r,m,1:nMatches[r,m]]]);
-                    target += multi_student_t_lupdf(observed[matchIndsInv[r,m,1:nMatches[r,m]],1:nMat[r,m]] |
-                                                    nu_residuals,
-                                                    predicted,
-                                                    cov[inds,inds]);
+                    target += multi_student_t_cholesky_lpdf(observed[matchIndsInv[r,m,1:nMatches[r,m]],1:nMat[r,m]] |
+                                                            nu_residuals,
+                                                            predicted,
+                                                            cholesky_decompose(cov[inds,inds]));
                 }
             }
         } else {
