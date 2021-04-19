@@ -321,7 +321,7 @@ transformed parameters {
 //                     * circular_matern(dist_sites, ms, inv(rho_sites[k]), ffKJ, chooseRJ),
                        * exp(-dist_sites / rho_sites[k]),
                        M[size(M)],
-                       square(weight_scales[DRC,k]) + 1e-10);
+                       square(weight_scales[DRC,k] + 1e-9));
     }
 }
 model {
@@ -345,7 +345,7 @@ model {
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);
     for(g in 1:KG) {
         target += multi_gp_cholesky_lupdf(Z[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g),] |
-                                          L_cov_exp_quad_ARD(Z[1:K_linear,], rho_Z[,g], 1e-10),
+                                          L_cov_exp_quad_ARD(Z[1:K_linear,], rho_Z[,g], 1e-9),
                                           ones_vector(K_gp));
     }
     for(drc in 1:DRC) {
@@ -377,7 +377,7 @@ model {
                                         nu_factors[DRC,k],
                                         rep_vector(0,M[DRC]),
                                         cov_sites[k]
-                                        * sqrt(nu_factors_raw[DRC,k] / nu_factors[DRC,k]));
+                                        * nu_factors_raw[DRC,k] / nu_factors[DRC,k]);
         target += student_t_lupdf(W_norm[(sumMplus[DRC] + M[DRC] + 1):(sumMplus[DRC] + Mplus[DRC]),k] |
                                   nu_factors[DRC,k],
                                   0,
@@ -432,7 +432,7 @@ model {
                                              M[d],
                                              Mplus[d] - M[d]),
                                    segment(var_scales, sumMplus[d] + M[d] + 1, Mplus[d] - M[d]))),
-                           square(segment(var_scales, sumMplus[d] + 1, M[d])) + 1e-10);
+                           square(segment(var_scales, sumMplus[d] + 1, M[d]) + 1e-9));
             target += multi_student_t_lupdf(to_vector_array(abundance_true) |
                                             nu_residuals,
                                             to_vector_array(predicted),
@@ -468,7 +468,7 @@ model {
                                              M[D+r],
                                              Mplus[D+r] - M[D+r]),
                                    segment(var_scales, sumMplus[D+r] + M[D+r] + 1, Mplus[D+r] - M[D+r]))),
-                           square(segment(var_scales, sumMplus[D+r] + 1, M[D+r])) + 1e-10);
+                           square(segment(var_scales, sumMplus[D+r] + 1, M[D+r]) + 1e-9));
             for(n in 1:(N+nVarGroups)) {
                 if(nIsolate[r,n] > 0) {
                     int inds[nIsolate[r,n]] = IRInds[r,n,1:sumIR[r,n]][segInds1[r,n,1:nIsolate[r,n]]];
