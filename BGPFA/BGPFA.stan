@@ -472,7 +472,7 @@ model {
     } // count likelihood
     for(r in 1:R) {
         if(Mplus[D+r] > M[D+r]) {
-            vector[max(nMat[r,]), N+nVarGroups] observed;
+            matrix[max(nMat[r,]), N+nVarGroups] observed;
             matrix[M[D+r],M[D+r]] cov
                 = add_diag(tcrossprod(diag_post_multiply(
                                    to_matrix(segment(mm, sumMMplus[D+r] + 1, MMplus[D+r]),
@@ -499,7 +499,7 @@ model {
             for(m in 1:nUniqueR[r]) {
                 if(nMat[r,m] > 0) {
                     int inds[nMat[r,m]] = uniqueRInds[r,m,1:sumIRUnique[r,m]][segInds2[r,m,1:nMat[r,m]]];
-                    vector[nMat[r,m], nMatches[r,m]] predicted
+                    matrix[nMat[r,m], nMatches[r,m]] predicted
                         = rep_matrix(intercepts[(sumM[D+r] + 1):(sumM[D+r+1])][inds], nMatches[r,m])
                           + W[(sumM[D+r] + 1):(sumM[D+r] + M[D+r]),][inds,]
                             * Z_Z_higher[,matchIndsInv[r,m,1:nMatches[r,m]]];
