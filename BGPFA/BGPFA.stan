@@ -351,8 +351,8 @@ model {
     target += student_t_lupdf(latent_scales | 2, 0, global_effect_scale);
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, 25);
     target += std_normal_lupdf(contaminant_overdisp);
-    target += normal_lupdf(to_vector(W_norm) | to_vector(W_ortho), 0.25 * fabs(to_vector(W_ortho)));
-    target += normal_lupdf(to_vector(Z) | to_vector(Z_ortho), 0.25 * fabs(to_vector(Z_ortho)));
+    target += normal_lupdf(to_vector(W_norm) | to_vector(W_ortho), 0.25 * global_effect_scale);
+    target += normal_lupdf(to_vector(Z) | to_vector(Z_ortho), 0.25 * global_effect_scale);
     target += std_normal_lupdf(to_vector(Z[1:K_linear,]));
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);
     for(g in 1:KG) {
