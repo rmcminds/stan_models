@@ -321,7 +321,7 @@ transformed parameters {
 //                     * circular_matern(dist_sites, ms, inv(rho_sites[k]), ffKJ, chooseRJ),
                        * exp(-dist_sites / rho_sites[k]),
                        M[DRC],
-                       square(weight_scales[DRC,k] + 1e-5));
+                       square(weight_scales[DRC,k] + 1e0));
     }
 }
 model {
@@ -432,7 +432,7 @@ model {
                                              M[d],
                                              Mplus[d] - M[d]),
                                    segment(var_scales, sumMplus[d] + M[d] + 1, Mplus[d] - M[d]))),
-                           square(segment(var_scales, sumMplus[d] + 1, M[d]) + 1e-5));
+                           square(segment(var_scales, sumMplus[d] + 1, M[d]) + 1e0));
             target += multi_student_t_lupdf(to_vector_array(abundance_true) |
                                             nu_residuals,
                                             to_vector_array(predicted),
@@ -468,7 +468,7 @@ model {
                                              M[D+r],
                                              Mplus[D+r] - M[D+r]),
                                    segment(var_scales, sumMplus[D+r] + M[D+r] + 1, Mplus[D+r] - M[D+r]))),
-                           square(segment(var_scales, sumMplus[D+r] + 1, M[D+r]) + 1e-5));
+                           square(segment(var_scales, sumMplus[D+r] + 1, M[D+r]) + 1e0));
             for(n in 1:(N+nVarGroups)) {
                 if(nIsolate[r,n] > 0) {
                     int inds[nIsolate[r,n]] = IRInds[r,n,1:sumIR[r,n]][segInds1[r,n,1:nIsolate[r,n]]];
