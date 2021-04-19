@@ -294,8 +294,7 @@ transformed parameters {
     vector<lower=0>[VOBplus+Vplus+D] var_scales
         = sds
           .* append_row(prior_scales,
-                        ones_vector(Vplus+D))
-          + 1e-6;
+                        ones_vector(Vplus+D));
     matrix<lower=2>[DRC,K] nu_factors = nu_factors_raw + 2;
     cov_matrix[M[DRC]] cov_sites[K];
     matrix[VOBplus+Vplus+D,K] W_norm = svd_U(W_raw) * diag_post_multiply(svd_V(W_raw)', sqrt(columns_dot_self(W_raw)));

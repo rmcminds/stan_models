@@ -990,8 +990,8 @@ init <- list(abundance_true_vector = abundance_true_vector_inits,
              binary_count_dataset_intercepts = rep(0,D),
              multinomial_nuisance = multinomial_nuisance_inits,
              global_effect_scale = global_scale_prior,
-             latent_scales = rep(global_scale_prior * 0.05,K),
-             sds = rep(1, VOBplus+sum(Mplus[1:D])+D),
+             latent_scales = rep(global_scale_prior,K),
+             sds = rep(0.01, VOBplus+sum(Mplus[1:D])+D),
              dataset_scales = rep(1, 2*D+R+C),
              nu_factors_raw = matrix(10, nrow=2*D+R+C, ncol=K),
              weight_scales = matrix(global_scale_prior * 0.05, nrow=2*D+R+C, ncol=K),
@@ -1017,7 +1017,7 @@ print(sampling_commands[[engine]])
 print(date())
 system(sampling_commands[[engine]])
 
-importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','log_post','dataset_scales','var_scales','weight_scales','nu_factors','rho_sites', 'site_prop', 'cov_sites', 'binary_count_dataset_intercepts','log_less_contamination','contaminant_overdisp','rho_Z')
+importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','log_post','dataset_scales','var_scales','weight_scales','nu_factors','rho_sites', 'site_prop', 'cov_sites', 'binary_count_dataset_intercepts', 'log_less_contamination', 'contaminant_overdisp', 'rho_Z')
 
 stan.fit <- read_stan_csv_subset(file.path(output_prefix, paste0('samples_',engine,'.txt')),
                                  params = importparams)
