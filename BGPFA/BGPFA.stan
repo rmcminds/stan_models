@@ -384,9 +384,9 @@ model {
                                    W_norm[(sumMplus[drc] + 1):(sumMplus[drc] + Mplus[drc]),k],
                                    0.1 * weight_scales[drc,k]);
         }
-        target += multi_student_t_cholesky_lpdf(W_norm[(sumMplus[DRC] + 1):(sumMplus[DRC] + M[DRC]),k] |
+        target += multi_student_t_cholesky_lpdf(to_matrix(W_norm[(sumMplus[DRC] + 1):(sumMplus[DRC] + M[DRC]),k]) |
                                                 nu_factors[DRC,k],
-                                                rep_vector(0,M[DRC]),
+                                                to_matrix(zeros_vector(M[DRC])),
                                                 cholesky_decompose(cov_sites[k])
                                                 * sqrt(nu_factors_raw[DRC,k] / nu_factors[DRC,k]));
         target += student_t_lupdf(W_norm[(sumMplus[DRC] + M[DRC] + 1):(sumMplus[DRC] + Mplus[DRC]),k] |
@@ -472,7 +472,7 @@ model {
     } // count likelihood
     for(r in 1:R) {
         if(Mplus[D+r] > M[D+r]) {
-            vector[max(nMat[r,])] observed[N+nVarGroups];
+            vector[max(nMat[r,]), N+nVarGroups] observed;
             matrix[M[D+r],M[D+r]] cov
                 = add_diag(tcrossprod(diag_post_multiply(
                                    to_matrix(segment(mm, sumMMplus[D+r] + 1, MMplus[D+r]),
@@ -492,18 +492,18 @@ model {
                 }
                 if(nMat[r,matchInds[r,n]] > 0) {
                     int inds[nMat[r,matchInds[r,n]]] = segInds2[r,matchInds[r,n],1:nMat[r,matchInds[r,n]]];
-                    observed[n,1:nMat[r,matchInds[r,n]]] = segment(P_filled, Pplace, sumIR[r,n])[inds];
+                    observed[1:nMat[r,matchInds[r,n]],n] = segment(P_filled, Pplace, sumIR[r,n])[inds];
                 }
                 Pplace += sumIR[r,n];
             }
             for(m in 1:nUniqueR[r]) {
                 if(nMat[r,m] > 0) {
                     int inds[nMat[r,m]] = uniqueRInds[r,m,1:sumIRUnique[r,m]][segInds2[r,m,1:nMat[r,m]]];
-                    vector[nMat[r,m]] predicted[nMatches[r,m]]
-                        = to_vector_array(rep_matrix(intercepts[(sumM[D+r] + 1):(sumM[D+r+1])][inds], nMatches[r,m])
-                                          + W[(sumM[D+r] + 1):(sumM[D+r] + M[D+r]),][inds,]
-                                          * Z_Z_higher[,matchIndsInv[r,m,1:nMatches[r,m]]]);
-                    target += multi_student_t_cholesky_lpdf(observed[matchIndsInv[r,m,1:nMatches[r,m]],1:nMat[r,m]] |
+                    vector[nMat[r,m], nMatches[r,m]] predicted
+                        = rep_matrix(intercepts[(sumM[D+r] + 1):(sumM[D+r+1])][inds], nMatches[r,m])
+                          + W[(sumM[D+r] + 1):(sumM[D+r] + M[D+r]),][inds,]
+                            * Z_Z_higher[,matchIndsInv[r,m,1:nMatches[r,m]]];
+                    target += multi_student_t_cholesky_lpdf(observed[1:nMat[r,m], matchIndsInv[r,m,1:nMatches[r,m]]] |
                                                             nu_residuals,
                                                             predicted,
                                                             cholesky_decompose(cov[inds,inds]));
