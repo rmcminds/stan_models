@@ -314,7 +314,7 @@ transformed parameters {
             += rep_matrix(var_scales[VOBplus+Vplus+d] * W_norm[VOBplus+Vplus+d,], M[d]);
     }
     Z_higher = Z * samp2group;
-    for(k in 1:K){}
+    for(k in 1:K) {
         cov_sites[k]
             = fill_sym(site_prop[k]
                        * square(weight_scales[DRC,k])
