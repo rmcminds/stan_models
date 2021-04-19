@@ -3,13 +3,15 @@ functions {
     real generalized_normal_lpdf(vector y, real mu, vector alpha, real beta) {
         return sum(log(beta) - log(2) - log(alpha) - lgamma(inv(beta)) - exp(beta * log(fabs(y-mu)./alpha)));
     }
-    real multi_student_t_cholesky_lpdf(vector[] y, real nu, vector[] mu, matrix[] L) {
-        int N = size(y);
-        int K = cols(sigma);
-        real lp = -0.5*K*log(nu) + lgamma(0.5*(nu+K)) - lgamma(nu/2) - sum(log(diagonal(sigma)));
-        for(n in 1:N) {
-            lp -= 0.5 * (nu+K) * log1p(dot_self(L * (y[n] - u[n])) / nu);
-        }
+    real multi_student_t_cholesky_lpdf(matrix y, real nu, matrix mu, matrix L) {
+        int N = cols(y);
+        int K = cols(L);
+        real lp
+            = - 0.5 * K * log(nu)
+              + lgamma(0.5 * (nu + K))
+              - lgamma(0.5 * nu)
+              - sum(log(diagonal(L)))
+              - 0.5 * (nu+K) * sum(log1p(columns_dot_self(L * (y - mu)) / nu));
         return(lp);
     }
     real ff(int k, int j) {
@@ -442,9 +444,9 @@ model {
                                              Mplus[d] - M[d]),
                                    segment(var_scales, sumMplus[d] + M[d] + 1, Mplus[d] - M[d]))),
                            square(segment(var_scales, sumMplus[d] + 1, M[d])) + 1e-9);
-            target += multi_student_t_cholesky_lpdf(to_vector_array(abundance_true) |
+            target += multi_student_t_cholesky_lpdf(abundance_true |
                                                     nu_residuals,
-                                                    to_vector_array(predicted),
+                                                    predicted,
                                                     cholesky_decompose(cov));
             phi = inv_square(contaminant_overdisp[d]) * inv(diagonal(cov));
         } else {
