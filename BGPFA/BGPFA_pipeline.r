@@ -32,7 +32,7 @@ if(exists('myargs')) {if(length(myargs)==1) {input_prefix <- myargs[[1]]}} else 
 preprocess_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/intermediate/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
-engine <- 'advi'
+engine <- 'sampling'
 opencl <- FALSE
 output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
 
@@ -1019,8 +1019,8 @@ system(sampling_commands[[engine]])
 
 importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','log_post','dataset_scales','var_scales','weight_scales','nu_factors','rho_sites', 'site_prop', 'cov_sites', 'binary_count_dataset_intercepts','log_less_contamination','contaminant_overdisp','rho_Z')
 
-stan.fit.vb <- read_stan_csv_subset(file.path(output_prefix, paste0('samples_',engine,'.txt')),
-                                    params = importparams)
+stan.fit <- read_stan_csv_subset(file.path(output_prefix, paste0('samples_',engine,'.txt')),
+                                 params = importparams)
 
 save.image(file.path(output_prefix, paste0('res_',engine,'.RData')))
 
