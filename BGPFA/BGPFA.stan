@@ -314,16 +314,11 @@ transformed parameters {
             += rep_matrix(var_scales[VOBplus+Vplus+d] * W_norm[VOBplus+Vplus+d,], M[d]);
     }
     Z_higher = Z * samp2group;
-    for(k in 1:K) {
-        //cov_sites[k]
-        //    = fill_sym(site_prop[k]
-        //               * square(weight_scales[DRC,k])
-        //               * circular_matern(dist_sites, ms, inv(rho_sites[k]), ffKJ, chooseRJ),
-        //               M[size(M)],
-        //               square(weight_scales[DRC,k]) + 1e-10);
+    for(k in 1:K){}
         cov_sites[k]
             = fill_sym(site_prop[k]
                        * square(weight_scales[DRC,k])
+//                     * circular_matern(dist_sites, ms, inv(rho_sites[k]), ffKJ, chooseRJ),
                        * exp(-dist_sites / rho_sites[k]),
                        M[size(M)],
                        square(weight_scales[DRC,k]) + 1e-10);
@@ -343,7 +338,7 @@ model {
     target += cauchy_lupdf(binary_count_dataset_intercepts | 0, 2.5);
     target += student_t_lupdf(global_effect_scale | 2, 0, global_scale_prior);
     target += student_t_lupdf(latent_scales | 2, 0, global_effect_scale);
-    target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, 15);
+    target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, 25);
     target += std_normal_lupdf(contaminant_overdisp);
     target += normal_lupdf(to_vector(Z_raw) | to_vector(Z), 0.1);
     target += std_normal_lupdf(to_vector(Z[1:K_linear,]));
@@ -376,7 +371,7 @@ model {
                                       * sqrt(nu_factors_raw[drc,k] / nu_factors[drc,k]));
             target += normal_lupdf(W_raw[(sumMplus[drc] + 1):(sumMplus[drc] + Mplus[drc]),k] |
                                    W_norm[(sumMplus[drc] + 1):(sumMplus[drc] + Mplus[drc]),k],
-                                   weight_scales[drc,k]);
+                                   0.1 * weight_scales[drc,k]);
         }
         target += multi_student_t_lupdf(W_norm[(sumMplus[DRC] + 1):(sumMplus[DRC] + M[DRC]),k] |
                                         nu_factors[DRC,k],
@@ -390,7 +385,7 @@ model {
                                   * sqrt(nu_factors_raw[DRC,k] / nu_factors[DRC,k]));
         target += normal_lupdf(W_raw[(sumMplus[DRC] + 1):(sumMplus[DRC] + Mplus[DRC]),k] |
                                W_norm[(sumMplus[DRC] + 1):(sumMplus[DRC] + Mplus[DRC]),k],
-                               weight_scales[DRC,k]);
+                               0.1 * weight_scales[DRC,k]);
         for(d in 1:D) {
             target += student_t_lupdf(W_norm[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),k] |
                                       nu_factors[DRC+d,k],
@@ -404,10 +399,10 @@ model {
                                       * sqrt(nu_factors_raw[DRC+d,k] / nu_factors[DRC+d,k]));
             target += normal_lupdf(W_raw[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),k] |
                                    W_norm[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),k],
-                                   weight_scales[DRC+d,k]);
+                                   0.1 * weight_scales[DRC+d,k]);
             target += normal_lupdf(W_raw[VOBplus+Vplus+d,k] |
                                    W_norm[VOBplus+Vplus+d,k],
-                                   weight_scales[DRC+d,k]);
+                                   0.1 * weight_scales[DRC+d,k]);
         }
     }
     for(d in 1:D) {
