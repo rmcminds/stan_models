@@ -11,7 +11,7 @@ functions {
               + lgamma(0.5 * (nu + K))
               - lgamma(0.5 * nu)
               - sum(log(diagonal(L)))
-              - 0.5 * (nu+K) * sum(log1p(columns_dot_self(L * (y - mu)) / nu));
+              - 0.5 * (nu + K) * sum(log1p(columns_dot_self(L * (y - mu)) / nu));
         return(lp);
     }
     real ff(int k, int j) {
@@ -265,8 +265,8 @@ transformed data {
     }
 }
 parameters {
-    matrix[K_linear + KG * K_gp,N] Z_raw; // PCA axis scores
-    matrix[VOBplus+Vplus+D,K] W_raw; // PCA variable loadings
+    matrix[K_linear + KG * K_gp,N] Z; // PCA axis scores
+    matrix[VOBplus+Vplus+D,K] W_norm; // PCA variable loadings
     vector<lower=0>[VOBplus+Vplus+D] sds;
     real<lower=0> global_effect_scale;
     vector<lower=0>[K] latent_scales;
@@ -297,8 +297,8 @@ transformed parameters {
                         ones_vector(Vplus+D));
     matrix<lower=2>[DRC,K] nu_factors = nu_factors_raw + 2;
     cov_matrix[M[DRC]] cov_sites[K];
-    matrix[VOBplus+Vplus+D,K] W_norm = svd_U(W_raw) * diag_post_multiply(svd_V(W_raw)', sqrt(columns_dot_self(W_raw)));
-    matrix[K_linear + KG * K_gp, N] Z = diag_pre_multiply(sqrt(rows_dot_self(Z_raw)), svd_V(Z_raw')) * svd_U(Z_raw')';
+    matrix[VOBplus+Vplus+D,K] W_ortho = svd_U(W_norm) * diag_post_multiply(svd_V(W_norm)', sqrt(columns_dot_self(W_norm)));
+    matrix[K_linear + KG * K_gp, N] Z_ortho = diag_pre_multiply(sqrt(rows_dot_self(Z)), svd_V(Z')) * svd_U(Z')';
     for(miss in 1:nMP) P_filled[indMP[miss]] = P_missing[miss] + P_max[miss];
     for(drc in 1:DRC) {
         W[(sumM[drc] + 1):(sumM[drc] + M[drc]),]
@@ -351,7 +351,7 @@ model {
     target += student_t_lupdf(latent_scales | 2, 0, global_effect_scale);
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, 25);
     target += std_normal_lupdf(contaminant_overdisp);
-    target += normal_lupdf(to_vector(Z_raw) | to_vector(Z), 0.1);
+    target += normal_lupdf(to_vector(Z) | to_vector(Z_ortho), 0.1);
     target += std_normal_lupdf(to_vector(Z[1:K_linear,]));
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);
     for(g in 1:KG) {
@@ -380,8 +380,8 @@ model {
                                       0,
                                       weight_scales[drc,k]
                                       * sqrt(nu_factors_raw[drc,k] / nu_factors[drc,k]));
-            target += normal_lupdf(W_raw[(sumMplus[drc] + 1):(sumMplus[drc] + Mplus[drc]),k] |
-                                   W_norm[(sumMplus[drc] + 1):(sumMplus[drc] + Mplus[drc]),k],
+            target += normal_lupdf(W_norm[(sumMplus[drc] + 1):(sumMplus[drc] + Mplus[drc]),k] |
+                                   W_ortho[(sumMplus[drc] + 1):(sumMplus[drc] + Mplus[drc]),k],
                                    0.1 * weight_scales[drc,k]);
         }
         target += multi_student_t_cholesky_lpdf(to_matrix(W_norm[(sumMplus[DRC] + 1):(sumMplus[DRC] + M[DRC]),k]) |
@@ -394,8 +394,8 @@ model {
                                   0,
                                   weight_scales[DRC,k]
                                   * sqrt(nu_factors_raw[DRC,k] / nu_factors[DRC,k]));
-        target += normal_lupdf(W_raw[(sumMplus[DRC] + 1):(sumMplus[DRC] + Mplus[DRC]),k] |
-                               W_norm[(sumMplus[DRC] + 1):(sumMplus[DRC] + Mplus[DRC]),k],
+        target += normal_lupdf(W_norm[(sumMplus[DRC] + 1):(sumMplus[DRC] + Mplus[DRC]),k] |
+                               W_ortho[(sumMplus[DRC] + 1):(sumMplus[DRC] + Mplus[DRC]),k],
                                0.1 * weight_scales[DRC,k]);
         for(d in 1:D) {
             target += student_t_lupdf(W_norm[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),k] |
@@ -408,11 +408,11 @@ model {
                                       0,
                                       weight_scales[DRC+d,k]
                                       * sqrt(nu_factors_raw[DRC+d,k] / nu_factors[DRC+d,k]));
-            target += normal_lupdf(W_raw[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),k] |
-                                   W_norm[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),k],
+            target += normal_lupdf(W_norm[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),k] |
+                                   W_ortho[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),k],
                                    0.1 * weight_scales[DRC+d,k]);
-            target += normal_lupdf(W_raw[VOBplus+Vplus+d,k] |
-                                   W_norm[VOBplus+Vplus+d,k],
+            target += normal_lupdf(W_norm[VOBplus+Vplus+d,k] |
+                                   W_ortho[VOBplus+Vplus+d,k],
                                    0.1 * weight_scales[DRC+d,k]);
         }
     }

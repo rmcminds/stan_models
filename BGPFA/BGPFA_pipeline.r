@@ -32,7 +32,7 @@ if(exists('myargs')) {if(length(myargs)==1) {input_prefix <- myargs[[1]]}} else 
 preprocess_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/intermediate/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
-engine <- 'sampling'
+engine <- 'advi'
 opencl <- FALSE
 output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
 
@@ -978,11 +978,11 @@ abundance_true_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) bacte
                                         sapply(1:N, function(x) if(I[3,x]) transcr_inits[I_cs[3,x],]),
                                         sapply(1:N, function(x) if(I[4,x]) itsFilt_inits[I_cs[4,x],])))
 
-Z_raw <- matrix(rnorm((K_linear+KG*K_gp)*N) * 0.001, nrow=K_linear+KG*K_gp)
-Z_raw <- diag(sqrt(colSums(t(Z_raw)^2))) %*% svd(t(Z_raw))$v %*% t(svd(t(Z_raw))$u)
+Z <- matrix(rnorm((K_linear+KG*K_gp)*N) * 0.001, nrow=K_linear+KG*K_gp)
+Z <- diag(sqrt(colSums(t(Z)^2))) %*% svd(t(Z))$v %*% t(svd(t(Z))$u)
 
-W_raw <- matrix(rnorm((VOBplus+sum(Mplus[1:D])+D) * K) * 0.001, ncol=K)
-W_raw <- svd(W_raw)$u %*% t(svd(W_raw)$v) %*% diag(sqrt(colSums(W_raw^2)))
+W_norm <- matrix(rnorm((VOBplus+sum(Mplus[1:D])+D) * K) * 0.001, ncol=K)
+W_norm <- svd(W_norm)$u %*% t(svd(W_norm)$v) %*% diag(sqrt(colSums(W_norm^2)))
 
 init <- list(abundance_true_vector = abundance_true_vector_inits,
              intercepts = intercepts_inits,
@@ -992,13 +992,13 @@ init <- list(abundance_true_vector = abundance_true_vector_inits,
              global_effect_scale = global_scale_prior,
              latent_scales = rep(global_scale_prior,K),
              sds = rep(0.01, VOBplus+sum(Mplus[1:D])+D),
-             dataset_scales = rep(1, 2*D+R+C),
+             dataset_scales = rep(0.01, 2*D+R+C),
              nu_factors_raw = matrix(10, nrow=2*D+R+C, ncol=K),
-             weight_scales = matrix(global_scale_prior * 0.05, nrow=2*D+R+C, ncol=K),
+             weight_scales = matrix(global_scale_prior, nrow=2*D+R+C, ncol=K),
              rho_sites = as.array(rep(mean(dist_sites[lower.tri(dist_sites)]) * 0.001, K)),
              site_prop = as.array(rep(0.001, K)),
-             Z_raw = Z_raw,
-             W_raw = W_raw,
+             Z      = Z,
+             W_norm = W_norm,
              P_missing = rep(-1,nMP),
              rho_Z = matrix(0.0001, nrow = K_linear, ncol = KG),
              inv_log_less_contamination = -inv_log_max_contam,
