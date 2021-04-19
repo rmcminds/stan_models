@@ -351,7 +351,8 @@ model {
     target += student_t_lupdf(latent_scales | 2, 0, global_effect_scale);
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, 25);
     target += std_normal_lupdf(contaminant_overdisp);
-    target += normal_lupdf(to_vector(Z) | to_vector(Z_ortho), 0.1);
+    target += normal_lupdf(to_vector(W_norm) | to_vector(W_ortho), 0.25 * fabs(to_vector(W_ortho)));
+    target += normal_lupdf(to_vector(Z) | to_vector(Z_ortho), 0.25 * fabs(to_vector(Z_ortho)));
     target += std_normal_lupdf(to_vector(Z[1:K_linear,]));
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);
     for(g in 1:KG) {
@@ -380,9 +381,6 @@ model {
                                       0,
                                       weight_scales[drc,k]
                                       * sqrt(nu_factors_raw[drc,k] / nu_factors[drc,k]));
-            target += normal_lupdf(W_norm[(sumMplus[drc] + 1):(sumMplus[drc] + Mplus[drc]),k] |
-                                   W_ortho[(sumMplus[drc] + 1):(sumMplus[drc] + Mplus[drc]),k],
-                                   0.1 * weight_scales[drc,k]);
         }
         target += multi_student_t_cholesky_lpdf(to_matrix(W_norm[(sumMplus[DRC] + 1):(sumMplus[DRC] + M[DRC]),k]) |
                                                 nu_factors[DRC,k],
@@ -394,9 +392,6 @@ model {
                                   0,
                                   weight_scales[DRC,k]
                                   * sqrt(nu_factors_raw[DRC,k] / nu_factors[DRC,k]));
-        target += normal_lupdf(W_norm[(sumMplus[DRC] + 1):(sumMplus[DRC] + Mplus[DRC]),k] |
-                               W_ortho[(sumMplus[DRC] + 1):(sumMplus[DRC] + Mplus[DRC]),k],
-                               0.1 * weight_scales[DRC,k]);
         for(d in 1:D) {
             target += student_t_lupdf(W_norm[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),k] |
                                       nu_factors[DRC+d,k],
@@ -408,12 +403,6 @@ model {
                                       0,
                                       weight_scales[DRC+d,k]
                                       * sqrt(nu_factors_raw[DRC+d,k] / nu_factors[DRC+d,k]));
-            target += normal_lupdf(W_norm[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),k] |
-                                   W_ortho[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),k],
-                                   0.1 * weight_scales[DRC+d,k]);
-            target += normal_lupdf(W_norm[VOBplus+Vplus+d,k] |
-                                   W_ortho[VOBplus+Vplus+d,k],
-                                   0.1 * weight_scales[DRC+d,k]);
         }
     }
     for(d in 1:D) {
