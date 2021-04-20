@@ -30,6 +30,7 @@ nu_residuals <- 25
 input_prefix <- file.path(Sys.getenv('HOME'), 'data/tara_unsupervised_analyses')
 if(exists('myargs')) {if(length(myargs)==1) {input_prefix <- myargs[[1]]}} else if(length(commandArgs(trailingOnly=TRUE)) > 0) {input_prefix <- commandArgs(trailingOnly=TRUE)[[1]]}
 preprocess_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/intermediate/')
+include_path <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utility/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
 engine <- 'advi'
@@ -1010,7 +1011,7 @@ write_stan_json(init, file.path(output_prefix, 'inits.json'))
 write_stan_json(data, file.path(output_prefix, 'data.json'))
 
 setwd(cmdstan_path())
-system(paste0(c('make ', 'make STAN_OPENCL=true ')[opencl+1], file.path(model_dir, model_name)))
+system(paste0(c('make ', 'make STAN_OPENCL=true ')[opencl+1], 'STANCFLAGS="--include-paths=', include_path, '" ', file.path(model_dir, model_name)))
 
 setwd(model_dir)
 print(sampling_commands[[engine]])
