@@ -188,7 +188,7 @@ transformed data {
 parameters {
     matrix[K_linear + KG * K_gp,N] Z; // PCA axis scores
     matrix[VOBplus+Vplus+D,K] W_norm; // PCA variable loadings
-    vector<lower=0>[VOBplus+Vplus+D] sds;
+    vector<lower=0>[VOBplus+Vplus+D] sds; // variable scales
     real<lower=0> global_effect_scale;
     real<lower=0> ortho_scale;
     row_vector<lower=0>[K] latent_scales;
@@ -208,31 +208,48 @@ parameters {
     vector<lower=0>[D] contaminant_overdisp;
 }
 transformed parameters {
-    vector[H] P_filled = P;
-    vector<upper=0>[D] log_less_contamination = inv(inv_log_less_contamination);
+    matrix[K,nVarGroups] Z_higher = Z * samp2group;
+    matrix[K_linear + KG * K_gp, N] Z_ortho = diag_pre_multiply(sqrt(rows_dot_self(Z)), svd_V(Z')) * svd_U(Z')';
+    matrix[VOBplus+Vplus+D,K] W_ortho = svd_U(W_norm) * diag_post_multiply(svd_V(W_norm)', sqrt(columns_dot_self(W_norm)));
     matrix[VOB,K] W;
     matrix[V,K] W_binary_counts;
-    matrix[K,nVarGroups] Z_higher;
     vector<lower=0>[VOBplus+Vplus+D] var_scales
         = sds
           .* append_row(prior_scales,
                         ones_vector(Vplus+D));
-    matrix<lower=2>[DRC,K] nu_factors = nu_factors_raw + 2;
+    vector<upper=0>[D] log_less_contamination = inv(inv_log_less_contamination);
+    vector[H] P_filled = P;
     cov_matrix[M[DRC]] cov_sites[K];
-    matrix[VOBplus+Vplus+D,K] W_ortho = svd_U(W_norm) * diag_post_multiply(svd_V(W_norm)', sqrt(columns_dot_self(W_norm)));
-    matrix[K_linear + KG * K_gp, N] Z_ortho = diag_pre_multiply(sqrt(rows_dot_self(Z)), svd_V(Z')) * svd_U(Z')';
+    matrix<lower=2>[DRC,K] nu_factors = nu_factors_raw + 2;
     for(miss in 1:nMP) P_filled[indMP[miss]] = P_missing[miss] + P_max[miss];
+    for(k in 1:K) {
+        cov_sites[k]
+            = fill_sym(site_prop[k]
+                       * square(weight_scales[DRC,k])
+//                     * circular_matern(dist_sites, ms, inv(rho_sites[k]), ffKJ, chooseRJ),
+                       * exp(-dist_sites / rho_sites[k]),
+                       M[DRC],
+                       square(weight_scales[DRC,k]) + 1e-9);
+    }
     for(drc in 1:DRC) {
         W[(sumM[drc] + 1):(sumM[drc] + M[drc]),]
             = diag_pre_multiply(segment(var_scales, sumMplus[drc] + 1, M[drc]),
                                 W_norm[(sumMplus[drc] + 1):(sumMplus[drc] + M[drc]),]); // effects for each base variable
+        if(drc == DRC) {
+            for(k in 1:K) {
+                W[(sumM[drc] + 1):(sumM[drc] + M[drc]),k]
+                    = cholesky_decompose(cov_sites[k])
+                      * sqrt(nu_factors_raw[DRC,k] / nu_factors[DRC,k])
+                      * W[(sumM[drc] + 1):(sumM[drc] + M[drc]),k];
+            }
+        } // induce correlation among sites
         if(Mplus[drc] > M[drc]) {
             W[(sumM[drc] + 1):(sumM[drc] + M[drc]),]
                 += to_matrix(segment(mm, sumMMplus[drc] + 1, MMplus[drc]), M[drc], Mplus[drc] - M[drc])
                    * diag_pre_multiply(segment(var_scales, sumMplus[drc] + M[drc] + 1, Mplus[drc] - M[drc]),
                                        W_norm[(sumMplus[drc] + M[drc] + 1):(sumMplus[drc] + Mplus[drc]),]); // add higher level effects
-        }
-    }
+        } // add higher level effects
+    } // scale PCA factor loadings and combine linear effects
     for(d in 1:D) {
         W_binary_counts[(sumM[d] + 1):(sumM[d] + M[d]),]
             = diag_pre_multiply(segment(var_scales, VOBplus + sumMplus[d] + 1, M[d]),
@@ -245,89 +262,72 @@ transformed parameters {
         }
         W_binary_counts[(sumM[d] + 1):(sumM[d] + M[d]),]
             += rep_matrix(var_scales[VOBplus+Vplus+d] * W_norm[VOBplus+Vplus+d,], M[d]);
-    }
-    Z_higher = Z * samp2group;
-    for(k in 1:K) {
-        cov_sites[k]
-            = fill_sym(site_prop[k]
-                       * square(weight_scales[DRC,k])
-//                     * circular_matern(dist_sites, ms, inv(rho_sites[k]), ffKJ, chooseRJ),
-                       * exp(-dist_sites / rho_sites[k]),
-                       M[DRC],
-                       square(weight_scales[DRC,k]) + 1e-9);
-    }
+    } // same as above, for prevalence estimates in count data
 }
 model {
     matrix[K, N + nVarGroups] Z_Z_higher = append_col(Z,Z_higher);
+    vector[VOBplus+Vplus+D] dsv;
+    matrix[VOBplus+Vplus+D,K] num;
+    matrix[VOBplus+Vplus+D,K] wsn;
     int Xplace = 1;
     int Pplace = 1;
     int Yplace = 1;
     int multinomPlace = 1;
-    target += inv_gamma_lupdf(to_vector(nu_factors_raw) | shape_gamma_fact, rate_gamma_fact);
-    target += std_normal_lupdf(dataset_scales);
-    target += cauchy_lupdf(intercepts | prior_intercept_centers, 2.5 * prior_intercept_scales);
-    target += cauchy_lupdf(binary_count_intercepts | binary_count_intercept_centers, 2.5);
-    target += cauchy_lupdf(binary_count_dataset_intercepts | 0, 2.5);
-    target += normal_lupdf(global_effect_scale | 0, global_scale_prior);
-    target += normal_lupdf(ortho_scale | 0, ortho_scale_prior);
-    target += student_t_lupdf(latent_scales | 2, 0, global_effect_scale);
-    target += student_t_lupdf(to_vector(weight_scales) | 2, 0, to_vector(rep_matrix(latent_scales, DRC+D)));
-    target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, gnorm_shape);
-    target += std_normal_lupdf(contaminant_overdisp);
-    target += normal_lupdf(to_vector(W_norm) | to_vector(W_ortho), global_effect_scale * ortho_scale);
-    target += normal_lupdf(to_vector(Z) | to_vector(Z_ortho), ortho_scale);
-    target += std_normal_lupdf(to_vector(Z[1:K_linear,]));
-    target += inv_gamma_lupdf(rho_sites | 5, 5 * rho_sites_prior);
-    target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);
+    for(drc in 1:DRC) {
+        dsv[(sumMplus[drc] + 1):(sumMplus[drc] + Mplus[drc])] = rep_vector(dataset_scales[drc], Mplus[drc]);
+        for(k in 1:K) {
+            num[(sumMplus[drc] + 1):(sumMplus[drc] + Mplus[drc]),k]
+                = rep_vector(nu_factors[drc,k],
+                             Mplus[drc]);
+            wsn[(sumMplus[drc] + 1):(sumMplus[drc] + Mplus[drc]),k]
+                = rep_vector(weight_scales[drc,k]
+                             * sqrt(nu_factors_raw[drc,k] / nu_factors[drc,k]),
+                             Mplus[drc]);
+        }
+        if(drc <= D) {
+            dsv[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d])] = rep_vector(dataset_scales[DRC+d], Mplus[DRC+d]);
+            dsv[VOBplus + Vplus + d] = dataset_scales[d];
+            for(k in 1:K) {
+                num[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),k]
+                    = rep_vector(nu_factors[d,k],
+                                 Mplus[d]);
+                num[VOBplus+Vplus+d,k]
+                    = rep_vector(nu_factors[DRC+d,k],
+                                 Mplus[d]);
+                wsn[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),k]
+                    = rep_vector(weight_scales[d,k]
+                                 * sqrt(nu_factors_raw[d,k] / nu_factors[d,k]),
+                                 Mplus[d]);
+                wsn[VOBplus+Vplus+d,k]
+                    = rep_vector(weight_scales[DRC+d,k]
+                                 * sqrt(nu_factors_raw[DRC+d,k] / nu_factors[DRC+d,k]),
+                                 Mplus[d]);
+            }
+        }
+    } // data wrangling (should replace with transformed data indices)
+    target += inv_gamma_lupdf(to_vector(nu_factors_raw) | shape_gamma_fact, rate_gamma_fact);                // PCA variable loadings have dataset and axis specific sparsity
+    target += std_normal_lupdf(dataset_scales);                                                              // entire datasets may have uniformly biased difference in scale compared to priors
+    target += cauchy_lupdf(intercepts | prior_intercept_centers, 2.5 * prior_intercept_scales);              // overall abundance and center of variables may differ from priors
+    target += cauchy_lupdf(binary_count_intercepts | binary_count_intercept_centers, 2.5);                   // overall prevalence may differ from priors
+    target += cauchy_lupdf(binary_count_dataset_intercepts | 0, 2.5);                                        // allow entire count datasets to have biased difference in prevalence compared to priors
+    target += normal_lupdf(global_effect_scale | 0, global_scale_prior);                                     // shrink global scale of effects toward zero
+    target += normal_lupdf(ortho_scale | 0, ortho_scale_prior);                                              // estimate necessary strength of orthonogonalization
+    target += student_t_lupdf(latent_scales | 2, 0, global_effect_scale);                                    // sparse selection of number of axes
+    target += student_t_lupdf(to_vector(weight_scales) | 2, 0, to_vector(rep_matrix(latent_scales, DRC+D))); // sparse selection of datasets per axis
+    target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, gnorm_shape);      // shrink amount of contamination in 'true zeros' toward zero
+    target += std_normal_lupdf(contaminant_overdisp);                                                        // shrink overdispersion of contaminant counts in 'true zeros' toward zero
+    target += normal_lupdf(to_vector(W_norm) | to_vector(W_ortho), global_effect_scale * ortho_scale);       // shrink PCA variable loadings toward closes orthogonal matrix
+    target += normal_lupdf(to_vector(Z) | to_vector(Z_ortho), ortho_scale);                                  // shrink PCA axis scores toward closes orthogonal matrix
+    target += std_normal_lupdf(to_vector(Z[1:K_linear,]));                                                   // first PCA axis scores are independent of one another
+    target += inv_gamma_lupdf(rho_sites | 5, 5 * rho_sites_prior);                                           // length scale for gaussian process on sites
+    target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);                                  // length scale for gaussian process on PCA axis scores
     for(g in 1:KG) {
         target += multi_gp_cholesky_lupdf(Z[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g),] |
                                           L_cov_exp_quad_ARD(Z[1:K_linear,], rho_Z[,g], 1e-9),
                                           ones_vector(K_gp));
-    }
-    for(drc in 1:DRC) {
-        target += normal_lupdf(sds[(sumMplus[drc] + 1):(sumMplus[drc] + Mplus[drc])] |
-                               0,
-                               dataset_scales[drc]);
-    }
-    for(d in 1:D) {
-        target += normal_lupdf(sds[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d])] |
-                               0,
-                               dataset_scales[DRC+d]);
-        target += normal_lupdf(sds[VOBplus + Vplus + d] |
-                               0,
-                               dataset_scales[DRC+d]);
-    }
-    for(k in 1:K) {
-        for(drc in 1:(DRC-1)) {
-            target += student_t_lupdf(W_norm[(sumMplus[drc] + 1):(sumMplus[drc] + Mplus[drc]),k] |
-                                      nu_factors[drc,k],
-                                      0,
-                                      weight_scales[drc,k]
-                                      * sqrt(nu_factors_raw[drc,k] / nu_factors[drc,k]));
-        }
-        target += multi_student_t_cholesky_lpdf(to_matrix(W_norm[(sumMplus[DRC] + 1):(sumMplus[DRC] + M[DRC]),k]) |
-                                                nu_factors[DRC,k],
-                                                to_matrix(zeros_vector(M[DRC])),
-                                                cholesky_decompose(cov_sites[k])
-                                                * sqrt(nu_factors_raw[DRC,k] / nu_factors[DRC,k]));
-        target += student_t_lupdf(W_norm[(sumMplus[DRC] + M[DRC] + 1):(sumMplus[DRC] + Mplus[DRC]),k] |
-                                  nu_factors[DRC,k],
-                                  0,
-                                  weight_scales[DRC,k]
-                                  * sqrt(nu_factors_raw[DRC,k] / nu_factors[DRC,k]));
-        for(d in 1:D) {
-            target += student_t_lupdf(W_norm[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),k] |
-                                      nu_factors[DRC+d,k],
-                                      0,
-                                      weight_scales[DRC+d,k]
-                                      * sqrt(nu_factors_raw[DRC+d,k] / nu_factors[DRC+d,k]));
-            target += student_t_lupdf(W_norm[VOBplus+Vplus+d,k] |
-                                      nu_factors[DRC+d,k],
-                                      0,
-                                      weight_scales[DRC+d,k]
-                                      * sqrt(nu_factors_raw[DRC+d,k] / nu_factors[DRC+d,k]));
-        }
-    }
+    }                                                                                                        // final KG * K_gp PCA axis scores are functions of first K_linear ones
+    target += normal_lupdf(sds | 0, dsv);                                                                    // per-variable sigmas shrink toward dataset scales
+    target += student_t_lupdf(to_vector(W_norm) | to_vector(num), 0, to_vector(wsn));                        // PCA loadings shrink to zero with axis-and-dataset-specific nu and variance
     for(d in 1:D) {
         matrix[M[d],sumID[d]] predicted
             = rep_matrix(intercepts[(sumM[d] + 1):(sumM[d] + M[d])], sumID[d])
@@ -376,7 +376,8 @@ model {
                                                                 phi[m]), //estimated abundance if true negative
                                         log_inv_logit(prevalence[m,n])
                                         + poisson_log_lpmf(X[Xplace + m - 1] |
-                                                           log_sum_exp(abundance_contam[m], abundance_true[m,n]) + multinomial_nuisance[multinomPlace])); //estimated abundance if true positive
+                                                           log_sum_exp(abundance_contam[m], abundance_true[m,n])
+                                                           + multinomial_nuisance[multinomPlace])); //estimated abundance if true positive
             }
             multinomPlace += 1;
             Xplace += M[d];
