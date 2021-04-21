@@ -299,7 +299,7 @@ model {
                                  Mplus[drc]);
                 wsn[VOBplus+Vplus+drc,k]
                     = weight_scales[DRC+drc,k]
-                      * sqrt(nu_factors_raw[DRC+drc,k] / nu_factors[DRC+drc,k]));
+                      * sqrt(nu_factors_raw[DRC+drc,k] / nu_factors[DRC+drc,k]);
             }
         }
     } // data wrangling (should replace with transformed data indices)
