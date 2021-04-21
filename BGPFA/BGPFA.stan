@@ -285,23 +285,23 @@ model {
                              Mplus[drc]);
         }
         if(drc <= D) {
-            dsv[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d])] = rep_vector(dataset_scales[DRC+d], Mplus[DRC+d]);
-            dsv[VOBplus + Vplus + d] = dataset_scales[d];
+            dsv[(VOBplus + sumMplus[drc] + 1):(VOBplus + sumMplus[drc] + Mplus[drc])] = rep_vector(dataset_scales[DRC+drc], Mplus[DRC+drc]);
+            dsv[VOBplus + Vplus + drc] = dataset_scales[drc];
             for(k in 1:K) {
-                num[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),k]
-                    = rep_vector(nu_factors[d,k],
-                                 Mplus[d]);
-                num[VOBplus+Vplus+d,k]
-                    = rep_vector(nu_factors[DRC+d,k],
-                                 Mplus[d]);
-                wsn[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),k]
-                    = rep_vector(weight_scales[d,k]
-                                 * sqrt(nu_factors_raw[d,k] / nu_factors[d,k]),
-                                 Mplus[d]);
-                wsn[VOBplus+Vplus+d,k]
-                    = rep_vector(weight_scales[DRC+d,k]
-                                 * sqrt(nu_factors_raw[DRC+d,k] / nu_factors[DRC+d,k]),
-                                 Mplus[d]);
+                num[(VOBplus + sumMplus[drc] + 1):(VOBplus + sumMplus[drc] + Mplus[drc]),k]
+                    = rep_vector(nu_factors[drc,k],
+                                 Mplus[drc]);
+                num[VOBplus+Vplus+drc,k]
+                    = rep_vector(nu_factors[DRC+drc,k],
+                                 Mplus[drc]);
+                wsn[(VOBplus + sumMplus[drc] + 1):(VOBplus + sumMplus[drc] + Mplus[drc]),k]
+                    = rep_vector(weight_scales[drc,k]
+                                 * sqrt(nu_factors_raw[drc,k] / nu_factors[drc,k]),
+                                 Mplus[drc]);
+                wsn[VOBplus+Vplus+drc,k]
+                    = rep_vector(weight_scales[DRC+drc,k]
+                                 * sqrt(nu_factors_raw[DRC+drc,k] / nu_factors[DRC+drc,k]),
+                                 Mplus[drc]);
             }
         }
     } // data wrangling (should replace with transformed data indices)
