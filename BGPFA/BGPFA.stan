@@ -230,7 +230,7 @@ transformed parameters {
                        * exp(-dist_sites / rho_sites[k]),
                        M[DRC],
                        square(weight_scales[DRC,k]) + 1e-9);
-    }
+    } // determine covariance of sites
     for(drc in 1:DRC) {
         W[(sumM[drc] + 1):(sumM[drc] + M[drc]),]
             = diag_pre_multiply(segment(var_scales, sumMplus[drc] + 1, M[drc]),
