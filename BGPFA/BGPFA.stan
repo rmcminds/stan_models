@@ -1,85 +1,87 @@
 //strong inspiration from https://www.cs.helsinki.fi/u/sakaya/tutorial/code/cca.R
 #include functions.stan
 data {
-    int<lower=0> N; // Number of samples
-    int<lower=0> D; // Number of compositional count datasets
-    int<lower=0> R; // Number of continuous datasets
-    int<lower=0> C; // Number of categorical datasets
-    int<lower=0> nVarGroups; // Number of groups of samples that have a shared single observation
-    int<lower=0> M[D+R+C]; // Number of observed variables in each dataset
-    int<lower=0> Mplus[D+R+C]; // Number of parameters for each dataset
-    int<lower=0> K_linear; // Number of residual latent linear dimensions
-    int<lower=0> K_gp; // Number of residual latent GP dimensions per kernel
-    int<lower=0> KG; // Number of unique GP kernels
-    int<lower=0> I[D, N + nVarGroups]; // Sample indices for count datasets
-    int<lower=0> O; // Total number of observed continuous variables
-    int<lower=0> IR[O, N + nVarGroups]; // Sample indices for continuous variables
-    int<lower=0> C_vars; // Total number of observed categorical variables
-    int<lower=0> IC[C_vars, N + nVarGroups]; // Sample indices for categorical datasets
-    int<lower=0> Mc[C_vars]; // Number of levels for each categorical variable
-    int<lower=0> F; // Total number of compositional count observations
-    int<lower=0> X[F]; // compositional count data
-    int<lower=0> G; // Total number of categorical observations
-    vector<lower=0>[G] Y; // categorical data
-    int<lower=0> H; // Total number of continuous observations
-    vector[H] P; // continuous data
+    int<lower=0> N;                                     // Number of samples
+    int<lower=0> D;                                     // Number of compositional count datasets
+    int<lower=0> R;                                     // Number of continuous datasets
+    int<lower=0> C;                                     // Number of categorical datasets
+    int<lower=0> nVarGroups;                            // Number of groups of samples that have a shared single observation
+    int<lower=0> M[D+R+C];                              // Number of observed variables in each dataset
+    int<lower=0> Mplus[D+R+C];                          // Number of parameters for each dataset
+    int<lower=0> K_linear;                              // Number of residual latent linear dimensions
+    int<lower=0> K_gp;                                  // Number of residual latent GP dimensions per kernel
+    int<lower=0> KG;                                    // Number of unique GP kernels
+    int<lower=0> I[D, N + nVarGroups];                  // Sample indices for count datasets
+    int<lower=0> O;                                     // Total number of observed continuous variables
+    int<lower=0> IR[O, N + nVarGroups];                 // Sample indices for continuous variables
+    int<lower=0> C_vars;                                // Total number of observed categorical variables
+    int<lower=0> IC[C_vars, N + nVarGroups];            // Sample indices for categorical datasets
+    int<lower=0> Mc[C_vars];                            // Number of levels for each categorical variable
+    int<lower=0> F;                                     // Total number of compositional count observations
+    int<lower=0> X[F];                                  // compositional count data
+    int<lower=0> G;                                     // Total number of categorical observations
+    vector<lower=0>[G] Y;                               // categorical data
+    int<lower=0> H;                                     // Total number of continuous observations
+    vector[H] P;                                        // continuous data
     real<lower=0> global_scale_prior;
-    real<lower=0> ortho_scale_prior;
+    real<lower=0> ortho_scale_prior;                    // prior degree of orthogonalization regularization
     vector<lower=0>[sum(Mplus)] prior_scales;
     vector<lower=0>[sum(M)] prior_intercept_scales;
     vector[sum(M)] prior_intercept_centers;
     vector[sum(M[1:D])] binary_count_intercept_centers;
-    int<lower=0> sizeMM; // size of model matrix for higher level variables
-    vector[sizeMM] mm; // model matrix for higher level variables
-    int<lower=0> nMP; // number of P measured as -inf
-    int<lower=0> indMP[nMP]; // indices for missing Ps
-    real P_max[nMP]; // lowest measured value for the variable corresponding to a missing P
-    real rate_gamma_fact; // scale of inverse gamma prior on nu for W
-    real shape_gamma_fact; // shape of inverse gamma prior on nu for W
-    vector[choose(M[size(M)],2)] dist_sites; // distance between sites
-    real rho_sites_prior; // prior expectation for length scale of gaussian process on sites
-    matrix[N,nVarGroups] samp2group;
-    int site_smoothness; // Matern smoothness parameter for sites
-    real nu_residuals;
-    vector[D] inv_log_max_contam; // prior expectation of contamination rate
-    real<lower=0> gnorm_shape;
+    int<lower=0> sizeMM;                                // size of model matrix for higher level variables
+    vector[sizeMM] mm;                                  // model matrix for higher level variables
+    int<lower=0> nMP;                                   // number of P measured as -inf
+    int<lower=0> indMP[nMP];                            // indices for missing Ps
+    real P_max[nMP];                                    // lowest measured value for the variable corresponding to a missing P
+    real rate_gamma_fact;                               // scale of inverse gamma prior on nu for W
+    real shape_gamma_fact;                              // shape of inverse gamma prior on nu for W
+    vector[choose(M[size(M)],2)] dist_sites;            // distance between sites
+    real rho_sites_prior;                               // prior expectation for length scale of gaussian process on sites
+    matrix[N,nVarGroups] samp2group;                    // Matrix to calculate means of grouped samples
+    int site_smoothness;                                // Matern smoothness parameter for sites
+    real nu_residuals;                                  // residual robustness
+    vector[D] inv_log_max_contam;                       // prior expectation of contamination rate
+    real<lower=0> gnorm_shape;                          // strength of prior pulling contamination toward zero
 }
 transformed data {
-    int K = K_linear + KG * K_gp;
-    int DRC = D+R+C; // Total number of datasets
-    int V = 0; // Total number of observed compositional count variables
-    int Vplus = 0; // Total number of observed compositional count parameters
-    int VOB = sum(M); // Total number of observed variables
-    int VOBplus = sum(Mplus); // Total number of parameters per dim
-    int sumM[DRC+1]; // Cumulative number of base level variables
-    int sumMplus[DRC+1]; // Cumulative number of base level and higher variables
-    int MMplus[DRC]; // size of model matrix for higher level variables
-    int sumMMplus[DRC+1]; // Cumulative size of model matrices for higher level variables
-    int sumMc[C_vars+1]; // Cumulative number of categorical levels
-    real rho_Z_shape = 1.0 / K_linear;
-    real rho_Z_scale = 6.0 / K_gp; // * 2 * tgamma((K_linear+1)/2.0) / tgamma(K_linear/2.0);
-    int nmulti = 0;
-    int sumID[D];
-    int IDInds[D,N+nVarGroups];
-    int X0Inds[D,N+nVarGroups];
-    int X1Inds[D,N+nVarGroups];
-    int NX1[D,N+nVarGroups] = rep_array(0,D,N+nVarGroups);
-    int NX0[D,N+nVarGroups] = rep_array(0,D,N+nVarGroups);
-    int xplace = 0;
-    int sumIR[R,N+nVarGroups];
-    int IRInds[R,N+nVarGroups,max(M[(D+1):(D+R)])];
-    int segInds1[R,N+nVarGroups,max(M[(D+1):(D+R)])];
+    int K = K_linear + KG * K_gp;                     // Total number of latent axes
+    int DRC = D+R+C;                                  // Total number of datasets
+    int V = 0;                                        // Total number of observed compositional count variables
+    int Vplus = 0;                                    // Total number of observed compositional count parameters
+    int VOB = sum(M);                                 // Total number of observed variables
+    int VOBplus = sum(Mplus);                         // Total number of parameters per dim
+    int sumM[DRC+1];                                  // Cumulative number of base level variables
+    int sumMplus[DRC+1];                              // Cumulative number of base level and higher variables
+    int MMplus[DRC];                                  // size of model matrix for higher level variables
+    int sumMMplus[DRC+1];                             // Cumulative size of model matrices for higher level variables
+    int sumMc[C_vars+1];                              // Cumulative number of categorical levels
+    int nmulti = 0;                                   // Total number of multinomial samples
+    int sumID[D];                                     // Number of samples in each count dataset
+    int IDInds[D,N+nVarGroups];                       // Indices mapping each sample to each count dataset
+    int sumIR[R,N+nVarGroups];                        // Number of samples in each continuous dataset
+    int IRInds[R,N+nVarGroups,max(M[(D+1):(D+R)])];   // Indices mapping each sample to each continuous dataset
+    int segInds1[R,N+nVarGroups,max(M[(D+1):(D+R)])]; // Various indices dealing with independent sets of continuous variables
     int segInds2[R,N+nVarGroups,max(M[(D+1):(D+R)])];
-    int nIsolate[R,N+nVarGroups] = rep_array(0,R,N+nVarGroups);
-    int nMat[R,N+nVarGroups] = rep_array(0,R,N+nVarGroups);
-    int matchInds[R,N+nVarGroups] = rep_array(0,R,N+nVarGroups);
-    int matchIndsInv[R,N+nVarGroups,N+nVarGroups] = rep_array(0,R,N+nVarGroups,N+nVarGroups);
-    int nMatches[R,N+nVarGroups] = rep_array(0,R,N+nVarGroups);
+    int nIsolate[R,N+nVarGroups]
+        = rep_array(0,R,N+nVarGroups);
+    int nMat[R,N+nVarGroups]
+        = rep_array(0,R,N+nVarGroups);
+    int matchInds[R,N+nVarGroups]
+        = rep_array(0,R,N+nVarGroups);
+    int matchIndsInv[R,N+nVarGroups,N+nVarGroups]
+        = rep_array(0,R,N+nVarGroups,N+nVarGroups);
+    int nMatches[R,N+nVarGroups]
+        = rep_array(0,R,N+nVarGroups);
     int nUniqueR[R] = rep_array(1,R);
-    int uniqueRInds[R,N+nVarGroups,max(M[(D+1):(D+R)])] = rep_array(0,R,N+nVarGroups,max(M[(D+1):(D+R)]));
-    int sumIRUnique[R,N+nVarGroups];
-    matrix[site_smoothness-1, 2 * site_smoothness] chooseRJ;
-    matrix[site_smoothness, 2 * site_smoothness] ffKJ;
+    int uniqueRInds[R,N+nVarGroups,max(M[(D+1):(D+R)])]
+        = rep_array(0,R,N+nVarGroups,max(M[(D+1):(D+R)]));
+    int sumIRUnique[R,N+nVarGroups];                         //
+    real rho_Z_shape = 1.0 / K_linear;                       // More 'independent' latent variables means more need for sparsity in feature selection
+    real rho_Z_scale = 6.0 / K_gp;                           // More 'dependent' latent variables per group means, in order to encourage orthogonality, length scale must be smaller
+    matrix[site_smoothness-1, 2 * site_smoothness] chooseRJ; // precomputed part of Matern covariance
+    matrix[site_smoothness, 2 * site_smoothness] ffKJ;       // precomputed part of Matern covariance
+    // create indices for all datasets
     sumM[1] = 0;
     sumMplus[1] = 0;
     sumMMplus[1] = 0;
@@ -89,9 +91,10 @@ transformed data {
         MMplus[drc] = M[drc] * (Mplus[drc] - M[drc]);
         sumMMplus[drc+1] = sum(MMplus[1:drc]);
     }
+    //
+    // create indices for count datasets
     V = sumM[D+1];
     Vplus = sumMplus[D+1];
-    // not used? some used?
     for(d in 1:D) {
         int nplace = 1;
         sumID[d] = sum(I[d,]);
@@ -99,21 +102,11 @@ transformed data {
             if(I[d,n]) {
                 IDInds[d,nplace] = n;
                 nplace += 1;
-                for(m in 1:M[d]) {
-                    if(X[xplace + m]) {
-                        NX1[d,n] += 1;
-                        X1Inds[d,NX1[d,n]] = m;
-                    } else {
-                        NX0[d,n] += 1;
-                        X0Inds[d,NX0[d,n]] = m;
-                    }
-                }
-                xplace += M[d];
             }
         }
     }
-    // end not used?
     nmulti = sum(sumID);
+    //
     // create indices for sets of independent continuous variables. would love simplification.
     for(r in 1:R) {
         matrix[M[D+r],M[D+r]] cov
@@ -192,26 +185,26 @@ transformed data {
     //
 }
 parameters {
-    matrix[K_linear + KG * K_gp,N] Z; // PCA axis scores
-    matrix[VOBplus+Vplus+D,K] W_norm; // PCA variable loadings
-    vector<lower=0>[VOBplus+Vplus+D] sds; // variable scales
-    real<lower=0> global_effect_scale;
-    real<lower=0> ortho_scale;
-    row_vector<lower=0>[K] latent_scales;
-    vector<lower=0>[DRC+D] dataset_scales;
-    matrix<lower=0>[DRC+D,K] weight_scales;
+    matrix[K_linear + KG * K_gp,N] Z;              // PCA axis scores
+    matrix[VOBplus+Vplus+D,K] W_norm;              // PCA variable loadings
+    vector<lower=0>[VOBplus+Vplus+D] sds;          // variable scales
+    real<lower=0> global_effect_scale;             // overall scale of variable loadings
+    real<lower=0> ortho_scale;                     // inverse strength of orthogonality shrinkage
+    row_vector<lower=0>[K] latent_scales;          // overall scale of each axis
+    vector<lower=0>[DRC+D] dataset_scales;         // overall scale of each dataset
+    matrix<lower=0>[DRC+D,K] weight_scales;        // per-dataset-and-axis scales
     vector[VOB] intercepts;
     vector[V] binary_count_intercepts;
-    vector[F] abundance_true_vector;
-    vector[D] binary_count_dataset_intercepts;
-    vector[nmulti] multinomial_nuisance;
-    vector<upper=0>[nMP] P_missing;
-    matrix<lower=0>[DRC+D,K] nu_factors_raw;
-    vector<lower=0>[K] rho_sites;
-    vector<lower=0, upper=1>[K] site_prop;
-    matrix<lower=0>[K_linear,KG] rho_Z;
-    vector<upper=0>[D] inv_log_less_contamination;
-    vector<lower=0>[D] contaminant_overdisp;
+    vector[F] abundance_true_vector;               // count dataset latent log abundance
+    vector[D] binary_count_dataset_intercepts;     // each count dataset could have biased prior intercepts
+    vector[nmulti] multinomial_nuisance;           // per-sample parameter to convert independent poisson distributions to a multinomial one
+    vector<upper=0>[nMP] P_missing;                // latent estimates of continuous variables with partial information (truncated observations)
+    matrix<lower=0>[DRC+D,K] nu_factors_raw;       // per-dataset-and-axis sparsity of variable loadings
+    vector<lower=0>[K] rho_sites;                  // length scale for site gaussian process
+    vector<lower=0, upper=1>[K] site_prop;         // importance of site covariance compared to nugget effect
+    matrix<lower=0>[K_linear,KG] rho_Z;            // length scale for latent axis gaussian process
+    vector<upper=0>[D] inv_log_less_contamination; // smaller = less average contamination
+    vector<lower=0>[D] contaminant_overdisp;       // dispersion parameter for amount of contamination in true negative count observations
 }
 transformed parameters {
     matrix[K,nVarGroups] Z_higher = Z * samp2group;
@@ -411,7 +404,7 @@ model {
                                               + W[(sumM[D+r] + 1):sumM[D+r+1],][inds,]
                                                 * Z_Z_higher[,n],
                                               sqrt(diagonal(cov)[inds]));
-                }
+                } // likelihood for variables with no higher level covariance, within datasets that do have such effects
                 if(nMat[r,matchInds[r,n]] > 0) {
                     int inds[nMat[r,matchInds[r,n]]] = segInds2[r,matchInds[r,n],1:nMat[r,matchInds[r,n]]];
                     observed[1:nMat[r,matchInds[r,n]],n] = segment(P_filled, Pplace, sumIR[r,n])[inds];
@@ -429,7 +422,7 @@ model {
                                                             nu_residuals,
                                                             predicted,
                                                             cholesky_decompose(cov[inds,inds]));
-                }
+                } // likelihood for sets of variables that share a subsettable covariance matrix
             }
         } else {
             for(n in 1:(N+nVarGroups)) {
@@ -443,7 +436,7 @@ model {
                     Pplace += sumIR[r,n];
                 }
             }
-        }
+        } // likelihood for entire datasets with no higher level covariance
     } // continuous likelihood
     for(cv in 1:C_vars) {
         for(n in 1:(N+nVarGroups)) {
@@ -464,7 +457,7 @@ model {
                             }
                         }
                     }
-                    target += terms;
+                    target += terms; // likelihood for categorical variables
                 } else {
                     real predicted
                         = intercepts[V + O + sumMc[cv] + 1]
@@ -479,7 +472,7 @@ model {
                                           log_inv_logit(predicted),
                                           log1m_inv_logit(predicted));
                     }
-                }
+                } // likelihood for binary variables
                 Yplace += Mc[cv];
             }
         }
