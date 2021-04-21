@@ -24,6 +24,7 @@ data {
     int<lower=0> H; // Total number of continuous observations
     vector[H] P; // continuous data
     real<lower=0> global_scale_prior;
+    real<lower=0> ortho_scale_prior;
     vector<lower=0>[sum(Mplus)] prior_scales;
     vector<lower=0>[sum(M)] prior_intercept_scales;
     vector[sum(M)] prior_intercept_centers;
@@ -43,6 +44,7 @@ data {
     int ms; // Matern smoothness parameter for sites
     real nu_residuals;
     vector[D] inv_log_max_contam; // prior expectation of contamination rate
+    real<lower=0> gnorm_shape;
 }
 transformed data {
     int K = K_linear + KG * K_gp;
@@ -188,6 +190,7 @@ parameters {
     matrix[VOBplus+Vplus+D,K] W_norm; // PCA variable loadings
     vector<lower=0>[VOBplus+Vplus+D] sds;
     real<lower=0> global_effect_scale;
+    real<lower=0> ortho_scale;
     row_vector<lower=0>[K] latent_scales;
     vector<lower=0>[DRC+D] dataset_scales;
     matrix<lower=0>[DRC+D,K] weight_scales;
@@ -265,13 +268,14 @@ model {
     target += cauchy_lupdf(intercepts | prior_intercept_centers, 2.5 * prior_intercept_scales);
     target += cauchy_lupdf(binary_count_intercepts | binary_count_intercept_centers, 2.5);
     target += cauchy_lupdf(binary_count_dataset_intercepts | 0, 2.5);
-    target += student_t_lupdf(global_effect_scale | 2, 0, global_scale_prior);
+    target += normal_lupdf(global_effect_scale | 0, global_scale_prior);
+    target += normal_lupdf(ortho_scale | 0, ortho_scale_prior);
     target += student_t_lupdf(latent_scales | 2, 0, global_effect_scale);
     target += student_t_lupdf(to_vector(weight_scales) | 2, 0, to_vector(rep_matrix(latent_scales, DRC+D)));
-    target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, 25);
+    target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, gnorm_shape);
     target += std_normal_lupdf(contaminant_overdisp);
-    target += normal_lupdf(to_vector(W_norm) | to_vector(W_ortho), 0.25 * global_effect_scale);
-    target += normal_lupdf(to_vector(Z) | to_vector(Z_ortho), 0.25);
+    target += normal_lupdf(to_vector(W_norm) | to_vector(W_ortho), global_effect_scale * ortho_scale);
+    target += normal_lupdf(to_vector(Z) | to_vector(Z_ortho), ortho_scale);
     target += std_normal_lupdf(to_vector(Z[1:K_linear,]));
     target += inv_gamma_lupdf(rho_sites | 5, 5 * rho_sites_prior);
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);

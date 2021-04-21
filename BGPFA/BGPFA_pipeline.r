@@ -26,6 +26,8 @@ rate_gamma_fact = 10
 shape_gamma_fact = 2
 site_smoothness <- 2
 nu_residuals <- 25
+ortho_scale_prior <- 0.25
+gnorm_shape <- 5
 
 input_prefix <- file.path(Sys.getenv('HOME'), 'data/tara_unsupervised_analyses')
 if(exists('myargs')) {if(length(myargs)==1) {input_prefix <- myargs[[1]]}} else if(length(commandArgs(trailingOnly=TRUE)) > 0) {input_prefix <- commandArgs(trailingOnly=TRUE)[[1]]}
@@ -971,7 +973,9 @@ data <- list(N = N,
              varsWGroupsInds     = varsWGroupsInds,
              ms                  = site_smoothness,
              nu_residuals        = nu_residuals,
-             inv_log_max_contam  = inv_log_max_contam)
+             inv_log_max_contam  = inv_log_max_contam,
+             ortho_scale_prior   = ortho_scale_prior,
+             gnorm_shape         = gnorm_shape)
 
 #### create initiliazations
 abundance_true_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) bacteriaFilt_inits[I_cs[1,x],]),
@@ -990,12 +994,13 @@ init <- list(abundance_true_vector = abundance_true_vector_inits,
              binary_count_intercepts = binary_count_intercepts_inits,
              binary_count_dataset_intercepts = rep(0,D),
              multinomial_nuisance = multinomial_nuisance_inits,
-             global_effect_scale = global_scale_prior,
-             latent_scales = rep(global_scale_prior,K),
+             global_effect_scale = global_scale_prior * 10,
+             ortho_scale         = 1,
+             latent_scales = rep(global_scale_prior * 10,K),
              sds = rep(0.01, VOBplus+sum(Mplus[1:D])+D),
              dataset_scales = rep(0.01, 2*D+R+C),
              nu_factors_raw = matrix(10, nrow=2*D+R+C, ncol=K),
-             weight_scales = matrix(global_scale_prior, nrow=2*D+R+C, ncol=K),
+             weight_scales = matrix(global_scale_prior * 10, nrow=2*D+R+C, ncol=K),
              rho_sites = as.array(rep(mean(dist_sites[lower.tri(dist_sites)]) * 0.001, K)),
              site_prop = as.array(rep(0.001, K)),
              Z      = Z,
@@ -1003,7 +1008,7 @@ init <- list(abundance_true_vector = abundance_true_vector_inits,
              P_missing = rep(-1,nMP),
              rho_Z = matrix(0.0001, nrow = K_linear, ncol = KG),
              inv_log_less_contamination = -inv_log_max_contam,
-             contaminant_overdisp = rep(1,D))
+             contaminant_overdisp = rep(10,D))
 
 save.image(file.path(output_prefix, 'setup.RData'))
 
