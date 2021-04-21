@@ -65,7 +65,7 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                        'grad_samples=1',
                                        'elbo_samples=100',
                                        'iter=30000',
-                                       'eta=1',
+                                       'eta=0.1',
                                        'adapt engaged=0',
                                        'tol_rel_obj=0.001',
                                        'output_samples=200',
@@ -448,7 +448,6 @@ for(f in fabT2isls) {
 
 allVarGroups <- unique(c(fabT1sites,fabT2isls))
 nVarGroups <- length(allVarGroups)
-nVarsWGroups <- ncol(fabT1agg) + ncol(fabT2agg)
 
 fabT1agg <- fabT1agg[allVarGroups[allVarGroups %in% rownames(fabT1agg)],]
 fabT2agg <- fabT2agg[allVarGroups[allVarGroups %in% rownames(fabT2agg)],]
@@ -925,8 +924,6 @@ sizeMM <- length(mm)
 varlabs <- c(colnames(bacteriaFilt), colnames(bactPhyMat), colnames(euksFilt), colnames(eukPhyMat), colnames(transcr), colnames(itsFilt), colnames(itsMat), colnames(biomarkersLog), biomarkermatNames, colnames(t2log), colnames(t2Mat), colnames(t3log), colnames(t3Mat), colnames(fabT1agg), names(fabT1aggMatNames), colnames(fabT2agg), colnames(snpmat), colnames(hostphotomat2), hostphotoHigherMatNames, colnames(envphotomat2), names(envphotoHigherMatNames), colnames(mmSpec), colnames(snpSVDmat), colnames(snpSVDHigherMat), colnames(siteMat), colnames(siteHigherMat))
 varlabsM <- c(colnames(bacteriaFilt), colnames(euksFilt), colnames(transcr), colnames(itsFilt), colnames(biomarkersLog), colnames(t2log), colnames(t3log), colnames(fabT1agg), colnames(fabT2agg), colnames(snpmat), colnames(hostphotomat2), colnames(envphotomat2), colnames(mmSpec), colnames(snpSVDmat), colnames(siteMat))
 
-varsWGroupsInds <- c(sapply(colnames(fabT1agg), function(x) which(x==varlabsM)), sapply(colnames(fabT2agg), function(x) which(x==varlabsM)))
-
 inv_log_max_contam <- 1 / (log(2) + log(c(max(apply(diag(1/rowSums(bacteriaFilt)) %*% bacteriaFilt, 2, function(x) max(x[x>0]) / min(x[x>0]))),
                                           max(apply(diag(1/rowSums(euksFilt)) %*% euksFilt, 2, function(x) max(x[x>0]) / min(x[x>0]))),
                                           max(apply(diag(1/rowSums(transcr)) %*% transcr, 2, function(x) max(x[x>0]) / min(x[x>0]))),
@@ -968,10 +965,8 @@ data <- list(N = N,
              dist_sites          = dist_sites[lower.tri(dist_sites)],
              rho_sites_prior     = mean(dist_sites[lower.tri(dist_sites)]),
              nVarGroups          = nVarGroups,
-             nVarsWGroups        = nVarsWGroups,
              samp2group          = samp2group,
-             varsWGroupsInds     = varsWGroupsInds,
-             ms                  = site_smoothness,
+             site_smoothness     = site_smoothness,
              nu_residuals        = nu_residuals,
              inv_log_max_contam  = inv_log_max_contam,
              ortho_scale_prior   = ortho_scale_prior,

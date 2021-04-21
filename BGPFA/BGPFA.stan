@@ -5,7 +5,7 @@ data {
     int<lower=0> D; // Number of compositional count datasets
     int<lower=0> R; // Number of continuous datasets
     int<lower=0> C; // Number of categorical datasets
-    int<lower=0> nVarGroups;
+    int<lower=0> nVarGroups; // Number of groups of samples that have a shared single observation
     int<lower=0> M[D+R+C]; // Number of observed variables in each dataset
     int<lower=0> Mplus[D+R+C]; // Number of parameters for each dataset
     int<lower=0> K_linear; // Number of residual latent linear dimensions
@@ -29,19 +29,17 @@ data {
     vector<lower=0>[sum(M)] prior_intercept_scales;
     vector[sum(M)] prior_intercept_centers;
     vector[sum(M[1:D])] binary_count_intercept_centers;
-    int<lower=0> sizeMM;
+    int<lower=0> sizeMM; // size of model matrix for higher level variables
     vector[sizeMM] mm; // model matrix for higher level variables
     int<lower=0> nMP; // number of P measured as -inf
     int<lower=0> indMP[nMP]; // indices for missing Ps
     real P_max[nMP]; // lowest measured value for the variable corresponding to a missing P
-    real rate_gamma_fact;
-    real shape_gamma_fact;
-    vector[choose(M[size(M)],2)] dist_sites;
-    real rho_sites_prior;
-    int nVarsWGroups;
+    real rate_gamma_fact; // scale of inverse gamma prior on nu for W
+    real shape_gamma_fact; // shape of inverse gamma prior on nu for W
+    vector[choose(M[size(M)],2)] dist_sites; // distance between sites
+    real rho_sites_prior; // prior expectation for length scale of gaussian process on sites
     matrix[N,nVarGroups] samp2group;
-    int varsWGroupsInds[nVarsWGroups];
-    int ms; // Matern smoothness parameter for sites
+    int site_smoothness; // Matern smoothness parameter for sites
     real nu_residuals;
     vector[D] inv_log_max_contam; // prior expectation of contamination rate
     real<lower=0> gnorm_shape;
@@ -80,8 +78,8 @@ transformed data {
     int nUniqueR[R] = rep_array(1,R);
     int uniqueRInds[R,N+nVarGroups,max(M[(D+1):(D+R)])] = rep_array(0,R,N+nVarGroups,max(M[(D+1):(D+R)]));
     int sumIRUnique[R,N+nVarGroups];
-    matrix[ms-1, 2 * ms] chooseRJ;
-    matrix[ms, 2 * ms] ffKJ;
+    matrix[site_smoothness-1, 2 * site_smoothness] chooseRJ;
+    matrix[site_smoothness, 2 * site_smoothness] ffKJ;
     sumM[1] = 0;
     sumMplus[1] = 0;
     sumMMplus[1] = 0;
@@ -93,6 +91,7 @@ transformed data {
     }
     V = sumM[D+1];
     Vplus = sumMplus[D+1];
+    // not used? some used?
     for(d in 1:D) {
         int nplace = 1;
         sumID[d] = sum(I[d,]);
@@ -113,7 +112,9 @@ transformed data {
             }
         }
     }
+    // end not used?
     nmulti = sum(sumID);
+    // create indices for sets of independent continuous variables. would love simplification.
     for(r in 1:R) {
         matrix[M[D+r],M[D+r]] cov
             = tcrossprod(to_matrix(segment(mm, sumMMplus[D+r] + 1, MMplus[D+r]),
@@ -172,18 +173,23 @@ transformed data {
             }
         }
     }
+    // end creating continuous variable indices
+    // create indices for categorical variables
     sumMc[1] = 0;
     for(cv in 1:C_vars) sumMc[cv+1] = sum(Mc[1:cv]);
-    for(r in 0:(ms-2)) {
+    //
+    // pre-compute some parts of the circular matern covariance function
+    for(r in 0:(site_smoothness-2)) {
         for(j in 0:(2*r+1)) {
             chooseRJ[r+1,j+1] = choose(2*r+1,j);
         }
     }
-    for(k in 0:(ms-1)) {
+    for(k in 0:(site_smoothness-1)) {
         for(j in 0:k) {
             ffKJ[k+1,j+1] = ff(k,j);
         }
     }
+    //
 }
 parameters {
     matrix[K_linear + KG * K_gp,N] Z; // PCA axis scores
@@ -226,7 +232,7 @@ transformed parameters {
         cov_sites[k]
             = fill_sym(site_prop[k]
                        * square(weight_scales[DRC,k])
-//                     * circular_matern(dist_sites, ms, inv(rho_sites[k]), ffKJ, chooseRJ),
+                   //  * circular_matern(dist_sites, site_smoothness, inv(rho_sites[k]), ffKJ, chooseRJ),
                        * exp(-dist_sites / rho_sites[k]),
                        M[DRC],
                        square(weight_scales[DRC,k]) + 1e-9);
@@ -265,6 +271,7 @@ transformed parameters {
     } // same as above, for prevalence estimates in count data
 }
 model {
+    // data wrangling (should replace some with transformed data indices)
     matrix[K, N + nVarGroups] Z_Z_higher = append_col(Z,Z_higher);
     vector[VOBplus+Vplus+D] dsv;
     matrix[VOBplus+Vplus+D,K] num;
@@ -302,7 +309,9 @@ model {
                       * sqrt(nu_factors_raw[DRC+drc,k] / nu_factors[DRC+drc,k]);
             }
         }
-    } // data wrangling (should replace with transformed data indices)
+    }
+    // end data wrangling
+    // priors
     target += inv_gamma_lupdf(to_vector(nu_factors_raw) | shape_gamma_fact, rate_gamma_fact);                // PCA variable loadings have dataset and axis specific sparsity
     target += std_normal_lupdf(dataset_scales);                                                              // entire datasets may have uniformly biased difference in scale compared to priors
     target += cauchy_lupdf(intercepts | prior_intercept_centers, 2.5 * prior_intercept_scales);              // overall abundance and center of variables may differ from priors
@@ -326,6 +335,8 @@ model {
     }                                                                                                        // final KG * K_gp PCA axis scores are functions of first K_linear ones
     target += normal_lupdf(sds | 0, dsv);                                                                    // per-variable sigmas shrink toward dataset scales
     target += student_t_lupdf(to_vector(W_norm) | to_vector(num), 0, to_vector(wsn));                        // PCA loadings shrink to zero with axis-and-dataset-specific nu and variance
+    // end priors
+    // likelihoods
     for(d in 1:D) {
         matrix[M[d],sumID[d]] predicted
             = rep_matrix(intercepts[(sumM[d] + 1):(sumM[d] + M[d])], sumID[d])
