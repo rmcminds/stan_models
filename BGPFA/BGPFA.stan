@@ -285,7 +285,7 @@ model {
                              Mplus[drc]);
         }
         if(drc <= D) {
-            dsv[(VOBplus + sumMplus[drc] + 1):(VOBplus + sumMplus[drc] + Mplus[drc])] = rep_vector(dataset_scales[DRC+drc], Mplus[DRC+drc]);
+            dsv[(VOBplus + sumMplus[drc] + 1):(VOBplus + sumMplus[drc] + Mplus[drc])] = rep_vector(dataset_scales[DRC+drc], Mplus[drc]);
             dsv[VOBplus + Vplus + drc] = dataset_scales[drc];
             for(k in 1:K) {
                 num[(VOBplus + sumMplus[drc] + 1):(VOBplus + sumMplus[drc] + Mplus[drc]),k]
