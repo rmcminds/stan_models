@@ -292,16 +292,14 @@ model {
                     = rep_vector(nu_factors[drc,k],
                                  Mplus[drc]);
                 num[VOBplus+Vplus+drc,k]
-                    = rep_vector(nu_factors[DRC+drc,k],
-                                 Mplus[drc]);
+                    = nu_factors[DRC+drc,k];
                 wsn[(VOBplus + sumMplus[drc] + 1):(VOBplus + sumMplus[drc] + Mplus[drc]),k]
                     = rep_vector(weight_scales[drc,k]
                                  * sqrt(nu_factors_raw[drc,k] / nu_factors[drc,k]),
                                  Mplus[drc]);
                 wsn[VOBplus+Vplus+drc,k]
-                    = rep_vector(weight_scales[DRC+drc,k]
-                                 * sqrt(nu_factors_raw[DRC+drc,k] / nu_factors[DRC+drc,k]),
-                                 Mplus[drc]);
+                    = weight_scales[DRC+drc,k]
+                      * sqrt(nu_factors_raw[DRC+drc,k] / nu_factors[DRC+drc,k]));
             }
         }
     } // data wrangling (should replace with transformed data indices)
