@@ -78,5 +78,10 @@ functions {
         for(j in 1:cols(x)) y[j] = x[,j];
         return(y);
     }
+    matrix cholesky_like(matrix A) {
+        vector[rows(A)] lambda = eigenvalues_sym(A);
+        for(i in 1:rows(A)) if(lambda[i] < 0) lambda[i] = 0;
+        return(qr_thin_R(diag_post_multiply(eigenvectors_sym(A), sqrt(lambda))')');
+    } // https://math.stackexchange.com/questions/423138/cholesky-for-non-positive-definite-matrices
 }
 
