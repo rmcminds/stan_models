@@ -17,9 +17,9 @@ logit <- function(p) log(p/(1-p))
 inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 
 nMicrobeKeep <- 500
-K_linear <- 5#10
-K_gp <- 20
-KG <- 1#2
+K_linear <- 5
+K_gp <- 15
+KG <- 3
 K <- K_linear + KG * K_gp
 global_scale_prior = 2.5
 rate_gamma_fact = 10
@@ -36,7 +36,7 @@ include_path <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utility/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
 engine <- 'advi'
-opencl <- FALSE
+opencl <- TRUE
 output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
 
 dir.create(output_prefix, recursive = TRUE)
@@ -53,7 +53,7 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                           'max_depth=7',
                                           'num_warmup=300',
                                           'num_samples=100',
-                                          ('opencl platform=0 device=1')[opencl],
+                                          ('opencl platform=0 device=0')[opencl],
                                           sep=' '),
                           advi = paste(paste0('./', model_name),
                                        paste0('data file=', file.path(output_prefix, 'data.json')),
@@ -65,11 +65,11 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                        'grad_samples=1',
                                        'elbo_samples=100',
                                        'iter=30000',
-                                       'eta=1',
+                                       'eta=0.1',
                                        'adapt engaged=0',
                                        'tol_rel_obj=0.001',
                                        'output_samples=200',
-                                       ('opencl platform=0 device=1')[opencl],
+                                       ('opencl platform=0 device=0')[opencl],
                                        sep=' '))
 
 sample_data <- read.table(file.path(input_prefix, 'Stephane/20201008/TARA-PACIFIC_samples-provenance_20200731d.txt'), sep='\t', skip=1, header=T, comment.char='', stringsAsFactors=TRUE)
@@ -984,26 +984,26 @@ Z <- diag(sqrt(colSums(t(Z)^2))) %*% svd(t(Z))$v %*% t(svd(t(Z))$u)
 W_norm <- matrix(rnorm((VOBplus+sum(Mplus[1:D])+D) * K) * 0.001, ncol=K)
 W_norm <- svd(W_norm)$u %*% t(svd(W_norm)$v) %*% diag(sqrt(colSums(W_norm^2)))
 
-init <- list(abundance_true_vector = abundance_true_vector_inits,
-             intercepts = intercepts_inits,
-             binary_count_intercepts = binary_count_intercepts_inits,
+init <- list(abundance_true_vector           = abundance_true_vector_inits,
+             intercepts                      = intercepts_inits,
+             binary_count_intercepts         = binary_count_intercepts_inits,
              binary_count_dataset_intercepts = rep(0,D),
-             multinomial_nuisance = multinomial_nuisance_inits,
-             global_effect_scale = global_scale_prior * 10,
-             ortho_scale         = 1,
-             latent_scales = rep(global_scale_prior * 10,K),
-             sds = rep(0.01, VOBplus+sum(Mplus[1:D])+D),
+             multinomial_nuisance            = multinomial_nuisance_inits,
+             global_effect_scale  = global_scale_prior * 10,
+             ortho_scale          = 1,
+             latent_scales        = rep(global_scale_prior * 10,K),
+             sds            = rep(0.01, VOBplus+sum(Mplus[1:D])+D),
              dataset_scales = rep(0.01, 2*D+R+C),
              nu_factors_raw = matrix(10, nrow=2*D+R+C, ncol=K),
-             weight_scales = matrix(global_scale_prior * 10, nrow=2*D+R+C, ncol=K),
+             weight_scales  = matrix(global_scale_prior * 10, nrow=2*D+R+C, ncol=K),
              rho_sites = as.array(rep(mean(dist_sites[lower.tri(dist_sites)]), K)),
              site_prop = as.array(rep(0.5, K)),
-             Z      = Z,
-             W_norm = W_norm,
+             Z         = Z,
+             W_norm    = W_norm,
              P_missing = rep(-1,nMP),
              rho_Z = matrix(0.0001, nrow = K_linear, ncol = KG),
-             inv_log_less_contamination = -inv_log_max_contam,
-             contaminant_overdisp = rep(10,D))
+             inv_log_less_contamination  = -inv_log_max_contam,
+             contaminant_overdisp        = rep(10,D))
 
 save.image(file.path(output_prefix, 'setup.RData'))
 
