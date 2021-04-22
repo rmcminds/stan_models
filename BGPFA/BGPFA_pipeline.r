@@ -17,9 +17,9 @@ logit <- function(p) log(p/(1-p))
 inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 
 nMicrobeKeep <- 500
-K_linear <- 10
+K_linear <- 5#10
 K_gp <- 20
-KG <- 2
+KG <- 1#2
 K <- K_linear + KG * K_gp
 global_scale_prior = 2.5
 rate_gamma_fact = 10
@@ -65,7 +65,7 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                        'grad_samples=1',
                                        'elbo_samples=100',
                                        'iter=30000',
-                                       'eta=0.1',
+                                       'eta=1',
                                        'adapt engaged=0',
                                        'tol_rel_obj=0.001',
                                        'output_samples=200',

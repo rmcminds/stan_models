@@ -59,6 +59,8 @@ transformed data {
     int nmulti = 0;                                   // Total number of multinomial samples
     int sumID[D];                                     // Number of samples in each count dataset
     int IDInds[D,N+nVarGroups];                       // Indices mapping each sample to each count dataset
+    int sumMhigherD[D];
+    int F_higher;
     int sumIR[R,N+nVarGroups];                        // Number of samples in each continuous dataset
     int IRInds[R,N+nVarGroups,max(M[(D+1):(D+R)])];   // Indices mapping each sample to each continuous dataset
     int segInds1[R,N+nVarGroups,max(M[(D+1):(D+R)])]; // Various indices dealing with independent sets of continuous variables
@@ -98,6 +100,7 @@ transformed data {
     for(d in 1:D) {
         int nplace = 1;
         sumID[d] = sum(I[d,]);
+        sumMhigherD[d] = sumID[d] * (Mplus[d] - M[d]);
         for(n in 1:(N+nVarGroups)) {
             if(I[d,n]) {
                 IDInds[d,nplace] = n;
@@ -106,6 +109,7 @@ transformed data {
         }
     }
     nmulti = sum(sumID);
+    F_higher = sum(sumMhigherD);
     //
     // create indices for sets of independent continuous variables. would love simplification.
     for(r in 1:R) {
@@ -196,6 +200,7 @@ parameters {
     vector[VOB] intercepts;
     vector[V] binary_count_intercepts;
     vector[F] abundance_true_vector;               // count dataset latent log abundance
+    vector[F_higher] abundance_higher_vector;
     vector[D] binary_count_dataset_intercepts;     // each count dataset could have biased prior intercepts
     vector[nmulti] multinomial_nuisance;           // per-sample parameter to convert independent poisson distributions to a multinomial one
     vector<upper=0>[nMP] P_missing;                // latent estimates of continuous variables with partial information (truncated observations)
@@ -270,6 +275,7 @@ model {
     matrix[VOBplus+Vplus+D,K] num;
     matrix[VOBplus+Vplus+D,K] wsn;
     int Xplace = 1;
+    int X_higher_place = 1;
     int Pplace = 1;
     int Yplace = 1;
     int multinomPlace = 1;
@@ -351,18 +357,28 @@ model {
                         M[d], sumID[d]);
         vector[M[d]] phi;
         if(Mplus[d] > M[d]) {
-            matrix[M[d],M[d]] cov
-                = add_diag(tcrossprod(diag_post_multiply(
-                                   to_matrix(segment(mm, sumMMplus[d] + 1, MMplus[d]),
-                                             M[d],
-                                             Mplus[d] - M[d]),
-                                   segment(var_scales, sumMplus[d] + M[d] + 1, Mplus[d] - M[d]))),
-                           square(segment(var_scales, sumMplus[d] + 1, M[d])) + 1e-9);
-            target += multi_student_t_cholesky_lpdf(abundance_true |
-                                                    nu_residuals,
-                                                    predicted,
-                                                    cholesky_decompose(cov));
-            phi = inv_square(contaminant_overdisp[d]) * inv(diagonal(cov));
+            matrix[M[d],Mplus[d] - M[d]] MM
+                = to_matrix(segment(mm, sumMMplus[d] + 1, MMplus[d]),
+                            M[d],
+                            Mplus[d] - M[d]);
+            matrix[M[d],sumID[d]] resid_higher
+                = MM
+                  * to_matrix(segment(abundance_higher_vector, X_higher_place, (Mplus[d] - M[d]) * sumID[d]),
+                              Mplus[d] - M[d], sumID[d]);
+            target += student_t_lpdf(segment(abundance_higher_vector, X_higher_place, (Mplus[d] - M[d]) * sumID[d]) |
+                                     nu_residuals,
+                                     0,
+                                     to_vector(rep_matrix(segment(var_scales, sumMplus[d] + M[d] + 1, Mplus[d] - M[d]), sumID[d])));
+            X_higher_place += (Mplus[d] - M[d]) * sumID[d];
+            target += student_t_lpdf(to_vector(abundance_true) |
+                                     nu_residuals,
+                                     to_vector(predicted + resid_higher),
+                                     to_vector(rep_matrix(segment(var_scales, sumMplus[d] + 1, M[d]), sumID[d])));
+            phi
+                = inv_square(contaminant_overdisp[d])
+                  * inv(rows_dot_self(diag_post_multiply(MM,
+                                                         segment(var_scales, sumMplus[d] + M[d] + 1, Mplus[d] - M[d])))
+                        + square(segment(var_scales, sumMplus[d] + 1, M[d])));
         } else {
             target += student_t_lupdf(to_vector(abundance_true) |
                                       nu_residuals,
@@ -421,7 +437,7 @@ model {
                     target += multi_student_t_cholesky_lpdf(observed[1:nMat[r,m], matchIndsInv[r,m,1:nMatches[r,m]]] |
                                                             nu_residuals,
                                                             predicted,
-                                                            cholesky_decompose(cov[inds,inds]));
+                                                           cholesky_decompose(cov[inds,inds]));
                 } // likelihood for sets of variables that share a subsettable covariance matrix
             }
         } else {
