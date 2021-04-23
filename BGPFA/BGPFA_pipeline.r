@@ -36,7 +36,7 @@ include_path <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utility/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
 engine <- 'advi'
-opencl <- TRUE
+opencl <- FALSE
 output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
 
 dir.create(output_prefix, recursive = TRUE)
@@ -916,10 +916,21 @@ prior_intercept_scales <- c(apply(bacteriaFilt_inits,2,sd),
 prior_intercept_centers <- intercepts_inits
 binary_count_intercept_centers <- binary_count_intercepts_inits
 
-Mplus <- M + c(ncol(bactPhyMat), ncol(eukPhyMat), 0, ncol(itsMat), ncol(biomarkermat), ncol(t2Mat), ncol(t3Mat), ncol(fabT1aggMat), 0, 0, ncol(hostphotoHigherMat), ncol(envphotoHigherMat), 0, ncol(snpSVDHigherMat), ncol(siteHigherMat))
+M_higher <- c(ncol(bactPhyMat), ncol(eukPhyMat), 0, ncol(itsMat), ncol(biomarkermat), ncol(t2Mat), ncol(t3Mat), ncol(fabT1aggMat), 0, 0, ncol(hostphotoHigherMat), ncol(envphotoHigherMat), 0, ncol(snpSVDHigherMat), ncol(siteHigherMat))
+Mplus <- M + M_higher
 VOBplus <- sum(Mplus)
 mm <- c(bactPhyMat, eukPhyMat, itsMat, biomarkermat, t2Mat, t3Mat, fabT1aggMat, hostphotoHigherMat, envphotoHigherMat, snpSVDHigherMat, siteHigherMat)
 sizeMM <- length(mm)
+
+F_higher <- sapply(1:D, function(x) sum(I[x,]*(Mplus[x]-M[x])))
+
+IR_higher <- rbind(t(biomarkermat) %*% IR[1:M[D+1],],
+                   t(t2Mat) %*% IR[(M[D+1] + 1):sum(M[(D+1):(D+2)]),],
+                   t(t3Mat) %*% IR[(sum(M[(D+1):(D+2)]) + 1):sum(M[(D+1):(D+3)]),],
+                   t(fabT1aggMat) %*% IR[(sum(M[(D+1):(D+3)]) + 1):sum(M[(D+1):(D+4)]),])
+IR_higher[IR_higher > 0] <- 1
+O_higher = nrow(IR_higher)
+H_higher <- sum(IR_higher > 0)
 
 varlabs <- c(colnames(bacteriaFilt), colnames(bactPhyMat), colnames(euksFilt), colnames(eukPhyMat), colnames(transcr), colnames(itsFilt), colnames(itsMat), colnames(biomarkersLog), biomarkermatNames, colnames(t2log), colnames(t2Mat), colnames(t3log), colnames(t3Mat), colnames(fabT1agg), names(fabT1aggMatNames), colnames(fabT2agg), colnames(snpmat), colnames(hostphotomat2), hostphotoHigherMatNames, colnames(envphotomat2), names(envphotoHigherMatNames), colnames(mmSpec), colnames(snpSVDmat), colnames(snpSVDHigherMat), colnames(siteMat), colnames(siteHigherMat))
 varlabsM <- c(colnames(bacteriaFilt), colnames(euksFilt), colnames(transcr), colnames(itsFilt), colnames(biomarkersLog), colnames(t2log), colnames(t3log), colnames(fabT1agg), colnames(fabT2agg), colnames(snpmat), colnames(hostphotomat2), colnames(envphotomat2), colnames(mmSpec), colnames(snpSVDmat), colnames(siteMat))
@@ -934,16 +945,21 @@ data <- list(N = N,
              R = R,
              C = C,
              M = M,
+             M_higher = M_higher,
              Mplus = Mplus,
              I = I,
              O = O,
+             O_higher = O_higher,
              IR = IR,
+             IR_higher = IR_higher,
              IC = IC,
              F = F,
+             F_higher = sum(F_higher),
              X = X,
              G = G,
              Y = Y,
              H = H,
+             H_higher = H_higher,
              P = P,
              C_vars = C_vars,
              Mc = Mc,
@@ -998,6 +1014,8 @@ init <- list(abundance_true_vector           = abundance_true_vector_inits,
              weight_scales  = matrix(global_scale_prior * 10, nrow=2*D+R+C, ncol=K),
              rho_sites = as.array(rep(mean(dist_sites[lower.tri(dist_sites)]), K)),
              site_prop = as.array(rep(0.5, K)),
+             abundance_higher_vector = rep(0,sum(F_higher)),
+             P_higher  = rep(0,H_higher),
              Z         = Z,
              W_norm    = W_norm,
              P_missing = rep(-1,nMP),

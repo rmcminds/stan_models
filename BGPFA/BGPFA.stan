@@ -7,21 +7,26 @@ data {
     int<lower=0> C;                                     // Number of categorical datasets
     int<lower=0> nVarGroups;                            // Number of groups of samples that have a shared single observation
     int<lower=0> M[D+R+C];                              // Number of observed variables in each dataset
+    int<lower=0> M_higher[D+R+C];                          // Number of parameters for each dataset
     int<lower=0> Mplus[D+R+C];                          // Number of parameters for each dataset
     int<lower=0> K_linear;                              // Number of residual latent linear dimensions
     int<lower=0> K_gp;                                  // Number of residual latent GP dimensions per kernel
     int<lower=0> KG;                                    // Number of unique GP kernels
     int<lower=0> I[D, N + nVarGroups];                  // Sample indices for count datasets
     int<lower=0> O;                                     // Total number of observed continuous variables
+    int<lower=0> O_higher;                              // Total number of higher effects for observed continuous variables
     int<lower=0> IR[O, N + nVarGroups];                 // Sample indices for continuous variables
+    int<lower=0> IR_higher[O_higher, N + nVarGroups];   // Sample indices for higher effects of continuous variables
     int<lower=0> C_vars;                                // Total number of observed categorical variables
     int<lower=0> IC[C_vars, N + nVarGroups];            // Sample indices for categorical datasets
     int<lower=0> Mc[C_vars];                            // Number of levels for each categorical variable
     int<lower=0> F;                                     // Total number of compositional count observations
+    int<lower=0> F_higher;                              // Total number of higher effects for compositional count observations
     int<lower=0> X[F];                                  // compositional count data
     int<lower=0> G;                                     // Total number of categorical observations
     vector<lower=0>[G] Y;                               // categorical data
     int<lower=0> H;                                     // Total number of continuous observations
+    int<lower=0> H_higher;                              // Total number of higher effects for continuous observations
     vector[H] P;                                        // continuous data
     real<lower=0> global_scale_prior;
     real<lower=0> ortho_scale_prior;                    // prior degree of orthogonalization regularization
@@ -52,6 +57,7 @@ transformed data {
     int VOB = sum(M);                                 // Total number of observed variables
     int VOBplus = sum(Mplus);                         // Total number of parameters per dim
     int sumM[DRC+1];                                  // Cumulative number of base level variables
+    int sumMhigher[DRC+1];                                  // Cumulative number of base level variables
     int sumMplus[DRC+1];                              // Cumulative number of base level and higher variables
     int MMplus[DRC];                                  // size of model matrix for higher level variables
     int sumMMplus[DRC+1];                             // Cumulative size of model matrices for higher level variables
@@ -59,38 +65,24 @@ transformed data {
     int nmulti = 0;                                   // Total number of multinomial samples
     int sumID[D];                                     // Number of samples in each count dataset
     int IDInds[D,N+nVarGroups];                       // Indices mapping each sample to each count dataset
-    int sumMhigherD[D];
-    int F_higher;
-    int sumIR[R,N+nVarGroups];                        // Number of samples in each continuous dataset
+    int sumIR[R,N+nVarGroups];                        // Number of continuous observations in each sample, per dataset
     int IRInds[R,N+nVarGroups,max(M[(D+1):(D+R)])];   // Indices mapping each sample to each continuous dataset
-    int segInds1[R,N+nVarGroups,max(M[(D+1):(D+R)])]; // Various indices dealing with independent sets of continuous variables
-    int segInds2[R,N+nVarGroups,max(M[(D+1):(D+R)])];
-    int nIsolate[R,N+nVarGroups]
-        = rep_array(0,R,N+nVarGroups);
-    int nMat[R,N+nVarGroups]
-        = rep_array(0,R,N+nVarGroups);
-    int matchInds[R,N+nVarGroups]
-        = rep_array(0,R,N+nVarGroups);
-    int matchIndsInv[R,N+nVarGroups,N+nVarGroups]
-        = rep_array(0,R,N+nVarGroups,N+nVarGroups);
-    int nMatches[R,N+nVarGroups]
-        = rep_array(0,R,N+nVarGroups);
-    int nUniqueR[R] = rep_array(1,R);
-    int uniqueRInds[R,N+nVarGroups,max(M[(D+1):(D+R)])]
-        = rep_array(0,R,N+nVarGroups,max(M[(D+1):(D+R)]));
-    int sumIRUnique[R,N+nVarGroups];                         //
+    int sumIR_higher[R,N+nVarGroups];                 // Number of continuous higher effects in each sample, per dataset
+    int IR_higher_inds[R,N+nVarGroups,max(M_higher[(D+1):(D+R)])];   // Indices mapping each sample to each continuous dataset
     real rho_Z_shape = 1.0 / K_linear;                       // More 'independent' latent variables means more need for sparsity in feature selection
     real rho_Z_scale = 6.0 / K_gp;                           // More 'dependent' latent variables per group means, in order to encourage orthogonality, length scale must be smaller
     matrix[site_smoothness-1, 2 * site_smoothness] chooseRJ; // precomputed part of Matern covariance
     matrix[site_smoothness, 2 * site_smoothness] ffKJ;       // precomputed part of Matern covariance
     // create indices for all datasets
     sumM[1] = 0;
+    sumMhigher[1] = 0;
     sumMplus[1] = 0;
     sumMMplus[1] = 0;
     for(drc in 1:DRC) {
         sumM[drc+1] = sum(M[1:drc]);
+        sumMhigher[drc+1] = sum(M_higher[1:drc]);
         sumMplus[drc+1] = sum(Mplus[1:drc]);
-        MMplus[drc] = M[drc] * (Mplus[drc] - M[drc]);
+        MMplus[drc] = M[drc] * M_higher[drc];
         sumMMplus[drc+1] = sum(MMplus[1:drc]);
     }
     //
@@ -100,7 +92,6 @@ transformed data {
     for(d in 1:D) {
         int nplace = 1;
         sumID[d] = sum(I[d,]);
-        sumMhigherD[d] = sumID[d] * (Mplus[d] - M[d]);
         for(n in 1:(N+nVarGroups)) {
             if(I[d,n]) {
                 IDInds[d,nplace] = n;
@@ -109,63 +100,24 @@ transformed data {
         }
     }
     nmulti = sum(sumID);
-    F_higher = sum(sumMhigherD);
     //
-    // create indices for sets of independent continuous variables. would love simplification.
+    // create indices for continuous variables
     for(r in 1:R) {
-        matrix[M[D+r],M[D+r]] cov
-            = tcrossprod(to_matrix(segment(mm, sumMMplus[D+r] + 1, MMplus[D+r]),
-                                   M[D+r],
-                                   Mplus[D+r] - M[D+r]));
         for(n in 1:(N+nVarGroups)) {
             int segplace = 1;
+            int segplace_higher = 1;
             sumIR[r,n] = sum(IR[(sumM[D+r]-V+1):(sumM[D+r+1]-V),n]);
+            sumIR_higher[r,n] = sum(IR_higher[(sumMhigher[D+r]-sumMhigher[D+1]+1):(sumMhigher[D+r+1]-sumMhigher[D+1]),n]);
             for(o in 1:M[D+r]) {
                 if(IR[sumM[D+r]-V+o, n]) {
                     IRInds[r,n,segplace] = o;
                     segplace += 1;
                 }
             }
-            for(o in 1:sumIR[r,n]) {
-                if(sum(cov[IRInds[r,n,1:sumIR[r,n]],IRInds[r,n,o]]) == cov[IRInds[r,n,o],IRInds[r,n,o]]) {
-                    nIsolate[r,n] += 1;
-                    segInds1[r,n,nIsolate[r,n]] = o;
-                }
-            }
-        }
-        uniqueRInds[r,1,] = IRInds[r,1,];
-        nMatches[r,1] = 1;
-        matchInds[r,1] = 1;
-        matchIndsInv[r,1,1] = 1;
-        for(n in 2:(N+nVarGroups)) {
-            for(m in 1:nUniqueR[r]) {
-                if(sumIR[r,n] == sumIR[r,matchIndsInv[r,m,1]]) {
-                    for(o in 1:sumIR[r,n]) {
-                        if(IRInds[r,n,o] != uniqueRInds[r,m,o]) {
-                            break;
-                        }
-                        if(o == sumIR[r,n]) {
-                            nMatches[r,m] += 1;
-                            matchInds[r,n] = m;
-                            matchIndsInv[r,m,nMatches[r,m]] = n;
-                        }
-                    }
-                }
-                if((matchInds[r,n] == 0) && (m == nUniqueR[r])) {
-                    nUniqueR[r] += 1;
-                    uniqueRInds[r,nUniqueR[r],] = IRInds[r,n,];
-                    nMatches[r,nUniqueR[r]] += 1;
-                    matchInds[r,n] = nUniqueR[r];
-                    matchIndsInv[r,nUniqueR[r],nMatches[r,nUniqueR[r]]] = n;
-                }
-            }
-        }
-        for(m in 1:nUniqueR[r]) {
-            sumIRUnique[r,m] = sumIR[r,matchIndsInv[r,m,1]];
-            for(o in 1:sumIRUnique[r,m]) {
-                if(sum(cov[uniqueRInds[r,m,1:sumIRUnique[r,m]],uniqueRInds[r,m,o]]) != cov[uniqueRInds[r,m,o],uniqueRInds[r,m,o]]) {
-                    nMat[r,m] += 1;
-                    segInds2[r,m,nMat[r,m]] = o;
+            for(o in 1:M_higher[D+r]) {
+                if(IR_higher[sumMhigher[D+r]-sumMhigher[D+1]+o, n]) {
+                    IR_higher_inds[r,n,segplace_higher] = o;
+                    segplace_higher += 1;
                 }
             }
         }
@@ -201,6 +153,7 @@ parameters {
     vector[V] binary_count_intercepts;
     vector[F] abundance_true_vector;               // count dataset latent log abundance
     vector[F_higher] abundance_higher_vector;
+    vector[H_higher] P_higher;
     vector[D] binary_count_dataset_intercepts;     // each count dataset could have biased prior intercepts
     vector[nmulti] multinomial_nuisance;           // per-sample parameter to convert independent poisson distributions to a multinomial one
     vector<upper=0>[nMP] P_missing;                // latent estimates of continuous variables with partial information (truncated observations)
@@ -249,8 +202,8 @@ transformed parameters {
         } // induce correlation among sites
         if(Mplus[drc] > M[drc]) {
             W[(sumM[drc] + 1):(sumM[drc] + M[drc]),]
-                += to_matrix(segment(mm, sumMMplus[drc] + 1, MMplus[drc]), M[drc], Mplus[drc] - M[drc])
-                   * diag_pre_multiply(segment(var_scales, sumMplus[drc] + M[drc] + 1, Mplus[drc] - M[drc]),
+                += to_matrix(segment(mm, sumMMplus[drc] + 1, MMplus[drc]), M[drc], M_higher[drc])
+                   * diag_pre_multiply(segment(var_scales, sumMplus[drc] + M[drc] + 1, M_higher[drc]),
                                        W_norm[(sumMplus[drc] + M[drc] + 1):(sumMplus[drc] + Mplus[drc]),]); // add higher level effects
         } // add higher level effects
     } // scale PCA factor loadings and combine linear effects
@@ -260,8 +213,8 @@ transformed parameters {
                                 W_norm[(VOBplus + sumMplus[d] + 1):(VOBplus + sumMplus[d] + M[d]),]);
         if(Mplus[d] > M[d]) {
             W_binary_counts[(sumM[d] + 1):(sumM[d] + M[d]),]
-                += to_matrix(segment(mm, sumMMplus[d] + 1, MMplus[d]), M[d], Mplus[d] - M[d])
-                   * diag_pre_multiply(segment(var_scales, VOBplus + sumMplus[d] + M[d] + 1, Mplus[d] - M[d]),
+                += to_matrix(segment(mm, sumMMplus[d] + 1, MMplus[d]), M[d], M_higher[d])
+                   * diag_pre_multiply(segment(var_scales, VOBplus + sumMplus[d] + M[d] + 1, M_higher[d]),
                                        W_norm[(VOBplus + sumMplus[d] + M[d] + 1):(VOBplus + sumMplus[d] + Mplus[d]),]);
         }
         W_binary_counts[(sumM[d] + 1):(sumM[d] + M[d]),]
@@ -274,9 +227,13 @@ model {
     vector[VOBplus+Vplus+D] dsv;
     matrix[VOBplus+Vplus+D,K] num;
     matrix[VOBplus+Vplus+D,K] wsn;
+    vector[H] P_predicted;
+    vector[H] P_var;
+    vector[H_higher] P_higher_var;
     int Xplace = 1;
     int X_higher_place = 1;
     int Pplace = 1;
+    int P_higher_place = 1;
     int Yplace = 1;
     int multinomPlace = 1;
     for(drc in 1:DRC) {
@@ -357,27 +314,25 @@ model {
                         M[d], sumID[d]);
         vector[M[d]] phi;
         if(Mplus[d] > M[d]) {
-            matrix[M[d],Mplus[d] - M[d]] MM
+            matrix[M[d],M_higher[d]] MM
                 = to_matrix(segment(mm, sumMMplus[d] + 1, MMplus[d]),
                             M[d],
-                            Mplus[d] - M[d]);
+                            M_higher[d]);
             matrix[M[d],sumID[d]] resid_higher
-                = MM
-                  * to_matrix(segment(abundance_higher_vector, X_higher_place, (Mplus[d] - M[d]) * sumID[d]),
-                              Mplus[d] - M[d], sumID[d]);
-            target += student_t_lpdf(segment(abundance_higher_vector, X_higher_place, (Mplus[d] - M[d]) * sumID[d]) |
+                = MM * to_matrix(segment(abundance_higher_vector, X_higher_place, M_higher[d] * sumID[d]),
+                                 M_higher[d], sumID[d]);
+            target += student_t_lpdf(segment(abundance_higher_vector, X_higher_place, M_higher[d] * sumID[d]) |
                                      nu_residuals,
                                      0,
-                                     to_vector(rep_matrix(segment(var_scales, sumMplus[d] + M[d] + 1, Mplus[d] - M[d]), sumID[d])));
-            X_higher_place += (Mplus[d] - M[d]) * sumID[d];
+                                     to_vector(rep_matrix(segment(var_scales, sumMplus[d] + M[d] + 1, M_higher[d]), sumID[d])));
+            X_higher_place += M_higher[d] * sumID[d];
             target += student_t_lpdf(to_vector(abundance_true) |
                                      nu_residuals,
                                      to_vector(predicted + resid_higher),
                                      to_vector(rep_matrix(segment(var_scales, sumMplus[d] + 1, M[d]), sumID[d])));
-            phi
-                = inv_square(contaminant_overdisp[d])
+            phi = inv_square(contaminant_overdisp[d])
                   * inv(rows_dot_self(diag_post_multiply(MM,
-                                                         segment(var_scales, sumMplus[d] + M[d] + 1, Mplus[d] - M[d])))
+                                                         segment(var_scales, sumMplus[d] + M[d] + 1, M_higher[d])))
                         + square(segment(var_scales, sumMplus[d] + 1, M[d])));
         } else {
             target += student_t_lupdf(to_vector(abundance_true) |
@@ -402,58 +357,39 @@ model {
         }
     } // count likelihood
     for(r in 1:R) {
+        matrix[M[D+r],M_higher[D+r]] MM;
         if(Mplus[D+r] > M[D+r]) {
-            matrix[max(nMat[r,]), N+nVarGroups] observed;
-            matrix[M[D+r],M[D+r]] cov
-                = add_diag(tcrossprod(diag_post_multiply(
-                                   to_matrix(segment(mm, sumMMplus[D+r] + 1, MMplus[D+r]),
-                                             M[D+r],
-                                             Mplus[D+r] - M[D+r]),
-                                   segment(var_scales, sumMplus[D+r] + M[D+r] + 1, Mplus[D+r] - M[D+r]))),
-                           square(segment(var_scales, sumMplus[D+r] + 1, M[D+r])) + 1e-9);
-            for(n in 1:(N+nVarGroups)) {
-                if(nIsolate[r,n] > 0) {
-                    int inds[nIsolate[r,n]] = IRInds[r,n,1:sumIR[r,n]][segInds1[r,n,1:nIsolate[r,n]]];
-                    target += student_t_lupdf(segment(P_filled, Pplace, sumIR[r,n])[segInds1[r,n,1:nIsolate[r,n]]] |
-                                              nu_residuals,
-                                              intercepts[(sumM[D+r] + 1):sumM[D+r+1]][inds]
-                                              + W[(sumM[D+r] + 1):sumM[D+r+1],][inds,]
-                                                * Z_Z_higher[,n],
-                                              sqrt(diagonal(cov)[inds]));
-                } // likelihood for variables with no higher level covariance, within datasets that do have such effects
-                if(nMat[r,matchInds[r,n]] > 0) {
-                    int inds[nMat[r,matchInds[r,n]]] = segInds2[r,matchInds[r,n],1:nMat[r,matchInds[r,n]]];
-                    observed[1:nMat[r,matchInds[r,n]],n] = segment(P_filled, Pplace, sumIR[r,n])[inds];
+            MM = to_matrix(segment(mm, sumMMplus[D+r] + 1, MMplus[D+r]),
+                           M[D+r],
+                           M_higher[D+r]);
+        }
+        for(n in 1:(N+nVarGroups)) {
+            if(sumIR[r,n] > 0) {
+                P_predicted[Pplace:(Pplace + sumIR[r,n] - 1)]
+                    = intercepts[(sumM[D+r] + 1):sumM[D+r+1]][IRInds[r,n,1:sumIR[r,n]]]
+                      + W[(sumM[D+r] + 1):sumM[D+r+1],][IRInds[r,n,1:sumIR[r,n]],]
+                        * Z_Z_higher[,n];
+                P_var[Pplace:(Pplace + sumIR[r,n] - 1)] = segment(var_scales, sumM[D+r] + 1, M[D+r])[IRInds[r,n,1:sumIR[r,n]]];
+                if(sumIR_higher[r,n] > 0) {
+                        P_predicted[Pplace:(Pplace + sumIR[r,n] - 1)]
+                            += MM[IRInds[r,n,1:sumIR[r,n]],IR_higher_inds[r,n,1:sumIR_higher[r,n]]]
+                               * segment(P_higher, P_higher_place, sumIR_higher[r,n]);
+                        P_higher_var[P_higher_place:(P_higher_place + sumIR_higher[r,n] - 1)]
+                            = segment(var_scales, sumMplus[D+r] + M[D+r] + 1, M_higher[D+r])[IR_higher_inds[r,n,1:sumIR_higher[r,n]]];
+                        P_higher_place += sumIR_higher[r,n];
                 }
                 Pplace += sumIR[r,n];
             }
-            for(m in 1:nUniqueR[r]) {
-                if(nMat[r,m] > 0) {
-                    int inds[nMat[r,m]] = uniqueRInds[r,m,1:sumIRUnique[r,m]][segInds2[r,m,1:nMat[r,m]]];
-                    matrix[nMat[r,m], nMatches[r,m]] predicted
-                        = rep_matrix(intercepts[(sumM[D+r] + 1):(sumM[D+r+1])][inds], nMatches[r,m])
-                          + W[(sumM[D+r] + 1):(sumM[D+r] + M[D+r]),][inds,]
-                            * Z_Z_higher[,matchIndsInv[r,m,1:nMatches[r,m]]];
-                    target += multi_student_t_cholesky_lpdf(observed[1:nMat[r,m], matchIndsInv[r,m,1:nMatches[r,m]]] |
-                                                            nu_residuals,
-                                                            predicted,
-                                                           cholesky_decompose(cov[inds,inds]));
-                } // likelihood for sets of variables that share a subsettable covariance matrix
-            }
-        } else {
-            for(n in 1:(N+nVarGroups)) {
-                if(sumIR[r,n] > 0) {
-                    target += student_t_lupdf(segment(P_filled, Pplace, sumIR[r,n]) |
-                                              nu_residuals,
-                                              intercepts[(sumM[D+r] + 1):sumM[D+r+1]][IRInds[r,n,1:sumIR[r,n]]]
-                                              + W[(sumM[D+r] + 1):sumM[D+r+1],][IRInds[r,n,1:sumIR[r,n]],]
-                                                * Z_Z_higher[,n],
-                                              segment(var_scales, sumM[D+r] + 1, M[D+r])[IRInds[r,n,1:sumIR[r,n]]]);
-                    Pplace += sumIR[r,n];
-                }
-            }
-        } // likelihood for entire datasets with no higher level covariance
-    } // continuous likelihood
+        }
+    }
+    target += student_t_lupdf(P_higher |
+                              nu_residuals,
+                              0,
+                              P_higher_var);
+    target += student_t_lupdf(P_filled |
+                              nu_residuals,
+                              P_predicted,
+                              P_var);  // continuous likelihood
     for(cv in 1:C_vars) {
         for(n in 1:(N+nVarGroups)) {
             if(IC[cv,n]) {
