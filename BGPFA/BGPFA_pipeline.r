@@ -508,54 +508,63 @@ IR[ncol(biomarkersLog) + ncol(t2log) + (1:ncol(t3log)),1:N] <- t(apply(t3log, 2,
 IR[ncol(biomarkersLog) + ncol(t2log) + ncol(t3log) + (1:ncol(fabT1agg)),(N+1):(N+nVarGroups)] <- t(apply(fabT1agg, 2, function(x) as.integer(allVarGroups %in% rownames(fabT1agg)[!is.na(x)])))
 IR[ncol(biomarkersLog) + ncol(t2log) + ncol(t3log) + ncol(fabT1agg) + (1:ncol(fabT2agg)),(N+1):(N+nVarGroups)] <- t(apply(fabT2agg, 2, function(x) as.integer(allVarGroups %in% rownames(fabT2agg)[!is.na(x)])))
 
-IC <- matrix(0, nrow=C_vars, ncol=(N+nVarGroups))
+B <- sum(Mc)
+IC <- matrix(0, nrow=B, ncol=(N+nVarGroups))
+IC[1:sum(Msnp),1:N] <- t(apply(snpmat, 2, function(x) as.integer(allsamples %in% rownames(snpmat)[!is.na(x)])))
+IC[sum(Msnp) + (1:sum(Mhostphoto)), 1:N] <- t(apply(hostphotomat2, 2, function(x) as.integer(allsamples %in% rownames(hostphotomat2)[!is.na(x)])))
+IC[sum(Msnp) + sum(Mhostphoto) + (1:sum(Menvphoto)), 1:N] <- t(apply(envphotomat2, 2, function(x) as.integer(allsamples %in% rownames(envphotomat2)[!is.na(x)])))
+IC[sum(Msnp) + sum(Mhostphoto) + sum(Menvphoto) + (1:sum(mSpec)), 1:N] <- t(apply(mmSpec, 2, function(x) as.integer(allsamples %in% rownames(mmSpec)[!is.na(x)])))
+IC[sum(Msnp) + sum(Mhostphoto) + sum(Menvphoto) + sum(mSpec) + (1:sum(MSVD)), 1:N] <- t(apply(snpSVDmat, 2, function(x) as.integer(allsamples %in% rownames(snpSVDmat)[!is.na(x)])))
+IC[sum(Msnp) + sum(Mhostphoto) + sum(Menvphoto) + sum(mSpec) + sum(MSVD) + (1:sum(nSites)), 1:N] <- t(apply(siteMat, 2, function(x) as.integer(allsamples %in% rownames(siteMat)[!is.na(x)])))
+
+ICv <- matrix(0, nrow=C_vars, ncol=(N+nVarGroups))
 for(var in 1:length(Msnp)) {
     if(Msnp[var] > 1) {
-        IC[var,1:N] <- as.integer(allsamples %in% rownames(snpmat)[apply(!is.na(snpmat[,(sum(Msnp[0:(var-1)])+1):sum(Msnp[0:var])]), 1, all)])
+        ICv[var,1:N] <- as.integer(allsamples %in% rownames(snpmat)[apply(!is.na(snpmat[,(sum(Msnp[0:(var-1)])+1):sum(Msnp[0:var])]), 1, all)])
     } else {
-        IC[var,1:N] <- as.integer(allsamples %in% rownames(snpmat)[!is.na(snpmat[,sum(Msnp[0:var])])])
+        ICv[var,1:N] <- as.integer(allsamples %in% rownames(snpmat)[!is.na(snpmat[,sum(Msnp[0:var])])])
     }
 }
 for(var in 1:length(Mhostphoto)) {
     if(Mhostphoto[var] > 1) {
-        IC[length(Msnp) + var,1:N] <- as.integer(allsamples %in% rownames(hostphotomat2)[apply(!is.na(hostphotomat2[,(sum(Mhostphoto[0:(var-1)])+1):sum(Mhostphoto[0:var])]), 1, all)])
+        ICv[length(Msnp) + var,1:N] <- as.integer(allsamples %in% rownames(hostphotomat2)[apply(!is.na(hostphotomat2[,(sum(Mhostphoto[0:(var-1)])+1):sum(Mhostphoto[0:var])]), 1, all)])
     } else {
-        IC[length(Msnp) + var,1:N] <- as.integer(allsamples %in% rownames(hostphotomat2)[!is.na(hostphotomat2[,sum(Mhostphoto[0:var])])])
+        ICv[length(Msnp) + var,1:N] <- as.integer(allsamples %in% rownames(hostphotomat2)[!is.na(hostphotomat2[,sum(Mhostphoto[0:var])])])
     }
 }
 for(var in 1:length(Menvphoto)) {
     if(Menvphoto[var] > 1) {
-        IC[length(Msnp) + length(Mhostphoto) + var,1:N] <- as.integer(allsamples %in% rownames(envphotomat2)[apply(!is.na(envphotomat2[,(sum(Menvphoto[0:(var-1)])+1):sum(Menvphoto[0:var])]), 1, all)])
+        ICv[length(Msnp) + length(Mhostphoto) + var,1:N] <- as.integer(allsamples %in% rownames(envphotomat2)[apply(!is.na(envphotomat2[,(sum(Menvphoto[0:(var-1)])+1):sum(Menvphoto[0:var])]), 1, all)])
     } else {
-        IC[length(Msnp) + length(Mhostphoto) + var,1:N] <- as.integer(allsamples %in% rownames(envphotomat2)[!is.na(envphotomat2[,sum(Menvphoto[0:var])])])
+        ICv[length(Msnp) + length(Mhostphoto) + var,1:N] <- as.integer(allsamples %in% rownames(envphotomat2)[!is.na(envphotomat2[,sum(Menvphoto[0:var])])])
     }
 }
 for(var in 1:length(mSpec)) {
     if(mSpec[var] > 1) {
-        IC[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + var,1:N] <- as.integer(allsamples %in% rownames(mmSpec)[apply(!is.na(mmSpec[,(sum(mSpec[0:(var-1)])+1):sum(mSpec[0:var])]), 1, all)])
+        ICv[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + var,1:N] <- as.integer(allsamples %in% rownames(mmSpec)[apply(!is.na(mmSpec[,(sum(mSpec[0:(var-1)])+1):sum(mSpec[0:var])]), 1, all)])
     } else {
-        IC[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + var,1:N] <- as.integer(allsamples %in% rownames(mmSpec)[!is.na(mmSpec[,sum(mSpec[0:var])])])
+        ICv[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + var,1:N] <- as.integer(allsamples %in% rownames(mmSpec)[!is.na(mmSpec[,sum(mSpec[0:var])])])
     }
 }
 for(var in 1:length(MSVD)) {
     if(MSVD[var] > 1) {
-        IC[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + length(mSpec) + var,1:N] <- as.integer(allsamples %in% rownames(snpSVDmat)[apply(!is.na(snpSVDmat[,(sum(MSVD[0:(var-1)])+1):sum(MSVD[0:var])]), 1, all)])
+        ICv[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + length(mSpec) + var,1:N] <- as.integer(allsamples %in% rownames(snpSVDmat)[apply(!is.na(snpSVDmat[,(sum(MSVD[0:(var-1)])+1):sum(MSVD[0:var])]), 1, all)])
     } else {
-        IC[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + length(mSpec) + var,1:N] <- as.integer(allsamples %in% rownames(snpSVDmat)[!is.na(snpSVDmat[,sum(MSVD[0:var])])])
+        ICv[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + length(mSpec) + var,1:N] <- as.integer(allsamples %in% rownames(snpSVDmat)[!is.na(snpSVDmat[,sum(MSVD[0:var])])])
     }
 }
 for(var in 1:length(nSites)) {
     if(nSites[var] > 1) {
-        IC[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + length(mSpec) + length(MSVD) + var,1:N] <- as.integer(allsamples %in% rownames(siteMat)[apply(!is.na(siteMat[,(sum(nSites[0:(var-1)])+1):sum(nSites[0:var])]), 1, all)])
+        ICv[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + length(mSpec) + length(MSVD) + var,1:N] <- as.integer(allsamples %in% rownames(siteMat)[apply(!is.na(siteMat[,(sum(nSites[0:(var-1)])+1):sum(nSites[0:var])]), 1, all)])
     } else {
-        IC[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + length(mSpec) + length(MSVD) + var,1:N] <- as.integer(allsamples %in% rownames(siteMat)[!is.na(siteMat[,sum(nSites[0:var])])])
+        ICv[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + length(mSpec) + length(MSVD) + var,1:N] <- as.integer(allsamples %in% rownames(siteMat)[!is.na(siteMat[,sum(nSites[0:var])])])
     }
 }
-colnames(IC) <- c(allsamples, paste0('varGroup',1:nVarGroups))
+colnames(ICv) <- c(allsamples, paste0('varGroup',1:nVarGroups))
 
 I_cs <- t(apply(I, 1, cumsum))
 IR_cs <- t(apply(IR, 1, cumsum))
-IC_cs <- t(apply(IC, 1, cumsum))
+IC_cs <- t(apply(ICv, 1, cumsum))
 
 X <- unlist(c(sapply(1:(N+nVarGroups), function(x) if(I[1,x]) bacteriaFilt[I_cs[1,x],]),
               sapply(1:(N+nVarGroups), function(x) if(I[2,x]) euksFilt[I_cs[2,x],]),
@@ -589,22 +598,22 @@ P <- unlist(c(sapply(1:(N+nVarGroups), function(x) unlist(sapply(1:ncol(biomarke
                                                    })))))
 
 Y <- unlist(c(sapply(1:length(Msnp), function(var) unlist(sapply(1:(N+nVarGroups), function(x) {
-                                                          if(IC[var, x]) return(snpmat[allsamples[[x]], (sum(Msnp[0:(var-1)])+1):sum(Msnp[0:var])])
+                                                          if(ICv[var, x]) return(snpmat[allsamples[[x]], (sum(Msnp[0:(var-1)])+1):sum(Msnp[0:var])])
                                                    }))),
               sapply(1:length(Mhostphoto), function(var) unlist(sapply(1:(N+nVarGroups), function(x) {
-                                                          if(IC[length(Msnp) + var, x]) return(hostphotomat2[allsamples[[x]], (sum(Mhostphoto[0:(var-1)])+1):sum(Mhostphoto[0:var])])
+                                                          if(ICv[length(Msnp) + var, x]) return(hostphotomat2[allsamples[[x]], (sum(Mhostphoto[0:(var-1)])+1):sum(Mhostphoto[0:var])])
                                                    }))),
               sapply(1:length(Menvphoto), function(var) unlist(sapply(1:(N+nVarGroups), function(x) {
-                                                          if(IC[length(Msnp) + length(Mhostphoto) + var, x]) return(envphotomat2[allsamples[[x]], (sum(Menvphoto[0:(var-1)])+1):sum(Menvphoto[0:var])])
+                                                          if(ICv[length(Msnp) + length(Mhostphoto) + var, x]) return(envphotomat2[allsamples[[x]], (sum(Menvphoto[0:(var-1)])+1):sum(Menvphoto[0:var])])
                                                    }))),
               sapply(1:length(mSpec), function(var) unlist(sapply(1:(N+nVarGroups), function(x) {
-                                                          if(IC[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + var, x]) return(mmSpec[allsamples[[x]], (sum(mSpec[0:(var-1)])+1):sum(mSpec[0:var])])
+                                                          if(ICv[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + var, x]) return(mmSpec[allsamples[[x]], (sum(mSpec[0:(var-1)])+1):sum(mSpec[0:var])])
                                                    }))),
               sapply(1:length(MSVD), function(var) unlist(sapply(1:(N+nVarGroups), function(x) {
-                                                          if(IC[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + length(mSpec) + var, x]) return(snpSVDmat[allsamples[[x]], (sum(MSVD[0:(var-1)])+1):sum(MSVD[0:var])])
+                                                          if(ICv[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + length(mSpec) + var, x]) return(snpSVDmat[allsamples[[x]], (sum(MSVD[0:(var-1)])+1):sum(MSVD[0:var])])
                                                    }))),
               sapply(1:length(nSites), function(var) unlist(sapply(1:(N+nVarGroups), function(x) {
-                                                          if(IC[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + length(mSpec) + length(MSVD) + var, x]) return(siteMat[allsamples[[x]], (sum(nSites[0:(var-1)])+1):sum(nSites[0:var])])
+                                                          if(ICv[length(Msnp) + length(Mhostphoto) + length(Menvphoto) + length(mSpec) + length(MSVD) + var, x]) return(siteMat[allsamples[[x]], (sum(nSites[0:(var-1)])+1):sum(nSites[0:var])])
                                                    })))))
 
 indMP <- which(is.infinite(P))
@@ -932,6 +941,14 @@ IR_higher[IR_higher > 0] <- 1
 O_higher = nrow(IR_higher)
 H_higher <- sum(IR_higher > 0)
 
+IC_higher <- rbind(t(hostphotoHigherMat) %*% IC[1:M[D+R+2],],
+                   t(envphotoHigherMat) %*% IC[(M[D+R+2] + 1):sum(M[(D+R+2):(D+R+3)]),],
+                   t(snpSVDHigherMat) %*% IC[(sum(M[(D+R+2):(D+R+4)]) + 1):sum(M[(D+R+2):(D+R+5)]),],
+                   t(siteHigherMat) %*% IC[(sum(M[(D+R+2):(D+R+5)]) + 1):sum(M[(D+R+2):(D+R+6)]),])
+IC_higher[IC_higher > 0] <- 1
+B_higher <-nrow(IC_higher)
+G_higher <- sapply(1:length(Mc), function(x) sum(ICv[x,]*Mc[x]))
+
 varlabs <- c(colnames(bacteriaFilt), colnames(bactPhyMat), colnames(euksFilt), colnames(eukPhyMat), colnames(transcr), colnames(itsFilt), colnames(itsMat), colnames(biomarkersLog), biomarkermatNames, colnames(t2log), colnames(t2Mat), colnames(t3log), colnames(t3Mat), colnames(fabT1agg), names(fabT1aggMatNames), colnames(fabT2agg), colnames(snpmat), colnames(hostphotomat2), hostphotoHigherMatNames, colnames(envphotomat2), names(envphotoHigherMatNames), colnames(mmSpec), colnames(snpSVDmat), colnames(snpSVDHigherMat), colnames(siteMat), colnames(siteHigherMat))
 varlabsM <- c(colnames(bacteriaFilt), colnames(euksFilt), colnames(transcr), colnames(itsFilt), colnames(biomarkersLog), colnames(t2log), colnames(t3log), colnames(fabT1agg), colnames(fabT2agg), colnames(snpmat), colnames(hostphotomat2), colnames(envphotomat2), colnames(mmSpec), colnames(snpSVDmat), colnames(siteMat))
 
@@ -953,6 +970,9 @@ data <- list(N = N,
              IR = IR,
              IR_higher = IR_higher,
              IC = IC,
+             B_higher = B_higher,
+             IC_higher = IC_higher,
+             ICv = ICv,
              F = F,
              F_higher = sum(F_higher),
              X = X,
@@ -961,8 +981,10 @@ data <- list(N = N,
              H = H,
              H_higher = H_higher,
              P = P,
+             B = B,
              C_vars = C_vars,
              Mc = Mc,
+             G_higher = sum(G_higher),
              prior_scales                   = prior_scales,
              prior_intercept_scales         = prior_intercept_scales,
              prior_intercept_centers        = prior_intercept_centers,
@@ -1015,6 +1037,7 @@ init <- list(abundance_true_vector           = abundance_true_vector_inits,
              rho_sites = as.array(rep(mean(dist_sites[lower.tri(dist_sites)]), K)),
              site_prop = as.array(rep(0.5, K)),
              abundance_higher_vector = rep(0,sum(F_higher)),
+             prevalence_higher_vector = rep(0,sum(F_higher)),
              P_higher  = rep(0,H_higher),
              Z         = Z,
              W_norm    = W_norm,

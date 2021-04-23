@@ -7,7 +7,7 @@ data {
     int<lower=0> C;                                     // Number of categorical datasets
     int<lower=0> nVarGroups;                            // Number of groups of samples that have a shared single observation
     int<lower=0> M[D+R+C];                              // Number of observed variables in each dataset
-    int<lower=0> M_higher[D+R+C];                          // Number of parameters for each dataset
+    int<lower=0> M_higher[D+R+C];                       // Number of higher parameters for each dataset
     int<lower=0> Mplus[D+R+C];                          // Number of parameters for each dataset
     int<lower=0> K_linear;                              // Number of residual latent linear dimensions
     int<lower=0> K_gp;                                  // Number of residual latent GP dimensions per kernel
@@ -17,13 +17,19 @@ data {
     int<lower=0> O_higher;                              // Total number of higher effects for observed continuous variables
     int<lower=0> IR[O, N + nVarGroups];                 // Sample indices for continuous variables
     int<lower=0> IR_higher[O_higher, N + nVarGroups];   // Sample indices for higher effects of continuous variables
+    int<lower=0> B;                                     // Total number of observed categorical variables
+    int<lower=0> IC[B, N + nVarGroups];                 // Sample indices for categorical datasets
+    int<lower=0> B_higher;                                     // Total number of observed categorical variables
+    int<lower=0> IC_higher[B_higher, N + nVarGroups];
     int<lower=0> C_vars;                                // Total number of observed categorical variables
-    int<lower=0> IC[C_vars, N + nVarGroups];            // Sample indices for categorical datasets
+    int<lower=0> ICv[C_vars, N + nVarGroups];           // Sample indices for categorical datasets
     int<lower=0> Mc[C_vars];                            // Number of levels for each categorical variable
+    int<lower=0> Mc_higher[C_vars];                     // Number of higher levels for each categorical variable
     int<lower=0> F;                                     // Total number of compositional count observations
     int<lower=0> F_higher;                              // Total number of higher effects for compositional count observations
     int<lower=0> X[F];                                  // compositional count data
     int<lower=0> G;                                     // Total number of categorical observations
+    int<lower=0> G_higher;                              // Total number of higher effects for categorical observations
     vector<lower=0>[G] Y;                               // categorical data
     int<lower=0> H;                                     // Total number of continuous observations
     int<lower=0> H_higher;                              // Total number of higher effects for continuous observations
@@ -69,6 +75,10 @@ transformed data {
     int IRInds[R,N+nVarGroups,max(M[(D+1):(D+R)])];   // Indices mapping each sample to each continuous dataset
     int sumIR_higher[R,N+nVarGroups];                 // Number of continuous higher effects in each sample, per dataset
     int IR_higher_inds[R,N+nVarGroups,max(M_higher[(D+1):(D+R)])];   // Indices mapping each sample to each continuous dataset
+    int sumIC[C,N+nVarGroups];                        // Number of categorical observations in each sample, per dataset
+    int ICInds[C,N+nVarGroups,max(M[(D+R+1):(DRC)])]; // Indices mapping each sample to each categorical dataset
+    int sumIC_higher[C,N+nVarGroups];                 // Number of categorical higher effects in each sample, per dataset
+    int IC_higher_inds[C,N+nVarGroups,max(M_higher[(D+R+1):(DRC)])];   // Indices mapping each sample to each categorical dataset
     real rho_Z_shape = 1.0 / K_linear;                       // More 'independent' latent variables means more need for sparsity in feature selection
     real rho_Z_scale = 6.0 / K_gp;                           // More 'dependent' latent variables per group means, in order to encourage orthogonality, length scale must be smaller
     matrix[site_smoothness-1, 2 * site_smoothness] chooseRJ; // precomputed part of Matern covariance
@@ -125,7 +135,29 @@ transformed data {
     // end creating continuous variable indices
     // create indices for categorical variables
     sumMc[1] = 0;
-    for(cv in 1:C_vars) sumMc[cv+1] = sum(Mc[1:cv]);
+    for(cv in 1:C_vars) {
+        sumMc[cv+1] = sum(Mc[1:cv]);
+    }
+    for(c in 1:C) {
+        for(n in 1:(N+nVarGroups)) {
+            int segplace = 1;
+            int segplace_higher = 1;
+            sumIC[c,n] = sum(IC[(sumM[D+R+c]-V-O+1):(sumM[D+R+1]-V-O),n]);
+            sumIC_higher[c,n] = sum(IC_higher[(sumMhigher[D+R+c]-sumMhigher[D+R+1]+1):(sumMhigher[D+R+c+1]-sumMhigher[D+R+1]),n]);
+            for(b in 1:M[D+R+c]) {
+                if(IC[sumM[D+R+c]-V-O+b, n]) {
+                    ICInds[c,n,segplace] = b;
+                    segplace += 1;
+                }
+            }
+            for(b in 1:M_higher[D+R+c]) {
+                if(IC_higher[sumMhigher[D+R+c]-sumMhigher[D+R+1]+b, n]) {
+                    IC_higher_inds[c,n,segplace_higher] = b;
+                    segplace_higher += 1;
+                }
+            }
+        }
+    }
     //
     // pre-compute some parts of the circular matern covariance function
     for(r in 0:(site_smoothness-2)) {
@@ -153,7 +185,9 @@ parameters {
     vector[V] binary_count_intercepts;
     vector[F] abundance_true_vector;               // count dataset latent log abundance
     vector[F_higher] abundance_higher_vector;
+    vector[F_higher] prevalence_higher_vector;
     vector[H_higher] P_higher;
+    vector[G_higher] Y_higher;
     vector[D] binary_count_dataset_intercepts;     // each count dataset could have biased prior intercepts
     vector[nmulti] multinomial_nuisance;           // per-sample parameter to convert independent poisson distributions to a multinomial one
     vector<upper=0>[nMP] P_missing;                // latent estimates of continuous variables with partial information (truncated observations)
@@ -235,6 +269,7 @@ model {
     int Pplace = 1;
     int P_higher_place = 1;
     int Yplace = 1;
+    int Y_higher_place = 1;
     int multinomPlace = 1;
     for(drc in 1:DRC) {
         dsv[(sumMplus[drc] + 1):(sumMplus[drc] + Mplus[drc])] = rep_vector(dataset_scales[drc], Mplus[drc]);
@@ -318,29 +353,32 @@ model {
                 = to_matrix(segment(mm, sumMMplus[d] + 1, MMplus[d]),
                             M[d],
                             M_higher[d]);
-            matrix[M[d],sumID[d]] resid_higher
-                = MM * to_matrix(segment(abundance_higher_vector, X_higher_place, M_higher[d] * sumID[d]),
-                                 M_higher[d], sumID[d]);
-            target += student_t_lpdf(segment(abundance_higher_vector, X_higher_place, M_higher[d] * sumID[d]) |
-                                     nu_residuals,
-                                     0,
-                                     to_vector(rep_matrix(segment(var_scales, sumMplus[d] + M[d] + 1, M_higher[d]), sumID[d])));
-            X_higher_place += M_higher[d] * sumID[d];
-            target += student_t_lpdf(to_vector(abundance_true) |
-                                     nu_residuals,
-                                     to_vector(predicted + resid_higher),
-                                     to_vector(rep_matrix(segment(var_scales, sumMplus[d] + 1, M[d]), sumID[d])));
             phi = inv_square(contaminant_overdisp[d])
                   * inv(rows_dot_self(diag_post_multiply(MM,
                                                          segment(var_scales, sumMplus[d] + M[d] + 1, M_higher[d])))
                         + square(segment(var_scales, sumMplus[d] + 1, M[d])));
+            predicted
+                += MM * to_matrix(segment(abundance_higher_vector, X_higher_place, M_higher[d] * sumID[d]),
+                                  M_higher[d], sumID[d]);
+            prevalence
+                += MM * to_matrix(segment(prevalence_higher_vector, X_higher_place, M_higher[d] * sumID[d]),
+                                  M_higher[d], sumID[d]);
+            target += student_t_lpdf(segment(abundance_higher_vector, X_higher_place, M_higher[d] * sumID[d]) |
+                                     nu_residuals,
+                                     0,
+                                     to_vector(rep_matrix(segment(var_scales, sumMplus[d] + M[d] + 1, M_higher[d]), sumID[d])));
+            target += student_t_lpdf(segment(prevalence_higher_vector, X_higher_place, M_higher[d] * sumID[d]) |
+                                     nu_residuals,
+                                     0,
+                                     to_vector(rep_matrix(segment(var_scales, VOBplus + sumMplus[d] + M[d] + 1, M_higher[d]), sumID[d])));
+            X_higher_place += M_higher[d] * sumID[d];
         } else {
-            target += student_t_lupdf(to_vector(abundance_true) |
-                                      nu_residuals,
-                                      to_vector(predicted),
-                                      to_vector(rep_matrix(segment(var_scales, sumMplus[d] + 1, M[d]), sumID[d])));
             phi = inv_square(contaminant_overdisp[d] * segment(var_scales, sumMplus[d] + 1, M[d]));
         }
+        target += student_t_lpdf(to_vector(abundance_true) |
+                                 nu_residuals,
+                                 to_vector(predicted),
+                                 to_vector(rep_matrix(segment(var_scales, sumMplus[d] + 1, M[d]), sumID[d])));
         for(n in 1:sumID[d]) {
             for(m in 1:M[d]) {
                 target += log_sum_exp(log1m_inv_logit(prevalence[m,n])
@@ -390,42 +428,63 @@ model {
                               nu_residuals,
                               P_predicted,
                               P_var);  // continuous likelihood
-    for(cv in 1:C_vars) {
-        for(n in 1:(N+nVarGroups)) {
-            if(IC[cv,n]) {
-                if(Mc[cv] > 1) {
-                    vector[Mc[cv]] predicted
-                        = log_softmax(segment(intercepts, V + O + sumMc[cv] + 1, Mc[cv])
-                                      + W[(V + O + sumMc[cv] + 1):(V + O + sumMc[cv] + Mc[cv]),]
-                                        * Z_Z_higher[,n]);
-                    vector[Mc[cv]] observed = segment(Y, Yplace, Mc[cv]);
-                    real terms = 0;
-                    for(c in 1:Mc[cv]) {
-                        if(observed[c] > 0) {
-                            if(terms == 0) {
-                                terms = log(observed[c]) + predicted[c];
-                            } else {
-                                terms = log_sum_exp(terms, log(observed[c]) + predicted[c]);
+    {
+        matrix[sum(M[(D+R+1):DRC]), N + nVarGroups] resids;
+        for(c in 1:C) {
+            matrix[M[D+R+c], M_higher[D+R+c]] MM
+                = to_matrix(segment(mm, sumMMplus[D+R+c] + 1, MMplus[D+R+c]),
+                            M[D+R+c],
+                            M_higher[D+R+c]);
+            for(n in 1:(N+nVarGroups)) {
+                resids[(sumM[D+R+c] - sumM[D+R] + 1):(sumM[D+R+c] - sumM[D+R] + M[D+R+c]),n]
+                    = MM[ICInds[c,n,1:sumIC[c,n]], IC_higher_inds[c,n,1:sumIC_higher[c,n]]]
+                      * segment(Y_higher, Y_higher_place, sumIC_higher[c,n]);
+                target += student_t_lupdf(segment(Y_higher, Y_higher_place, sumIC_higher[c,n]) |
+                                          nu_residuals,
+                                          0,
+                                          segment(var_scales, sumMplus[D+R+c] + M[D+R+c] + 1, M_higher[D+R+c])[IC_higher_inds[c,n,1:sumIC_higher[c,n]]]);
+                Y_higher_place += sumIC_higher[c,n];
+            }
+        }
+        for(cv in 1:C_vars) {
+            for(n in 1:(N+nVarGroups)) {
+                if(ICv[cv,n]) {
+                    if(Mc[cv] > 1) {
+                        vector[Mc[cv]] predicted
+                            = log_softmax(segment(intercepts, V + O + sumMc[cv] + 1, Mc[cv])
+                                          + W[(V + O + sumMc[cv] + 1):(V + O + sumMc[cv] + Mc[cv]),]
+                                            * Z_Z_higher[,n]
+                                          + resids[(sumMc[cv] + 1):(sumMc[cv] + Mc[cv]),n]);
+                        vector[Mc[cv]] observed = segment(Y, Yplace, Mc[cv]);
+                        real terms = 0;
+                        for(c in 1:Mc[cv]) {
+                            if(observed[c] > 0) {
+                                if(terms == 0) {
+                                    terms = log(observed[c]) + predicted[c];
+                                } else {
+                                    terms = log_sum_exp(terms, log(observed[c]) + predicted[c]);
+                                }
                             }
                         }
-                    }
-                    target += terms; // likelihood for categorical variables
-                } else {
-                    real predicted
-                        = intercepts[V + O + sumMc[cv] + 1]
-                          + W[V + O + sumMc[cv] + 1,]
-                            * Z_Z_higher[,n];
-                    if(Y[Yplace] == 1) {
-                        target += log_inv_logit(predicted);
-                    } else if(Y[Yplace] == 0) {
-                        target += log1m_inv_logit(predicted);
+                        target += terms; // likelihood for categorical variables
                     } else {
-                        target += log_mix(Y[Yplace],
-                                          log_inv_logit(predicted),
-                                          log1m_inv_logit(predicted));
-                    }
-                } // likelihood for binary variables
-                Yplace += Mc[cv];
+                        real predicted
+                            = intercepts[V + O + sumMc[cv] + 1]
+                              + W[V + O + sumMc[cv] + 1,]
+                                * Z_Z_higher[,n]
+                              + resids[sumMc[cv] + 1, n];
+                        if(Y[Yplace] == 1) {
+                            target += log_inv_logit(predicted);
+                        } else if(Y[Yplace] == 0) {
+                            target += log1m_inv_logit(predicted);
+                        } else {
+                            target += log_mix(Y[Yplace],
+                                              log_inv_logit(predicted),
+                                              log1m_inv_logit(predicted));
+                        }
+                    } // likelihood for binary variables
+                    Yplace += Mc[cv];
+                }
             }
         }
     } // categorical/binary likelihood allowing uncertain (real-valued) data
