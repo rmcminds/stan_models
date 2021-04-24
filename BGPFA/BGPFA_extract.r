@@ -52,7 +52,7 @@ if('log_less_contamination' %in% importparams) {
     log_less_contamination <- apply(log_less_contamination, 3, sumfunc)
 }
 
-if('contaminant_overDisp' %in% importparams) {
+if('contaminant_overdisp' %in% importparams) {
     contaminant_overdisp <- extract(stan.fit, pars='contaminant_overdisp', permuted=FALSE)
     contaminant_overdisp <- apply(contaminant_overdisp, 3, sumfunc)
 }
@@ -94,7 +94,7 @@ if('rho_Z' %in% importparams) {
 
 pos1 <- array(apply(W_norm_all,3,monteCarloP,pn='p'),dim=c(dim(W_norm_all)[[3]]/K,K))[,axisOrder]
 possig <- pos1 < 0.05
-neg1 <- array(apply(W_norm_all,3,monteCarloP,pn='n'),dim=c(dim(W_norm_All)[[3]]/K,K))[,axisOrder]
+neg1 <- array(apply(W_norm_all,3,monteCarloP,pn='n'),dim=c(dim(W_norm_all)[[3]]/K,K))[,axisOrder]
 negsig <- neg1 < 0.05
 anysig <- possig | negsig
 rownames(pos1) <- rownames(neg1) <- labs
