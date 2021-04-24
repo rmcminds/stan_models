@@ -1076,6 +1076,6 @@ stan.fit <- read_stan_csv_subset(file.path(output_prefix, paste0('samples_',engi
 
 save.image(file.path(output_prefix, paste0('res_',engine,'.RData')))
 
-source(file.path(model_dir, 'GPBFA_extract.r'))
+source(file.path(model_dir, 'BGPFA_extract.r'))
 
 save.image(file.path(output_prefix, paste0('res_',engine,'_processed.RData')))
