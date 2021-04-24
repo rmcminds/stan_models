@@ -72,6 +72,9 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                        ('opencl platform=0 device=0')[opencl],
                                        sep=' '))
 
+dataset_names <- c('mb16S','mb18S','rna','its2','biomarkers','t2','t3','fab_T1_agg','fab_T2_agg','snps','hphoto','ephoto','species','svd','sites')
+in_data <- list()
+
 sample_data <- read.table(file.path(input_prefix, 'Stephane/20201008/TARA-PACIFIC_samples-provenance_20200731d.txt'), sep='\t', skip=1, header=T, comment.char='', stringsAsFactors=TRUE)
 sample_data$species <- NA
 sample_data$species[grepl('Pocillopora',sample_data$sample.material_taxonomy_host)] <-'Pocillopora'
@@ -98,12 +101,12 @@ for(i in 1:nMicrobeKeep) {
 }
 keepers <- sort(keepers)
 
-bacteriaFilt <- t(bacteria[keepers,])
-rownames(bacteriaFilt) <- sample_data[match(rownames(bacteriaFilt), sample_data$sample.storage_container.label), 'myname']
-bacteriaFilt <-bacteriaFilt[order(rownames(bacteriaFilt)),]
+in_data$mb16S <- t(bacteria[keepers,])
+rownames(in_data$mb16S) <- sample_data[match(rownames(in_data$mb16S), sample_data$sample.storage_container.label), 'myname']
+in_data$mb16S <-in_data$mb16S[order(rownames(in_data$mb16S)),]
 
 bacttree <- read.tree(file.path(preprocess_prefix, '20201231/TARA_PACIFIC_16S_asv_CO-0-filtered_combined_filtered_aligned.tree'))
-bacttreeY <- drop.tip(bacttree, bacttree$tip.label[!bacttree$tip.label %in% colnames(bacteriaFilt)])
+bacttreeY <- drop.tip(bacttree, bacttree$tip.label[!bacttree$tip.label %in% colnames(in_data$mb16S)])
 
 #colnames(tax) <- c('Root','Domain','Phylum','Class','Order','Family','Genus')
 
@@ -118,7 +121,7 @@ if(length(myarchs) > 1) {
     bacttreeY.root <- MidpointRooter:::midpoint.root2(bacttreeY)
 }
 
-bacteriaFilt <- bacteriaFilt[,bacttreeY.root$tip.label]
+in_data$mb16S <- in_data$mb16S[,bacttreeY.root$tip.label]
 
 NTips <- length(bacttreeY.root$tip.label)
 NNodes <- bacttreeY.root$Nnode + NTips - 1
@@ -141,15 +144,15 @@ for(i in 1:nMicrobeKeep) {
 }
 keepers_euk <- sort(keepers_euk)
 
-euksFilt <- t(euks[keepers_euk,])
-rownames(euksFilt) <- sample_data[match(rownames(euksFilt), sample_data$sample.storage_container.label), 'myname']
-euksFilt <-euksFilt[order(rownames(euksFilt)),]
+in_data$mb18S <- t(euks[keepers_euk,])
+rownames(in_data$mb18S) <- sample_data[match(rownames(in_data$mb18S), sample_data$sample.storage_container.label), 'myname']
+in_data$mb18S <-in_data$mb18S[order(rownames(in_data$mb18S)),]
 
 euktree <- read.tree(file.path(preprocess_prefix, '20210102/TARA_PACIFIC_18SV9_4191_samples_v202004.OTU.filtered_CO-0-filtered_combined_filtered_aligned.tree'))
-euktreeY <- drop.tip(euktree, euktree$tip.label[!euktree$tip.label %in% colnames(euksFilt)])
+euktreeY <- drop.tip(euktree, euktree$tip.label[!euktree$tip.label %in% colnames(in_data$mb18S)])
 euktreeY.root <- MidpointRooter:::midpoint.root2(euktreeY)
 
-euksFilt <- euksFilt[,euktreeY.root$tip.label]
+in_data$mb18S <- in_data$mb18S[,euktreeY.root$tip.label]
 
 NTipsEuks <- length(euktreeY.root$tip.label)
 NNodesEuks <- euktreeY.root$Nnode + NTipsEuks - 1
@@ -157,13 +160,13 @@ NNodesEuks <- euktreeY.root$Nnode + NTipsEuks - 1
 
 ###
 
-transcr <- as.matrix(read.csv(file.path(input_prefix, 'Alice/20190924/transcriptomics/tara_I10_trans.csv'), sep=';', row.names=1, stringsAsFactors=TRUE)[,1:48])
-rownames(transcr) <- paste(substr(rownames(transcr), 1, 7), 0, substr(rownames(transcr), 8, nchar(rownames(transcr))), sep = "")
-transcr <- transcr[,colSums(transcr) > 0]
-transcr <- t(apply(transcr,1,function(x) round(10 * x)))
-transcr <- cbind(transcr, apply(transcr,1,function(x) 10000000 - sum(x))) #data are normalized out of a million reads and have accuracy of 1/100th. to treat them as counts i am going to assume all samples had exactly 10 million reads originally - because i suspect the siginificant digits are optimistic and this number was not actually sequenced. i'm hoping more were sequenced, but assuming a lower count makes them less confident and this is therefore conservative
-colnames(transcr)[ncol(transcr)] <- 'X.Other'
-colnames(transcr) <- sub('^X.','transcr_',colnames(transcr))
+in_data$rna <- as.matrix(read.csv(file.path(input_prefix, 'Alice/20190924/transcriptomics/tara_I10_trans.csv'), sep=';', row.names=1, stringsAsFactors=TRUE)[,1:48])
+rownames(in_data$rna) <- paste(substr(rownames(in_data$rna), 1, 7), 0, substr(rownames(in_data$rna), 8, nchar(rownames(in_data$rna))), sep = "")
+in_data$rna <- in_data$rna[,colSums(in_data$rna) > 0]
+in_data$rna <- t(apply(in_data$rna,1,function(x) round(10 * x)))
+in_data$rna <- cbind(in_data$rna, apply(in_data$rna,1,function(x) 10000000 - sum(x))) #data are normalized out of a million reads and have accuracy of 1/100th. to treat them as counts i am going to assume all samples had exactly 10 million reads originally - because i suspect the siginificant digits are optimistic and this number was not actually sequenced. i'm hoping more were sequenced, but assuming a lower count makes them less confident and this is therefore conservative
+colnames(in_data$rna)[ncol(in_data$rna)] <- 'X.Other'
+colnames(in_data$rna) <- sub('^X.','transcr_',colnames(in_data$rna))
 
 ## import telomere data
 
@@ -201,8 +204,8 @@ rownames(its) <- sub('TARA_','',rownames(its),fixed=T)
 colnames(its) <- sub('^X','ITS2_',colnames(its))
 its <- its[grepl('CO-', rownames(its)), ]
 its <- its[,apply(its,2,function(x) sum(x>0)) > 0]
-itsFilt <- its
-rownames(itsFilt) <- sample_data[match(rownames(itsFilt), sample_data$sample.storage_container.label), 'myname']
+in_data$its2 <- its
+rownames(in_data$its2) <- sample_data[match(rownames(in_data$its2), sample_data$sample.storage_container.label), 'myname']
 
 itsMeta <- read.table(file=file.path(input_prefix, 'Ben/20200212/its2_type_profiles/90_20200125_DBV_2020-01-28_05-39-25.985991.profiles.absolute.meta_only.txt'), row.names=1, header=T, sep='\t', comment.char='', stringsAsFactors=TRUE)
 rownames(itsMeta) <- paste0('ITS2_', rownames(itsMeta))
@@ -218,33 +221,33 @@ rownames(snps) <- gsub('o',0,sapply(rownames(snps), function(x) paste0(c('I', su
 
 nSNPs <- ncol(snps) / 2
 
-mm_snps <- matrix(0, nrow = nrow(snps), ncol = 4 * nSNPs)
-colnames(mm_snps) <- 1:(4 * nSNPs)
-rownames(mm_snps) <- rownames(snps)
+in_data$snps <- matrix(0, nrow = nrow(snps), ncol = 4 * nSNPs)
+colnames(in_data$snps) <- 1:(4 * nSNPs)
+rownames(in_data$snps) <- rownames(snps)
 M_snp <- vector('numeric')
 newsnpnames <- vector()
 snpFilter <- vector()
 indSNP <- 1
 indSNPMat <- 1
 for(i in 1:nSNPs) {
-    mm_snps[, indSNPMat:(indSNPMat + 3)] <- t(apply(snps[, indSNP:(indSNP+1)], 1, function(x) {
+    in_data$snps[, indSNPMat:(indSNPMat + 3)] <- t(apply(snps[, indSNP:(indSNP+1)], 1, function(x) {
         sapply(1:4, function(y) sum(y == x))
     }))
-    colnames(mm_snps)[indSNPMat:(indSNPMat + 3)] <- paste(colnames(snps)[indSNP], 1:4, sep='.')
-    newFilt <- apply(mm_snps[, indSNPMat:(indSNPMat + 3)], 2, function(x) any(x > 0) & sd(x) > 0)
+    colnames(in_data$snps)[indSNPMat:(indSNPMat + 3)] <- paste(colnames(snps)[indSNP], 1:4, sep='.')
+    newFilt <- apply(in_data$snps[, indSNPMat:(indSNPMat + 3)], 2, function(x) any(x > 0) & sd(x) > 0)
     if(sum(newFilt) == 2) {
-        snpPoss <- sort(unique(mm_snps[,(indSNPMat:(indSNPMat + 3))[which(newFilt)[[2]]]]))
+        snpPoss <- sort(unique(in_data$snps[,(indSNPMat:(indSNPMat + 3))[which(newFilt)[[2]]]]))
         if(length(snpPoss) == 2) {
 
-            poss1 <- mm_snps[,(indSNPMat:(indSNPMat + 3))[which(newFilt)[[1]]]] == snpPoss[[1]]
-            poss2 <- mm_snps[,(indSNPMat:(indSNPMat + 3))[which(newFilt)[[1]]]] == snpPoss[[2]]
+            poss1 <- in_data$snps[,(indSNPMat:(indSNPMat + 3))[which(newFilt)[[1]]]] == snpPoss[[1]]
+            poss2 <- in_data$snps[,(indSNPMat:(indSNPMat + 3))[which(newFilt)[[1]]]] == snpPoss[[2]]
 
             if(sum(poss1) > 1 & sum(poss2) > 1) {
                 newsnpnames <- c(newsnpnames, paste(names(newFilt)[which(newFilt)[[2]]], names(newFilt)[which(newFilt)[[1]]], sep='_vs_'))
                 newFilt[which(newFilt)[[1]]] <- FALSE
 
-                mm_snps[poss1,(indSNPMat:(indSNPMat + 3))[newFilt]] <- 0
-                mm_snps[poss2,(indSNPMat:(indSNPMat + 3))[newFilt]] <- 1
+                in_data$snps[poss1,(indSNPMat:(indSNPMat + 3))[newFilt]] <- 0
+                in_data$snps[poss2,(indSNPMat:(indSNPMat + 3))[newFilt]] <- 1
 
                 M_snp <- c(M_snp, 1)
             } else {
@@ -253,19 +256,19 @@ for(i in 1:nSNPs) {
         }
         else if(length(snpPoss) > 2) {
 
-            het <- mm_snps[,(indSNPMat:(indSNPMat + 3))[which(newFilt)[[1]]]] == 1
-            hom1 <- mm_snps[,(indSNPMat:(indSNPMat + 3))[which(newFilt)[[1]]]] == 2
-            hom2 <- mm_snps[,(indSNPMat:(indSNPMat + 3))[which(newFilt)[[1]]]] == 0
+            het <- in_data$snps[,(indSNPMat:(indSNPMat + 3))[which(newFilt)[[1]]]] == 1
+            hom1 <- in_data$snps[,(indSNPMat:(indSNPMat + 3))[which(newFilt)[[1]]]] == 2
+            hom2 <- in_data$snps[,(indSNPMat:(indSNPMat + 3))[which(newFilt)[[1]]]] == 0
 
             homname <- paste(names(newFilt)[which(newFilt)[[2]]], names(newFilt)[which(newFilt)[[1]]], sep='_vs_')
-            mm_snps[het, (indSNPMat:(indSNPMat + 3))[which(newFilt)[[1]]]] <- NA
-            mm_snps[hom1, (indSNPMat:(indSNPMat + 3))[which(newFilt)[[1]]]] <- 0
-            mm_snps[hom2, (indSNPMat:(indSNPMat + 3))[which(newFilt)[[1]]]] <- 1
+            in_data$snps[het, (indSNPMat:(indSNPMat + 3))[which(newFilt)[[1]]]] <- NA
+            in_data$snps[hom1, (indSNPMat:(indSNPMat + 3))[which(newFilt)[[1]]]] <- 0
+            in_data$snps[hom2, (indSNPMat:(indSNPMat + 3))[which(newFilt)[[1]]]] <- 1
 
             hetname <- paste(names(newFilt)[which(newFilt)[[2]]], names(newFilt)[which(newFilt)[[1]]], sep='_AND_')
-            mm_snps[het, (indSNPMat:(indSNPMat + 3))[which(newFilt)[[2]]]] <- 1
-            mm_snps[hom1, (indSNPMat:(indSNPMat + 3))[which(newFilt)[[2]]]] <- 0
-            mm_snps[hom2, (indSNPMat:(indSNPMat + 3))[which(newFilt)[[2]]]] <- 0
+            in_data$snps[het, (indSNPMat:(indSNPMat + 3))[which(newFilt)[[2]]]] <- 1
+            in_data$snps[hom1, (indSNPMat:(indSNPMat + 3))[which(newFilt)[[2]]]] <- 0
+            in_data$snps[hom2, (indSNPMat:(indSNPMat + 3))[which(newFilt)[[2]]]] <- 0
 
             if(sum(hom1) > 1 & sum(hom2) > 1) {
                 newsnpnames <- c(newsnpnames, homname)
@@ -289,8 +292,8 @@ for(i in 1:nSNPs) {
     indSNP <- indSNP + 2
     indSNPMat <- indSNPMat + 4
 }
-mm_snps <- mm_snps[,snpFilter]
-colnames(mm_snps) <- newsnpnames
+in_data$snps <- in_data$snps[,snpFilter]
+colnames(in_data$snps) <- newsnpnames
 
 ### photos
 photodat <- read.table(file.path(input_prefix,'Ryan/20200406/results_202004061414.txt'), header=T, sep='\t', quote = '', stringsAsFactors=FALSE)
@@ -326,9 +329,9 @@ hostphotomat <- sapply(allmorphs, function(y) y == paste(photodat$target,photoda
 colnames(hostphotomat) <- paste('morphotype', allmorphs, sep='_')
 M_hphoto <- nlevs
 
-mm_hphoto <- t(sapply(photosamples, function(x) if(sum(photonames == x) > 1) {apply(hostphotomat[photonames == x,],2,function(y) sum(y,na.rm=TRUE)/length(y))} else {hostphotomat[photonames == x,]}))
+in_data$hphoto <- t(sapply(photosamples, function(x) if(sum(photonames == x) > 1) {apply(hostphotomat[photonames == x,],2,function(y) sum(y,na.rm=TRUE)/length(y))} else {hostphotomat[photonames == x,]}))
 
-mm_hphoto <- cbind(mm_hphoto, photodatagg[rownames(mm_hphoto),c('porites_lumps','porites_ridges')])
+in_data$hphoto <- cbind(in_data$hphoto, photodatagg[rownames(in_data$hphoto),c('porites_lumps','porites_ridges')])
 M_hphoto <- c(M_hphoto, 1, 1)
 
 ## env
@@ -337,61 +340,61 @@ M_ephoto <- length(bleachLevs)
 
 envphotomat <- sapply(bleachLevs, function(y) y == photodat$bleached)
 colnames(envphotomat) <- paste('bleached', bleachLevs, sep='_')
-mm_ephoto <- t(sapply(photosamples, function(x) if(sum(photonames == x) > 1) {apply(envphotomat[photonames == x,],2,function(y) sum(y,na.rm=TRUE)/length(y))} else {envphotomat[photonames == x,]}))
+in_data$ephoto <- t(sapply(photosamples, function(x) if(sum(photonames == x) > 1) {apply(envphotomat[photonames == x,],2,function(y) sum(y,na.rm=TRUE)/length(y))} else {envphotomat[photonames == x,]}))
 
-mm_ephoto <- cbind(mm_ephoto, photodatagg[,envvars[envvars != 'bleached']])
-mm_ephoto <- mm_ephoto[,apply(mm_ephoto,2,sd,na.rm=TRUE) > 0]
-M_ephoto <- c(M_ephoto, rep(1,length(envvars[envvars %in% colnames(mm_ephoto,2)])))
+in_data$ephoto <- cbind(in_data$ephoto, photodatagg[,envvars[envvars != 'bleached']])
+in_data$ephoto <- in_data$ephoto[,apply(in_data$ephoto,2,sd,na.rm=TRUE) > 0]
+M_ephoto <- c(M_ephoto, rep(1,length(envvars[envvars %in% colnames(in_data$ephoto,2)])))
 
 ########
 
-repeatedsamples <- c(rownames(bacteriaFilt), rownames(euksFilt), rownames(transcr), rownames(itsFilt), rownames(biomarkers), rownames(t2in), rownames(t3in), rownames(mm_snps), rownames(mm_hphoto), rownames(mm_ephoto))
+repeatedsamples <- c(rownames(in_data$mb16S), rownames(in_data$mb18S), rownames(in_data$rna), rownames(in_data$its2), rownames(biomarkers), rownames(t2in), rownames(t3in), rownames(in_data$snps), rownames(in_data$hphoto), rownames(in_data$ephoto))
 allsamples <- unique(repeatedsamples)[sapply(unique(repeatedsamples), function(x) sum(x==repeatedsamples)>1)]
 
-bacteriaFilt <- bacteriaFilt[allsamples[allsamples %in% rownames(bacteriaFilt)],]
-euksFilt <- euksFilt[allsamples[allsamples %in% rownames(euksFilt)],]
-transcr <- transcr[allsamples[allsamples %in% rownames(transcr)],]
-itsFilt <- itsFilt[allsamples[allsamples %in% rownames(itsFilt)],]
-itsFilt <- itsFilt[,apply(itsFilt,2,function(x) sum(x>0)) > 0]
+in_data$mb16S <- in_data$mb16S[allsamples[allsamples %in% rownames(in_data$mb16S)],]
+in_data$mb18S <- in_data$mb18S[allsamples[allsamples %in% rownames(in_data$mb18S)],]
+in_data$rna <- in_data$rna[allsamples[allsamples %in% rownames(in_data$rna)],]
+in_data$its2 <- in_data$its2[allsamples[allsamples %in% rownames(in_data$its2)],]
+in_data$its2 <- in_data$its2[,apply(in_data$its2,2,function(x) sum(x>0)) > 0]
 
-t2log <- as.matrix(log(t2in[allsamples[allsamples %in% rownames(t2in)],]))
-t3log <- as.matrix(log(t3in[allsamples[allsamples %in% rownames(t3in)],]))
+in_data$t2 <- as.matrix(log(t2in[allsamples[allsamples %in% rownames(t2in)],]))
+in_data$t3 <- as.matrix(log(t3in[allsamples[allsamples %in% rownames(t3in)],]))
 
-biomarkersLog <- log(biomarkers[allsamples[allsamples %in% rownames(biomarkers)],])
-biomarkersLog_inits <- biomarkersLog
-for(i in 1:ncol(biomarkersLog_inits)){
-    biomarkersLog_inits[is.infinite(biomarkersLog_inits[,i]),i] <- min(biomarkersLog_inits[!is.infinite(biomarkersLog_inits[,i]),i], na.rm=TRUE)
+in_data$biomarkers <- log(biomarkers[allsamples[allsamples %in% rownames(biomarkers)],])
+inits_biomarkers <- in_data$biomarkers
+for(i in 1:ncol(inits_biomarkers)){
+    inits_biomarkers[is.infinite(inits_biomarkers[,i]),i] <- min(inits_biomarkers[!is.infinite(inits_biomarkers[,i]),i], na.rm=TRUE)
 }
-biomarkersLog_inits <- as.matrix(biomarkersLog_inits)
+inits_biomarkers <- as.matrix(inits_biomarkers)
 
-mm_snps <- mm_snps[allsamples[allsamples %in% rownames(mm_snps)],]
+in_data$snps <- in_data$snps[allsamples[allsamples %in% rownames(in_data$snps)],]
 
-mm_hphoto <- mm_hphoto[allsamples[allsamples %in% rownames(mm_hphoto)],]
-keepcol <- rep(TRUE,ncol(mm_hphoto))
+in_data$hphoto <- in_data$hphoto[allsamples[allsamples %in% rownames(in_data$hphoto)],]
+keepcol <- rep(TRUE,ncol(in_data$hphoto))
 MFilt <- M_hphoto
 for(u in 1:length(M_hphoto)) {
     for(p in 1:M_hphoto[u]) {
-        if(sum(mm_hphoto[,sum(M_hphoto[0:(u-1)])+p], na.rm=TRUE) == 0) {
+        if(sum(in_data$hphoto[,sum(M_hphoto[0:(u-1)])+p], na.rm=TRUE) == 0) {
             keepcol[sum(M_hphoto[0:(u-1)])+p] <- FALSE
             MFilt[u] <- MFilt[u] - 1
         }
     }
 }
-mm_hphoto <- mm_hphoto[,keepcol]
+in_data$hphoto <- in_data$hphoto[,keepcol]
 M_hphoto <- MFilt
 
-mm_ephoto <- mm_ephoto[allsamples[allsamples %in% rownames(mm_ephoto)],]
-keepcol <- rep(TRUE,ncol(mm_ephoto))
+in_data$ephoto <- in_data$ephoto[allsamples[allsamples %in% rownames(in_data$ephoto)],]
+keepcol <- rep(TRUE,ncol(in_data$ephoto))
 MFilt <- M_ephoto
 for(u in 1:length(M_ephoto)) {
     for(p in 1:M_ephoto[u]) {
-        if(sum(mm_ephoto[,sum(M_ephoto[0:(u-1)])+p], na.rm=TRUE) == 0) {
+        if(sum(in_data$ephoto[,sum(M_ephoto[0:(u-1)])+p], na.rm=TRUE) == 0) {
             keepcol[sum(M_ephoto[0:(u-1)])+p] <- FALSE
             MFilt[u] <- MFilt[u] - 1
         }
     }
 }
-mm_ephoto <- mm_ephoto[,keepcol]
+in_data$ephoto <- in_data$ephoto[,keepcol]
 M_ephoto <- MFilt
 
 
@@ -401,18 +404,18 @@ rownames(filtData) <- filtData$myname
 filtData$site <- as.factor(substr(filtData$myname,1,6))
 filtData$island <- as.factor(substr(filtData$myname,1,3))
 
-mm_spec <- model.matrix(~0 + species, data = filtData)
-rownames(mm_spec) <- filtData$myname[!is.na(filtData$species)]
-mm_spec <- mm_spec[allsamples[allsamples %in% rownames(mm_spec)],]
-M_spec <- ncol(mm_spec)
+in_data$species <- model.matrix(~0 + species, data = filtData)
+rownames(in_data$species) <- filtData$myname[!is.na(filtData$species)]
+in_data$species <- in_data$species[allsamples[allsamples %in% rownames(in_data$species)],]
+M_spec <- ncol(in_data$species)
 
 
 ### didier's pop gen analysis
 
 snpSVDs <- read.table(file.path(input_prefix,'Didier/20200419/snp_clusters.txt'), header=T, sep='\t', quote = '', row.names = 1, stringsAsFactors=FALSE)
-mm_svd <- model.matrix(~0 + clade, data = snpSVDs)
-mm_svd <- mm_svd[allsamples[allsamples %in% rownames(mm_svd)],]
-M_svd <- ncol(mm_svd)
+in_data$svd <- model.matrix(~0 + clade, data = snpSVDs)
+in_data$svd <- in_data$svd[allsamples[allsamples %in% rownames(in_data$svd)],]
+M_svd <- ncol(in_data$svd)
 
 ###
 
@@ -425,13 +428,13 @@ fabT1 <- as.data.frame(apply(fabT1,2,function(x) if(any(x<=0,na.rm=T)) x else lo
 
 fabT1sites <- unique(sites[keep])
 
-fabT1agg <- array(0, dim = c(length(fabT1sites), ncol(fabT1)), dimnames = list(fabT1sites, colnames(fabT1)))
+in_data$fab_T1_agg <- array(0, dim = c(length(fabT1sites), ncol(fabT1)), dimnames = list(fabT1sites, colnames(fabT1)))
 for(f in fabT1sites) {
-    fabT1agg[f,] <- apply(fabT1[sites==f & keep,], 2, mean, na.rm = TRUE)
+    in_data$fab_T1_agg[f,] <- apply(fabT1[sites==f & keep,], 2, mean, na.rm = TRUE)
 }
-repeats <- substr(grep('Q50',colnames(fabT1agg),ignore.case = TRUE,value=TRUE),4,100)
-fabT1agg <- fabT1agg[,!colnames(fabT1agg) %in% c(repeats, paste0('Q25',repeats), paste0('Q75',repeats))]
-fabT1agg <- fabT1agg[,apply(fabT1agg, 2, function(x) {temp <- sd(x,na.rm=T); temp > 0 & !is.na(temp)})]
+repeats <- substr(grep('Q50',colnames(in_data$fab_T1_agg),ignore.case = TRUE,value=TRUE),4,100)
+in_data$fab_T1_agg <- in_data$fab_T1_agg[,!colnames(in_data$fab_T1_agg) %in% c(repeats, paste0('Q25',repeats), paste0('Q75',repeats))]
+in_data$fab_T1_agg <- in_data$fab_T1_agg[,apply(in_data$fab_T1_agg, 2, function(x) {temp <- sd(x,na.rm=T); temp > 0 & !is.na(temp)})]
 
 fabT2 <- read.table(file.path(input_prefix, 'Fabien/20190329/TotalTable_Satellites_2S.txt'), sep='\t', header=T, comment.char='', stringsAsFactors=TRUE)
 islands <- substr(fabT2$st_ID, 1,3)
@@ -441,17 +444,17 @@ fabT2 <- fabT2[,apply(fabT2, 2, function(x) {temp <- sd(x,na.rm=T); temp > 0 & !
 fabT2 <- log(fabT2[,!grepl('_SD',colnames(fabT2))])
 
 fabT2isls <- unique(islands[keep])
-fabT2agg <- array(0, dim = c(length(fabT2isls), ncol(fabT2)), dimnames = list(fabT2isls, colnames(fabT2)))
+in_data$fab_T2_agg <- array(0, dim = c(length(fabT2isls), ncol(fabT2)), dimnames = list(fabT2isls, colnames(fabT2)))
 for(f in fabT2isls) {
-    fabT2agg[f,] <- apply(fabT2[islands==f & keep,], 2, mean, na.rm = TRUE)
+    in_data$fab_T2_agg[f,] <- apply(fabT2[islands==f & keep,], 2, mean, na.rm = TRUE)
 }
 
 
 allVarGroups <- unique(c(fabT1sites,fabT2isls))
 N_var_groups <- length(allVarGroups)
 
-fabT1agg <- fabT1agg[allVarGroups[allVarGroups %in% rownames(fabT1agg)],]
-fabT2agg <- fabT2agg[allVarGroups[allVarGroups %in% rownames(fabT2agg)],]
+in_data$fab_T1_agg <- in_data$fab_T1_agg[allVarGroups[allVarGroups %in% rownames(in_data$fab_T1_agg)],]
+in_data$fab_T2_agg <- in_data$fab_T2_agg[allVarGroups[allVarGroups %in% rownames(in_data$fab_T2_agg)],]
 
 
 ### site matrix (special treatment in model)
@@ -478,89 +481,87 @@ for(i in which(missinglonglat)) {
     dist_sites[i,i] <- 0
 }
 
-mm_sites <- model.matrix(~0+site, data=filtData)
-mm_sites <- mm_sites[allsamples[allsamples %in% rownames(mm_sites)],]
-N_sites <- ncol(mm_sites)
+in_data$sites <- model.matrix(~0+site, data=filtData)
+in_data$sites <- in_data$sites[allsamples[allsamples %in% rownames(in_data$sites)],]
+N_sites <- ncol(in_data$sites)
 ##
 
+in_data <- in_data[dataset_names]
 N <- length(allsamples)
 N_all <- N + N_var_groups
 D <- 4
 R <- 5
 C <- 6
-M <- c(ncol(bacteriaFilt), ncol(euksFilt), ncol(transcr), ncol(itsFilt), ncol(biomarkersLog), ncol(t2log), ncol(t3log), ncol(fabT1agg), ncol(fabT2agg), ncol(mm_snps), ncol(mm_hphoto), ncol(mm_ephoto), ncol(mm_spec), ncol(mm_svd), ncol(mm_sites))
+M <- sapply(in_data, ncol)
 VOB <- sum(M)
 samp2group <- cbind(sapply(fabT1sites, function(x) as.integer(x == filtData[allsamples,'site'])), sapply(fabT2isls, function(x) as.integer(x == filtData[allsamples,'island'])))
 samp2group <- samp2group %*% diag(1.0 / colSums(samp2group, na.rm=TRUE))
 samp2group[is.na(samp2group)] <- 0
 Mc <- c(M_snp, M_hphoto, M_ephoto, M_spec, M_svd, N_sites)
 C_vars <- length(Mc)
-I <- matrix(0, nrow=D, ncol=N_all)
-I[1,1:N] <- as.integer(allsamples %in% rownames(bacteriaFilt))
-I[2,1:N] <- as.integer(allsamples %in% rownames(euksFilt))
-I[3,1:N] <- as.integer(allsamples %in% rownames(transcr))
-I[4,1:N] <- as.integer(allsamples %in% rownames(itsFilt))
-colnames(I) <- c(allsamples, paste0('varGroup', 1:N_var_groups))
 
-O <- ncol(biomarkersLog) + ncol(t2log) + ncol(t3log) + ncol(fabT1agg) + ncol(fabT2agg)
-IR <- matrix(0, nrow=O, ncol=N_all) #analogous to I above but per-variable rather than per-dataset
-IR[1:ncol(biomarkersLog),1:N] <- t(apply(biomarkersLog, 2, function(x) as.integer(allsamples %in% rownames(biomarkersLog)[!is.na(x)])))
-IR[ncol(biomarkersLog) + (1:ncol(t2log)),1:N] <- t(apply(t2log, 2, function(x) as.integer(allsamples %in% rownames(t2log)[!is.na(x)])))
-IR[ncol(biomarkersLog) + ncol(t2log) + (1:ncol(t3log)),1:N] <- t(apply(t3log, 2, function(x) as.integer(allsamples %in% rownames(t3log)[!is.na(x)])))
-IR[ncol(biomarkersLog) + ncol(t2log) + ncol(t3log) + (1:ncol(fabT1agg)),(N+1):N_all] <- t(apply(fabT1agg, 2, function(x) as.integer(allVarGroups %in% rownames(fabT1agg)[!is.na(x)])))
-IR[ncol(biomarkersLog) + ncol(t2log) + ncol(t3log) + ncol(fabT1agg) + (1:ncol(fabT2agg)),(N+1):N_all] <- t(apply(fabT2agg, 2, function(x) as.integer(allVarGroups %in% rownames(fabT2agg)[!is.na(x)])))
+I <- matrix(0, nrow=D, ncol=N_all)
+I[1:D,1:N] <- t(sapply(1:D, function(d) as.integer(allsamples %in% rownames(in_data[[d]]))))
+dimnames(I) <- list(dataset_names[1:D], c(allsamples, paste0('varGroup', 1:N_var_groups)))
+
+O <- sum(M[(D+1):(D+R)])
+IR <- matrix(0, nrow=0, ncol=N_all) #analogous to I above but per-variable rather than per-dataset
+for(y in (D+1):(D+R)) {
+    IR <- rbind(IR,
+                t(apply(in_data[[y]], 2, function(x) as.integer(c(allsamples,allVarGroups) %in% rownames(in_data[[y]])[!is.na(x)]))))
+}
+colnames(IR) <- c(allsamples, paste0('varGroup', 1:N_var_groups))
 
 B <- sum(Mc)
-IC <- matrix(0, nrow=B, ncol=N_all)
-IC[1:sum(M_snp),1:N] <- t(apply(mm_snps, 2, function(x) as.integer(allsamples %in% rownames(mm_snps)[!is.na(x)])))
-IC[sum(M_snp) + (1:sum(M_hphoto)), 1:N] <- t(apply(mm_hphoto, 2, function(x) as.integer(allsamples %in% rownames(mm_hphoto)[!is.na(x)])))
-IC[sum(M_snp) + sum(M_hphoto) + (1:sum(M_ephoto)), 1:N] <- t(apply(mm_ephoto, 2, function(x) as.integer(allsamples %in% rownames(mm_ephoto)[!is.na(x)])))
-IC[sum(M_snp) + sum(M_hphoto) + sum(M_ephoto) + (1:sum(M_spec)), 1:N] <- t(apply(mm_spec, 2, function(x) as.integer(allsamples %in% rownames(mm_spec)[!is.na(x)])))
-IC[sum(M_snp) + sum(M_hphoto) + sum(M_ephoto) + sum(M_spec) + (1:sum(M_svd)), 1:N] <- t(apply(mm_svd, 2, function(x) as.integer(allsamples %in% rownames(mm_svd)[!is.na(x)])))
-IC[sum(M_snp) + sum(M_hphoto) + sum(M_ephoto) + sum(M_spec) + sum(M_svd) + (1:sum(N_sites)), 1:N] <- t(apply(mm_sites, 2, function(x) as.integer(allsamples %in% rownames(mm_sites)[!is.na(x)])))
-rownames(IC)[sum(M_snp) + sum(M_hphoto) + sum(M_ephoto) + sum(M_spec) + sum(M_svd) + (1:sum(N_sites))] <- colnames(mm_sites)
+IC <- matrix(0, nrow=0, ncol=N_all)
+for(y in (D+R+1):(D+R+C)) {
+    IC <- rbind(IC,
+                t(apply(in_data[[y]], 2, function(x) as.integer(c(allsamples,allVarGroups) %in% rownames(in_data[[y]])[!is.na(x)]))))
+}
+colnames(IC) <- c(allsamples, paste0('varGroup', 1:N_var_groups))
+
 
 ICv <- matrix(0, nrow=C_vars, ncol=N_all)
 for(var in 1:length(M_snp)) {
     if(M_snp[var] > 1) {
-        ICv[var,1:N] <- as.integer(allsamples %in% rownames(mm_snps)[apply(!is.na(mm_snps[,(sum(M_snp[0:(var-1)])+1):sum(M_snp[0:var])]), 1, all)])
+        ICv[var,1:N] <- as.integer(allsamples %in% rownames(in_data$snps)[apply(!is.na(in_data$snps[,(sum(M_snp[0:(var-1)])+1):sum(M_snp[0:var])]), 1, all)])
     } else {
-        ICv[var,1:N] <- as.integer(allsamples %in% rownames(mm_snps)[!is.na(mm_snps[,sum(M_snp[0:var])])])
+        ICv[var,1:N] <- as.integer(allsamples %in% rownames(in_data$snps)[!is.na(in_data$snps[,sum(M_snp[0:var])])])
     }
 }
 for(var in 1:length(M_hphoto)) {
     if(M_hphoto[var] > 1) {
-        ICv[length(M_snp) + var,1:N] <- as.integer(allsamples %in% rownames(mm_hphoto)[apply(!is.na(mm_hphoto[,(sum(M_hphoto[0:(var-1)])+1):sum(M_hphoto[0:var])]), 1, all)])
+        ICv[length(M_snp) + var,1:N] <- as.integer(allsamples %in% rownames(in_data$hphoto)[apply(!is.na(in_data$hphoto[,(sum(M_hphoto[0:(var-1)])+1):sum(M_hphoto[0:var])]), 1, all)])
     } else {
-        ICv[length(M_snp) + var,1:N] <- as.integer(allsamples %in% rownames(mm_hphoto)[!is.na(mm_hphoto[,sum(M_hphoto[0:var])])])
+        ICv[length(M_snp) + var,1:N] <- as.integer(allsamples %in% rownames(in_data$hphoto)[!is.na(in_data$hphoto[,sum(M_hphoto[0:var])])])
     }
 }
 for(var in 1:length(M_ephoto)) {
     if(M_ephoto[var] > 1) {
-        ICv[length(M_snp) + length(M_hphoto) + var,1:N] <- as.integer(allsamples %in% rownames(mm_ephoto)[apply(!is.na(mm_ephoto[,(sum(M_ephoto[0:(var-1)])+1):sum(M_ephoto[0:var])]), 1, all)])
+        ICv[length(M_snp) + length(M_hphoto) + var,1:N] <- as.integer(allsamples %in% rownames(in_data$ephoto)[apply(!is.na(in_data$ephoto[,(sum(M_ephoto[0:(var-1)])+1):sum(M_ephoto[0:var])]), 1, all)])
     } else {
-        ICv[length(M_snp) + length(M_hphoto) + var,1:N] <- as.integer(allsamples %in% rownames(mm_ephoto)[!is.na(mm_ephoto[,sum(M_ephoto[0:var])])])
+        ICv[length(M_snp) + length(M_hphoto) + var,1:N] <- as.integer(allsamples %in% rownames(in_data$ephoto)[!is.na(in_data$ephoto[,sum(M_ephoto[0:var])])])
     }
 }
 for(var in 1:length(M_spec)) {
     if(M_spec[var] > 1) {
-        ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + var,1:N] <- as.integer(allsamples %in% rownames(mm_spec)[apply(!is.na(mm_spec[,(sum(M_spec[0:(var-1)])+1):sum(M_spec[0:var])]), 1, all)])
+        ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + var,1:N] <- as.integer(allsamples %in% rownames(in_data$species)[apply(!is.na(in_data$species[,(sum(M_spec[0:(var-1)])+1):sum(M_spec[0:var])]), 1, all)])
     } else {
-        ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + var,1:N] <- as.integer(allsamples %in% rownames(mm_spec)[!is.na(mm_spec[,sum(M_spec[0:var])])])
+        ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + var,1:N] <- as.integer(allsamples %in% rownames(in_data$species)[!is.na(in_data$species[,sum(M_spec[0:var])])])
     }
 }
 for(var in 1:length(M_svd)) {
     if(M_svd[var] > 1) {
-        ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + length(M_spec) + var,1:N] <- as.integer(allsamples %in% rownames(mm_svd)[apply(!is.na(mm_svd[,(sum(M_svd[0:(var-1)])+1):sum(M_svd[0:var])]), 1, all)])
+        ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + length(M_spec) + var,1:N] <- as.integer(allsamples %in% rownames(in_data$svd)[apply(!is.na(in_data$svd[,(sum(M_svd[0:(var-1)])+1):sum(M_svd[0:var])]), 1, all)])
     } else {
-        ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + length(M_spec) + var,1:N] <- as.integer(allsamples %in% rownames(mm_svd)[!is.na(mm_svd[,sum(M_svd[0:var])])])
+        ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + length(M_spec) + var,1:N] <- as.integer(allsamples %in% rownames(in_data$svd)[!is.na(in_data$svd[,sum(M_svd[0:var])])])
     }
 }
 for(var in 1:length(N_sites)) {
     if(N_sites[var] > 1) {
-        ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + length(M_spec) + length(M_svd) + var,1:N] <- as.integer(allsamples %in% rownames(mm_sites)[apply(!is.na(mm_sites[,(sum(N_sites[0:(var-1)])+1):sum(N_sites[0:var])]), 1, all)])
+        ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + length(M_spec) + length(M_svd) + var,1:N] <- as.integer(allsamples %in% rownames(in_data$sites)[apply(!is.na(in_data$sites[,(sum(N_sites[0:(var-1)])+1):sum(N_sites[0:var])]), 1, all)])
     } else {
-        ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + length(M_spec) + length(M_svd) + var,1:N] <- as.integer(allsamples %in% rownames(mm_sites)[!is.na(mm_sites[,sum(N_sites[0:var])])])
+        ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + length(M_spec) + length(M_svd) + var,1:N] <- as.integer(allsamples %in% rownames(in_data$sites)[!is.na(in_data$sites[,sum(N_sites[0:var])])])
     }
 }
 colnames(ICv) <- c(allsamples, paste0('varGroup',1:N_var_groups))
@@ -569,59 +570,56 @@ I_cs <- t(apply(I, 1, cumsum))
 IR_cs <- t(apply(IR, 1, cumsum))
 IC_cs <- t(apply(ICv, 1, cumsum))
 
-X <- unlist(c(sapply(1:N_all, function(x) if(I[1,x]) bacteriaFilt[I_cs[1,x],]),
-              sapply(1:N_all, function(x) if(I[2,x]) euksFilt[I_cs[2,x],]),
-              sapply(1:N_all, function(x) if(I[3,x]) transcr[I_cs[3,x],]),
-              sapply(1:N_all, function(x) if(I[4,x]) itsFilt[I_cs[4,x],])))
+X <- sapply(1:D, function(d) sapply(1:N_all, function(x) if(I[d,x]) in_data[[d]][I_cs[d,x],]))
 
-P <- unlist(c(sapply(1:N_all, function(x) unlist(sapply(1:ncol(biomarkersLog), function(y) {
-                                                          temp <- biomarkersLog[!is.na(biomarkersLog[,y]),y]
-                                                          names(temp) <- rep(colnames(biomarkersLog)[y], length(temp))
+P <- unlist(c(sapply(1:N_all, function(x) unlist(sapply(1:ncol(in_data$biomarkers), function(y) {
+                                                          temp <- in_data$biomarkers[!is.na(in_data$biomarkers[,y]),y]
+                                                          names(temp) <- rep(colnames(in_data$biomarkers)[y], length(temp))
                                                           if(IR[y,x]) temp[IR_cs[y,x]]
                                                    }))),
-              sapply(1:N_all, function(x) unlist(sapply(1:ncol(t2log), function(y) {
-                                                          temp <- t2log[!is.na(t2log[,y]),y]
-                                                          names(temp) <- rep(colnames(t2log)[y], length(temp))
-                                                          if(IR[ncol(biomarkersLog) + y,x]) temp[IR_cs[ncol(biomarkersLog) + y,x]]
+              sapply(1:N_all, function(x) unlist(sapply(1:ncol(in_data$t2), function(y) {
+                                                          temp <- in_data$t2[!is.na(in_data$t2[,y]),y]
+                                                          names(temp) <- rep(colnames(in_data$t2)[y], length(temp))
+                                                          if(IR[ncol(in_data$biomarkers) + y,x]) temp[IR_cs[ncol(in_data$biomarkers) + y,x]]
                                                    }))),
-              sapply(1:N_all, function(x) unlist(sapply(1:ncol(t3log), function(y) {
-                                                          temp <- t3log[!is.na(t3log[,y]),y]
-                                                          names(temp) <- rep(colnames(t3log)[y], length(temp))
-                                                          if(IR[ncol(biomarkersLog) + ncol(t2log) + y,x]) temp[IR_cs[ncol(biomarkersLog) + ncol(t2log) + y,x]]
+              sapply(1:N_all, function(x) unlist(sapply(1:ncol(in_data$t3), function(y) {
+                                                          temp <- in_data$t3[!is.na(in_data$t3[,y]),y]
+                                                          names(temp) <- rep(colnames(in_data$t3)[y], length(temp))
+                                                          if(IR[ncol(in_data$biomarkers) + ncol(in_data$t2) + y,x]) temp[IR_cs[ncol(in_data$biomarkers) + ncol(in_data$t2) + y,x]]
                                                    }))),
-              sapply(1:N_all, function(x) unlist(sapply(1:ncol(fabT1agg), function(y) {
-                                                          temp <- fabT1agg[!is.na(fabT1agg[,y]),y]
-                                                          names(temp) <- rep(colnames(fabT1agg)[y], length(temp))
-                                                          if(IR[ncol(biomarkersLog) + ncol(t2log) + ncol(t3log) + y,x]) temp[IR_cs[ncol(biomarkersLog) + ncol(t2log) + ncol(t3log) + y,x]]
+              sapply(1:N_all, function(x) unlist(sapply(1:ncol(in_data$fab_T1_agg), function(y) {
+                                                          temp <- in_data$fab_T1_agg[!is.na(in_data$fab_T1_agg[,y]),y]
+                                                          names(temp) <- rep(colnames(in_data$fab_T1_agg)[y], length(temp))
+                                                          if(IR[ncol(in_data$biomarkers) + ncol(in_data$t2) + ncol(in_data$t3) + y,x]) temp[IR_cs[ncol(in_data$biomarkers) + ncol(in_data$t2) + ncol(in_data$t3) + y,x]]
                                                    }))),
-              sapply(1:N_all, function(x) unlist(sapply(1:ncol(fabT2agg), function(y) {
-                                                          temp <- fabT2agg[!is.na(fabT2agg[,y]),y]
-                                                          names(temp) <- rep(colnames(fabT2agg)[y], length(temp))
-                                                          if(IR[ncol(biomarkersLog) + ncol(t2log) + ncol(t3log) + ncol(fabT1agg) + y,x]) temp[IR_cs[ncol(biomarkersLog) + ncol(t2log) + ncol(t3log) + ncol(fabT1agg) + y,x]]
+              sapply(1:N_all, function(x) unlist(sapply(1:ncol(in_data$fab_T2_agg), function(y) {
+                                                          temp <- in_data$fab_T2_agg[!is.na(in_data$fab_T2_agg[,y]),y]
+                                                          names(temp) <- rep(colnames(in_data$fab_T2_agg)[y], length(temp))
+                                                          if(IR[ncol(in_data$biomarkers) + ncol(in_data$t2) + ncol(in_data$t3) + ncol(in_data$fab_T1_agg) + y,x]) temp[IR_cs[ncol(in_data$biomarkers) + ncol(in_data$t2) + ncol(in_data$t3) + ncol(in_data$fab_T1_agg) + y,x]]
                                                    })))))
 
 Y <- unlist(c(sapply(1:length(M_snp), function(var) unlist(sapply(1:N_all, function(x) {
-                                                          if(ICv[var, x]) return(mm_snps[allsamples[[x]], (sum(M_snp[0:(var-1)])+1):sum(M_snp[0:var])])
+                                                          if(ICv[var, x]) return(in_data$snps[allsamples[[x]], (sum(M_snp[0:(var-1)])+1):sum(M_snp[0:var])])
                                                    }))),
               sapply(1:length(M_hphoto), function(var) unlist(sapply(1:N_all, function(x) {
-                                                          if(ICv[length(M_snp) + var, x]) return(mm_hphoto[allsamples[[x]], (sum(M_hphoto[0:(var-1)])+1):sum(M_hphoto[0:var])])
+                                                          if(ICv[length(M_snp) + var, x]) return(in_data$hphoto[allsamples[[x]], (sum(M_hphoto[0:(var-1)])+1):sum(M_hphoto[0:var])])
                                                    }))),
               sapply(1:length(M_ephoto), function(var) unlist(sapply(1:N_all, function(x) {
-                                                          if(ICv[length(M_snp) + length(M_hphoto) + var, x]) return(mm_ephoto[allsamples[[x]], (sum(M_ephoto[0:(var-1)])+1):sum(M_ephoto[0:var])])
+                                                          if(ICv[length(M_snp) + length(M_hphoto) + var, x]) return(in_data$ephoto[allsamples[[x]], (sum(M_ephoto[0:(var-1)])+1):sum(M_ephoto[0:var])])
                                                    }))),
               sapply(1:length(M_spec), function(var) unlist(sapply(1:N_all, function(x) {
-                                                          if(ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + var, x]) return(mm_spec[allsamples[[x]], (sum(M_spec[0:(var-1)])+1):sum(M_spec[0:var])])
+                                                          if(ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + var, x]) return(in_data$species[allsamples[[x]], (sum(M_spec[0:(var-1)])+1):sum(M_spec[0:var])])
                                                    }))),
               sapply(1:length(M_svd), function(var) unlist(sapply(1:N_all, function(x) {
-                                                          if(ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + length(M_spec) + var, x]) return(mm_svd[allsamples[[x]], (sum(M_svd[0:(var-1)])+1):sum(M_svd[0:var])])
+                                                          if(ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + length(M_spec) + var, x]) return(in_data$svd[allsamples[[x]], (sum(M_svd[0:(var-1)])+1):sum(M_svd[0:var])])
                                                    }))),
               sapply(1:length(N_sites), function(var) unlist(sapply(1:N_all, function(x) {
-                                                          if(ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + length(M_spec) + length(M_svd) + var, x]) return(mm_sites[allsamples[[x]], (sum(N_sites[0:(var-1)])+1):sum(N_sites[0:var])])
+                                                          if(ICv[length(M_snp) + length(M_hphoto) + length(M_ephoto) + length(M_spec) + length(M_svd) + var, x]) return(in_data$sites[allsamples[[x]], (sum(N_sites[0:(var-1)])+1):sum(N_sites[0:var])])
                                                    })))))
 
 idx_Pm <- which(is.infinite(P))
 P_max <- sapply(names(idx_Pm), function(x) {
-    temp <- biomarkersLog[,x]
+    temp <- in_data$biomarkers[,x]
     min(temp[!is.infinite(temp)], na.rm=TRUE)
 })
 N_Pm <- length(P_max)
@@ -629,126 +627,126 @@ N_Pm <- length(P_max)
 P[is.infinite(P)] <- 0
 
 
-F <- length(bacteriaFilt) + length(euksFilt) + length(transcr) + length(itsFilt)
-H <- sum(!is.na(biomarkersLog)) + sum(!is.na(t2log)) + sum(!is.na(t3log)) + sum(!is.na(fabT1agg)) + sum(!is.na(fabT2agg))
+F <- sum(sapply(in_data[1:D],length))
+H <- sum(sapply((D+1):(D+R), function(x) sum(!is.na(in_data[[x]]))))
 G <- length(Y)
 
 
-cophenbact <- cophenetic(bacttreeY.root)[colnames(bacteriaFilt),colnames(bacteriaFilt)]
-bacteriaFilt_inits <- log(bacteriaFilt)
-bacteriaFilt_inits[bacteriaFilt == 0] <- NA
-bacteriaFilt_nuisance_inits <- numeric()
-for(x in 1:nrow(bacteriaFilt)) {
-    nuisance <- mean(bacteriaFilt_inits[x,],na.rm=TRUE)
-    bacteriaFilt_nuisance_inits <- c(bacteriaFilt_nuisance_inits,nuisance)
-    bacteriaFilt_inits[x,] <- bacteriaFilt_inits[x,] - nuisance
+cophenbact <- cophenetic(bacttreeY.root)[colnames(in_data$mb16S),colnames(in_data$mb16S)]
+inits_mb16S <- log(in_data$mb16S)
+inits_mb16S[in_data$mb16S == 0] <- NA
+inits_mb16S_nuisance <- numeric()
+for(x in 1:nrow(in_data$mb16S)) {
+    nuisance <- mean(inits_mb16S[x,],na.rm=TRUE)
+    inits_mb16S_nuisance <- c(inits_mb16S_nuisance,nuisance)
+    inits_mb16S[x,] <- inits_mb16S[x,] - nuisance
 }
-for(x in 1:nrow(bacteriaFilt)) {
-    wObs <- which(!is.na(bacteriaFilt_inits[x,]))
-    for(y in which(is.na(bacteriaFilt_inits[x,]))) {
+for(x in 1:nrow(in_data$mb16S)) {
+    wObs <- which(!is.na(inits_mb16S[x,]))
+    for(y in which(is.na(inits_mb16S[x,]))) {
         closestRel <- wObs[which.min(cophenbact[y,wObs])]
-        ypres <- bacteriaFilt[,y] > 0
-        closepres <- bacteriaFilt[,closestRel] > 0
+        ypres <- in_data$mb16S[,y] > 0
+        closepres <- in_data$mb16S[,closestRel] > 0
         bothpres <- ypres & closepres
         if(any(bothpres))
-            bacteriaFilt_inits[x,y] <- bacteriaFilt_inits[x,closestRel] + mean(bacteriaFilt_inits[bothpres,y] - bacteriaFilt_inits[bothpres,closestRel], na.rm=TRUE)
+            inits_mb16S[x,y] <- inits_mb16S[x,closestRel] + mean(inits_mb16S[bothpres,y] - inits_mb16S[bothpres,closestRel], na.rm=TRUE)
         else
-            bacteriaFilt_inits[x,y] <- bacteriaFilt_inits[x,closestRel] + mean(bacteriaFilt_inits[ypres,y],na.rm=TRUE) - mean(bacteriaFilt_inits[closepres,closestRel],na.rm=TRUE)
+            inits_mb16S[x,y] <- inits_mb16S[x,closestRel] + mean(inits_mb16S[ypres,y],na.rm=TRUE) - mean(inits_mb16S[closepres,closestRel],na.rm=TRUE)
     }
 }
-bacteria_intercept_inits <- apply(bacteriaFilt_inits,2,mean)
-bacteriaFilt_inits <- bacteriaFilt_inits - mean(bacteria_intercept_inits)
-bacteriaFilt_nuisance_inits <- bacteriaFilt_nuisance_inits + mean(bacteria_intercept_inits)
-bacteria_intercept_inits <- bacteria_intercept_inits - mean(bacteria_intercept_inits)
+inits_mb16S_intercepts <- apply(inits_mb16S,2,mean)
+inits_mb16S <- inits_mb16S - mean(inits_mb16S_intercepts)
+inits_mb16S_nuisance <- inits_mb16S_nuisance + mean(inits_mb16S_intercepts)
+inits_mb16S_intercepts <- inits_mb16S_intercepts - mean(inits_mb16S_intercepts)
 ##might want to modify the replacement by doing something like the ITS version, where the mean of multiple close relatives is used (or better some kind of ancestral state estimate)
 
-copheneuk <- cophenetic(euktreeY.root)[colnames(euksFilt),colnames(euksFilt)]
-euksFilt_inits <- log(euksFilt)
-euksFilt_inits[euksFilt == 0] <- NA
-euksFilt_nuisance_inits <- numeric()
-for(x in 1:nrow(euksFilt)) {
-    nuisance <- mean(euksFilt_inits[x,],na.rm=TRUE)
-    euksFilt_nuisance_inits <- c(euksFilt_nuisance_inits,nuisance)
-    euksFilt_inits[x,] <- euksFilt_inits[x,] - nuisance
+copheneuk <- cophenetic(euktreeY.root)[colnames(in_data$mb18S),colnames(in_data$mb18S)]
+inits_mb18S <- log(in_data$mb18S)
+inits_mb18S[in_data$mb18S == 0] <- NA
+inits_mb18S_nuisance <- numeric()
+for(x in 1:nrow(in_data$mb18S)) {
+    nuisance <- mean(inits_mb18S[x,],na.rm=TRUE)
+    inits_mb18S_nuisance <- c(inits_mb18S_nuisance,nuisance)
+    inits_mb18S[x,] <- inits_mb18S[x,] - nuisance
 }
-for(x in 1:nrow(euksFilt)) {
-    wObs <- which(!is.na(euksFilt_inits[x,]))
-    for(y in which(is.na(euksFilt_inits[x,]))) {
+for(x in 1:nrow(in_data$mb18S)) {
+    wObs <- which(!is.na(inits_mb18S[x,]))
+    for(y in which(is.na(inits_mb18S[x,]))) {
         closestRel <- wObs[which.min(copheneuk[y,wObs])]
-        ypres <- euksFilt[,y] > 0
-        closepres <- euksFilt[,closestRel] > 0
+        ypres <- in_data$mb18S[,y] > 0
+        closepres <- in_data$mb18S[,closestRel] > 0
         bothpres <- ypres & closepres
         if(any(bothpres))
-            euksFilt_inits[x,y] <- euksFilt_inits[x,closestRel] + mean(euksFilt_inits[bothpres,y] - euksFilt_inits[bothpres,closestRel], na.rm=TRUE)
+            inits_mb18S[x,y] <- inits_mb18S[x,closestRel] + mean(inits_mb18S[bothpres,y] - inits_mb18S[bothpres,closestRel], na.rm=TRUE)
         else
-            euksFilt_inits[x,y] <- euksFilt_inits[x,closestRel] + mean(euksFilt_inits[ypres,y],na.rm=TRUE) - mean(euksFilt_inits[closepres,closestRel],na.rm=TRUE)
+            inits_mb18S[x,y] <- inits_mb18S[x,closestRel] + mean(inits_mb18S[ypres,y],na.rm=TRUE) - mean(inits_mb18S[closepres,closestRel],na.rm=TRUE)
     }
 }
-euks_intercept_inits <- apply(euksFilt_inits,2,mean)
-euksFilt_inits <- euksFilt_inits - mean(euks_intercept_inits)
-euksFilt_nuisance_inits <- euksFilt_nuisance_inits + mean(euks_intercept_inits)
-euks_intercept_inits <- euks_intercept_inits - mean(euks_intercept_inits)
+inits_mb18S_intercepts <- apply(inits_mb18S,2,mean)
+inits_mb18S <- inits_mb18S - mean(inits_mb18S_intercepts)
+inits_mb18S_nuisance <- inits_mb18S_nuisance + mean(inits_mb18S_intercepts)
+inits_mb18S_intercepts <- inits_mb18S_intercepts - mean(inits_mb18S_intercepts)
 
 
-transcr_inits <- log(transcr)
-transcr_inits[transcr == 0] <- NA
-transcr_nuisance_inits <- numeric()
-for(x in 1:nrow(transcr)) {
-    nuisance <- mean(transcr_inits[x,],na.rm=TRUE)
-    transcr_nuisance_inits <- c(transcr_nuisance_inits,nuisance)
-    transcr_inits[x,] <- transcr_inits[x,] - nuisance
+inits_rna <- log(in_data$rna)
+inits_rna[in_data$rna == 0] <- NA
+inits_rna_nuisance <- numeric()
+for(x in 1:nrow(in_data$rna)) {
+    nuisance <- mean(inits_rna[x,],na.rm=TRUE)
+    inits_rna_nuisance <- c(inits_rna_nuisance,nuisance)
+    inits_rna[x,] <- inits_rna[x,] - nuisance
 }
-for(x in 1:nrow(transcr)) {
-    for(y in 1:ncol(transcr)) {
-        if(is.na(transcr_inits[x,y])) {
-            transcr_inits[x,y] <- mean(transcr_inits[transcr[,y] > 0, y],na.rm=TRUE)
+for(x in 1:nrow(in_data$rna)) {
+    for(y in 1:ncol(in_data$rna)) {
+        if(is.na(inits_rna[x,y])) {
+            inits_rna[x,y] <- mean(inits_rna[in_data$rna[,y] > 0, y],na.rm=TRUE)
         }
     }
 }
-transcr_intercept_inits <- apply(transcr_inits,2,mean)
-transcr_inits <- transcr_inits - mean(transcr_intercept_inits)
-transcr_nuisance_inits <- transcr_nuisance_inits + mean(transcr_intercept_inits)
-transcr_intercept_inits <- transcr_intercept_inits - mean(transcr_intercept_inits)
+inits_rna_intercepts <- apply(inits_rna,2,mean)
+inits_rna <- inits_rna - mean(inits_rna_intercepts)
+inits_rna_nuisance <- inits_rna_nuisance + mean(inits_rna_intercepts)
+inits_rna_intercepts <- inits_rna_intercepts - mean(inits_rna_intercepts)
 
 
-allclades <- as.character(unique(itsMeta[colnames(itsFilt), 'Clade']))
-allmaj <- as.character(unique(itsMeta[colnames(itsFilt), 'Majority.ITS2.sequence']))
-mm_h$its2 <- cbind(sapply(unique(itsMeta[colnames(itsFilt), 'Clade']), function(x) x == itsMeta[colnames(itsFilt), 'Clade']),
-                sapply(allmaj, function(x) x == itsMeta[colnames(itsFilt), 'Majority.ITS2.sequence']))
+allclades <- as.character(unique(itsMeta[colnames(in_data$its2), 'Clade']))
+allmaj <- as.character(unique(itsMeta[colnames(in_data$its2), 'Majority.ITS2.sequence']))
+mm_h$its2 <- cbind(sapply(unique(itsMeta[colnames(in_data$its2), 'Clade']), function(x) x == itsMeta[colnames(in_data$its2), 'Clade']),
+                sapply(allmaj, function(x) x == itsMeta[colnames(in_data$its2), 'Majority.ITS2.sequence']))
 colnames(mm_h$its2) <- paste0('ITS2_', c(allclades,allmaj))
 mm_h$its2 <- mm_h$its2[,apply(mm_h$its2,2,function(x) sum(x) > 1)]
 
 covits <- tcrossprod(mm_h$its2)
-colnames(covits) <- rownames(covits) <- colnames(itsFilt)
-itsFilt_inits <- log(itsFilt)
-itsFilt_inits[itsFilt == 0] <- NA
-itsFilt_nuisance_inits <- numeric()
-for(x in 1:nrow(itsFilt)) {
-    nuisance <- mean(itsFilt_inits[x,],na.rm=TRUE)
-    itsFilt_nuisance_inits <- c(itsFilt_nuisance_inits,nuisance)
-    itsFilt_inits[x,] <- itsFilt_inits[x,] - nuisance
+colnames(covits) <- rownames(covits) <- colnames(in_data$its2)
+inits_its2 <- log(in_data$its2)
+inits_its2[in_data$its2 == 0] <- NA
+inits_its2_nuisance <- numeric()
+for(x in 1:nrow(in_data$its2)) {
+    nuisance <- mean(inits_its2[x,],na.rm=TRUE)
+    inits_its2_nuisance <- c(inits_its2_nuisance,nuisance)
+    inits_its2[x,] <- inits_its2[x,] - nuisance
 }
-for(x in 1:nrow(itsFilt)) {
-    wObs <- which(!is.na(itsFilt_inits[x,]))
-    for(y in which(is.na(itsFilt_inits[x,]))) {
+for(x in 1:nrow(in_data$its2)) {
+    wObs <- which(!is.na(inits_its2[x,]))
+    for(y in which(is.na(inits_its2[x,]))) {
         closestRel <- wObs[covits[y,wObs] == max(covits[y,wObs])]
-        ypres <- itsFilt[,y] > 0
+        ypres <- in_data$its2[,y] > 0
         if(length(closestRel) == 1) {
-            closepres <- itsFilt[,closestRel] > 0
+            closepres <- in_data$its2[,closestRel] > 0
             bothpres <- ypres & closepres
             if(any(bothpres))
-                itsFilt_inits[x,y] <- itsFilt_inits[x,closestRel] + mean(itsFilt_inits[bothpres,y] - itsFilt_inits[bothpres,closestRel], na.rm=TRUE)
+                inits_its2[x,y] <- inits_its2[x,closestRel] + mean(inits_its2[bothpres,y] - inits_its2[bothpres,closestRel], na.rm=TRUE)
             else
-                itsFilt_inits[x,y] <- itsFilt_inits[x,closestRel] + mean(itsFilt_inits[ypres,y],na.rm=TRUE) - mean(itsFilt_inits[closepres,closestRel],na.rm=TRUE)
+                inits_its2[x,y] <- inits_its2[x,closestRel] + mean(inits_its2[ypres,y],na.rm=TRUE) - mean(inits_its2[closepres,closestRel],na.rm=TRUE)
         } else {
-            itsFilt_inits[x,y] <- mean(itsFilt_inits[x,closestRel]) + mean(itsFilt_inits[ypres,y],na.rm=TRUE) - mean(sapply(closestRel, function(z) mean(itsFilt_inits[itsFilt[,z] > 0, z])), na.rm=TRUE)
+            inits_its2[x,y] <- mean(inits_its2[x,closestRel]) + mean(inits_its2[ypres,y],na.rm=TRUE) - mean(sapply(closestRel, function(z) mean(inits_its2[in_data$its2[,z] > 0, z])), na.rm=TRUE)
         }
     }
 }
-its_intercept_inits <- apply(itsFilt_inits,2,mean)
-itsFilt_inits <- itsFilt_inits - mean(its_intercept_inits)
-itsFilt_nuisance_inits <- itsFilt_nuisance_inits + mean(its_intercept_inits)
-its_intercept_inits <- its_intercept_inits - mean(its_intercept_inits)
+inits_its2_intercepts <- apply(inits_its2,2,mean)
+inits_its2 <- inits_its2 - mean(inits_its2_intercepts)
+inits_its2_nuisance <- inits_its2_nuisance + mean(inits_its2_intercepts)
+inits_its2_intercepts <- inits_its2_intercepts - mean(inits_its2_intercepts)
 
 mm_h <- list()
 names_mm_h <- list()
@@ -759,7 +757,7 @@ for(node in 1:(NNodes + 1)) {
 }
 colnames(mm_h$mb_16S) <- rownames(mm_h$mb_16S) <- paste0('16S_i', 1:(NNodes + 1))
 colnames(mm_h$mb_16S)[1:NTips] <- rownames(mm_h$mb_16S)[1:NTips] <- bacttreeY.root$tip.label
-mm_h$mb_16S <- mm_h$mb_16S[colnames(bacteriaFilt), (NTips+2):ncol(mm_h$mb_16S)]
+mm_h$mb_16S <- mm_h$mb_16S[colnames(in_data$mb16S), (NTips+2):ncol(mm_h$mb_16S)]
 
 mm_h$mb_18S <- matrix(0, NNodesEuks + 1, NNodesEuks + 1)
 for(node in 1:(NNodesEuks + 1)) {
@@ -767,14 +765,14 @@ for(node in 1:(NNodesEuks + 1)) {
 }
 colnames(mm_h$mb_18S) <- rownames(mm_h$mb_18S) <- paste0('euk_i', 1:(NNodesEuks + 1))
 colnames(mm_h$mb_18S)[1:NTipsEuks] <- rownames(mm_h$mb_18S)[1:NTipsEuks] <- euktreeY.root$tip.label
-mm_h$mb_18S <- mm_h$mb_18S[colnames(euksFilt), (NTipsEuks+2):ncol(mm_h$mb_18S)]
+mm_h$mb_18S <- mm_h$mb_18S[colnames(in_data$mb18S), (NTipsEuks+2):ncol(mm_h$mb_18S)]
 
 names_mm_h$biomarkers <- c('symbiont_biomass','ubiquitin')
-mm_h$biomarkers <- sapply(names_mm_h$biomarkers, function(x) grepl(x,colnames(biomarkersLog),ignore.case = TRUE))
+mm_h$biomarkers <- sapply(names_mm_h$biomarkers, function(x) grepl(x,colnames(in_data$biomarkers),ignore.case = TRUE))
 
-mm_h$t2 <- cbind(1, as.numeric(grepl('raw', colnames(t2log))), as.numeric(grepl('norm', colnames(t2log))), as.numeric(grepl('Q1', colnames(t2log))), as.numeric(grepl('Q3', colnames(t2log))))
+mm_h$t2 <- cbind(1, as.numeric(grepl('raw', colnames(in_data$t2))), as.numeric(grepl('norm', colnames(in_data$t2))), as.numeric(grepl('Q1', colnames(in_data$t2))), as.numeric(grepl('Q3', colnames(in_data$t2))))
 colnames(mm_h$t2) <- c('T2_all', 'T2_raw_all', 'T2_norm_all', 'T2_Q1', 'T2_Q3')
-mm_h$t3 <- cbind(1, as.numeric(grepl('raw', colnames(t3log))), as.numeric(grepl('norm', colnames(t3log))), as.numeric(grepl('Q1', colnames(t3log))), as.numeric(grepl('Q3', colnames(t3log))))
+mm_h$t3 <- cbind(1, as.numeric(grepl('raw', colnames(in_data$t3))), as.numeric(grepl('norm', colnames(in_data$t3))), as.numeric(grepl('Q1', colnames(in_data$t3))), as.numeric(grepl('Q3', colnames(in_data$t3))))
 colnames(mm_h$t3) <- c('T3_all', 'T3_raw_all', 'T3_norm_all', 'T3_Q1', 'T3_Q3')
 
 names_mm_h$fab_t1_agg <- list(windspeed_group = 'speed',
@@ -837,21 +835,21 @@ names_mm_h$fab_t1_agg <- list(windspeed_group = 'speed',
                              azimuth_group = 'azimuth',
                              moon_group = 'moon',
                              moon_rise_set_group = 'moon_(rise|set)')
-names_mm_h$fab_t1_agg <- names_mm_h$fab_t1_agg[sapply(names_mm_h$fab_t1_agg, function(x) sum(grepl(x,colnames(fabT1agg),ignore.case = TRUE))) > 1]
-mm_h$fab_T1_agg <- sapply(names_mm_h$fab_t1_agg, function(x) grepl(x,colnames(fabT1agg),ignore.case = TRUE))
+names_mm_h$fab_t1_agg <- names_mm_h$fab_t1_agg[sapply(names_mm_h$fab_t1_agg, function(x) sum(grepl(x,colnames(in_data$fab_T1_agg),ignore.case = TRUE))) > 1]
+mm_h$fab_T1_agg <- sapply(names_mm_h$fab_t1_agg, function(x) grepl(x,colnames(in_data$fab_T1_agg),ignore.case = TRUE))
 
 names_mm_h$hphoto <- c('morphotype_Millepora','morphotype_Pocillopora','morphotype_Porites')
-mm_h$hphoto <- sapply(names_mm_h$hphoto, function(x) grepl(x,colnames(mm_hphoto),ignore.case = TRUE))
+mm_h$hphoto <- sapply(names_mm_h$hphoto, function(x) grepl(x,colnames(in_data$hphoto),ignore.case = TRUE))
 
 names_mm_h$ephoto <- list(bleached_group='bleached_light|bleached_bleached', borers_group='bivalve|Spirobranchus|Tridacna|boringurchin|other_polychaete|sponge|gallcrabs|ascidians', polychaetes_group='Spirobranchus|other_polychaete', bivalve_group='bivalve|Tridacna', algae_contact_group='Halimeda|Turbinaria|Dictyota|Lobophora|Galaxaura|Sargassum', sargassaceae_group='Turbinaria|Sargassum')
-names_mm_h$ephoto <- names_mm_h$ephoto[sapply(names_mm_h$ephoto, function(x) sum(grepl(x,colnames(mm_ephoto),ignore.case = TRUE))) > 1]
-mm_h$ephoto <- sapply(names_mm_h$ephoto, function(x) grepl(x,colnames(mm_ephoto),ignore.case = TRUE))
+names_mm_h$ephoto <- names_mm_h$ephoto[sapply(names_mm_h$ephoto, function(x) sum(grepl(x,colnames(in_data$ephoto),ignore.case = TRUE))) > 1]
+mm_h$ephoto <- sapply(names_mm_h$ephoto, function(x) grepl(x,colnames(in_data$ephoto),ignore.case = TRUE))
 
 names_mm_h$svd <- c('cladePOC','cladePOR')
-mm_h$svd <- sapply(names_mm_h$svd, function(x) grepl(x,colnames(mm_svd),ignore.case = TRUE))
+mm_h$svd <- sapply(names_mm_h$svd, function(x) grepl(x,colnames(in_data$svd),ignore.case = TRUE))
 
 names_mm_h$sites <- levels(filtData$island)
-mm_h$sites <- sapply(names_mm_h$sites, function(x) grepl(x,colnames(mm_sites),ignore.case = TRUE))
+mm_h$sites <- sapply(names_mm_h$sites, function(x) grepl(x,colnames(in_data$sites),ignore.case = TRUE))
 
 ii_fun <- function(x,M,mm) {
     if(M[[x]] == 1) {
@@ -864,21 +862,21 @@ ii_fun <- function(x,M,mm) {
         return(temp - mean(temp))
     }
 }
-intercepts_inits <- c(bacteria_intercept_inits,
-                      euks_intercept_inits,
-                      transcr_intercept_inits,
-                      its_intercept_inits,
-                      apply(biomarkersLog_inits,2,mean,na.rm=TRUE),
-                      apply(t2log,2,mean,na.rm=TRUE),
-                      apply(t3log,2,mean,na.rm=TRUE),
-                      apply(fabT1agg,2,mean,na.rm=TRUE),
-                      apply(fabT2agg,2,mean,na.rm=TRUE),
-                      unlist(sapply(1:length(M_snp), ii_fun, M_snp, mm_snps)),
-                      unlist(sapply(1:length(M_hphoto), ii_fun, M_hphoto, mm_hphoto)),
-                      unlist(sapply(1:length(M_ephoto), ii_fun, M_ephoto, mm_ephoto)),
-                      unlist(sapply(1:length(M_spec), ii_fun, M_spec, mm_spec)),
-                      unlist(sapply(1:length(M_svd), ii_fun, M_svd, mm_svd)),
-                      {temp <- log(apply(mm_sites,2,mean,na.rm=TRUE)); temp - mean(temp)})
+intercepts_inits <- c(inits_mb16S_intercepts,
+                      inits_mb18S_intercepts,
+                      inits_rna_intercepts,
+                      inits_its2_intercepts,
+                      apply(inits_biomarkers,2,mean,na.rm=TRUE),
+                      apply(in_data$t2,2,mean,na.rm=TRUE),
+                      apply(in_data$t3,2,mean,na.rm=TRUE),
+                      apply(in_data$fab_T1_agg,2,mean,na.rm=TRUE),
+                      apply(in_data$fab_T2_agg,2,mean,na.rm=TRUE),
+                      unlist(sapply(1:length(M_snp), ii_fun, M_snp, in_data$snps)),
+                      unlist(sapply(1:length(M_hphoto), ii_fun, M_hphoto, in_data$hphoto)),
+                      unlist(sapply(1:length(M_ephoto), ii_fun, M_ephoto, in_data$ephoto)),
+                      unlist(sapply(1:length(M_spec), ii_fun, M_spec, in_data$species)),
+                      unlist(sapply(1:length(M_svd), ii_fun, M_svd, in_data$svd)),
+                      {temp <- log(apply(in_data$sites,2,mean,na.rm=TRUE)); temp - mean(temp)})
 
 intercept_fun <- function(x) {
     if(sum(x,na.rm=TRUE) != sum(!is.na(x)))
@@ -886,55 +884,55 @@ intercept_fun <- function(x) {
     else
         sum(x,na.rm=TRUE)/(sum(!is.na(x))+1)
 }
-binary_count_intercepts_inits <- logit(c(apply(bacteriaFilt > 0,2,intercept_fun),
-                                         apply(euksFilt > 0,2,intercept_fun),
-                                         apply(transcr > 0,2,intercept_fun),
-                                         apply(itsFilt > 0,2,intercept_fun)))
+binary_count_intercepts_inits <- logit(c(apply(in_data$mb16S > 0,2,intercept_fun),
+                                         apply(in_data$mb18S > 0,2,intercept_fun),
+                                         apply(in_data$rna > 0,2,intercept_fun),
+                                         apply(in_data$its2 > 0,2,intercept_fun)))
 
-multinomial_nuisance_inits <- c(bacteriaFilt_nuisance_inits,
-                                euksFilt_nuisance_inits,
-                                transcr_nuisance_inits,
-                                itsFilt_nuisance_inits)
+multinomial_nuisance_inits <- c(inits_mb16S_nuisance,
+                                inits_mb18S_nuisance,
+                                inits_rna_nuisance,
+                                inits_its2_nuisance)
 
 
-biomarkersInv <- t(ginv(cbind(diag(ncol(biomarkersLog_inits)),mm_h$biomarkers)))
-fabT1aggMatInv <- t(ginv(cbind(diag(ncol(fabT1agg)),mm_h$fab_T1_agg)))
+biomarkersInv <- t(ginv(cbind(diag(ncol(inits_biomarkers)),mm_h$biomarkers)))
+fabT1aggMatInv <- t(ginv(cbind(diag(ncol(in_data$fab_T1_agg)),mm_h$fab_T1_agg)))
 
-prior_scales <- c(apply(bacteriaFilt_inits %*% t(ginv(cbind(1,diag(ncol(bacteriaFilt_inits)),mm_h$mb_16S))[-1,]),2,sd),
-                  apply(euksFilt_inits %*% t(ginv(cbind(1,diag(ncol(euksFilt_inits)),mm_h$mb_18S))[-1,]),2,sd),
-                  apply(transcr_inits, 2, sd),
-                  apply(itsFilt_inits %*% t(ginv(cbind(1,diag(ncol(itsFilt_inits)),mm_h$its2))[-1,]),2,sd),
-                  apply(sapply(1:ncol(biomarkersInv), function(x) matrix(biomarkersLog_inits[,biomarkersInv[,x]!=0],nrow=nrow(biomarkersLog_inits)) %*% biomarkersInv[biomarkersInv[,x]!=0,x]),2,sd,na.rm=TRUE),
-                  apply(t2log %*% t(ginv(cbind(diag(ncol(t2log)),mm_h$t2))),2,sd),
-                  apply(t3log %*% t(ginv(cbind(diag(ncol(t3log)),mm_h$t3))),2,sd),
-                  apply(sapply(1:ncol(fabT1aggMatInv), function(x) matrix(fabT1agg[,fabT1aggMatInv[,x]!=0],nrow=nrow(fabT1agg)) %*% fabT1aggMatInv[fabT1aggMatInv[,x]!=0,x]),2,sd,na.rm=TRUE),
-                  apply(fabT2agg,2,sd,na.rm=TRUE),
-                  rep(1,ncol(mm_snps)),
-                  rep(1,ncol(mm_hphoto)),
+prior_scales <- c(apply(inits_mb16S %*% t(ginv(cbind(1,diag(ncol(inits_mb16S)),mm_h$mb_16S))[-1,]),2,sd),
+                  apply(inits_mb18S %*% t(ginv(cbind(1,diag(ncol(inits_mb18S)),mm_h$mb_18S))[-1,]),2,sd),
+                  apply(inits_rna, 2, sd),
+                  apply(inits_its2 %*% t(ginv(cbind(1,diag(ncol(inits_its2)),mm_h$its2))[-1,]),2,sd),
+                  apply(sapply(1:ncol(biomarkersInv), function(x) matrix(inits_biomarkers[,biomarkersInv[,x]!=0],nrow=nrow(inits_biomarkers)) %*% biomarkersInv[biomarkersInv[,x]!=0,x]),2,sd,na.rm=TRUE),
+                  apply(in_data$t2 %*% t(ginv(cbind(diag(ncol(in_data$t2)),mm_h$t2))),2,sd),
+                  apply(in_data$t3 %*% t(ginv(cbind(diag(ncol(in_data$t3)),mm_h$t3))),2,sd),
+                  apply(sapply(1:ncol(fabT1aggMatInv), function(x) matrix(in_data$fab_T1_agg[,fabT1aggMatInv[,x]!=0],nrow=nrow(in_data$fab_T1_agg)) %*% fabT1aggMatInv[fabT1aggMatInv[,x]!=0,x]),2,sd,na.rm=TRUE),
+                  apply(in_data$fab_T2_agg,2,sd,na.rm=TRUE),
+                  rep(1,ncol(in_data$snps)),
+                  rep(1,ncol(in_data$hphoto)),
                   rep(1,ncol(mm_h$hphoto)),
-                  rep(1,ncol(mm_ephoto)),
+                  rep(1,ncol(in_data$ephoto)),
                   rep(1,ncol(mm_h$ephoto)),
-                  rep(1,ncol(mm_spec)),
-                  rep(1,ncol(mm_svd)),
+                  rep(1,ncol(in_data$species)),
+                  rep(1,ncol(in_data$svd)),
                   rep(1,ncol(mm_h$svd)),
-                  rep(1,ncol(mm_sites)),
+                  rep(1,ncol(in_data$sites)),
                   rep(1,ncol(mm_h$sites)))
 
-prior_intercept_scales <- c(apply(bacteriaFilt_inits,2,sd),
-                            apply(euksFilt_inits,2,sd),
-                            apply(transcr_inits,2, sd),
-                            apply(itsFilt_inits,2,sd),
-                            apply(biomarkersLog_inits,2,sd,na.rm=TRUE),
-                            apply(t2log,2,sd),
-                            apply(t3log,2,sd),
-                            apply(fabT1agg,2,sd,na.rm=TRUE),
-                            apply(fabT2agg,2,sd,na.rm=TRUE),
-                            rep(1,ncol(mm_snps)),
-                            rep(1,ncol(mm_hphoto)),
-                            rep(1,ncol(mm_ephoto)),
-                            rep(1,ncol(mm_spec)),
-                            rep(1,ncol(mm_svd)),
-                            rep(1,ncol(mm_sites)))
+prior_intercept_scales <- c(apply(inits_mb16S,2,sd),
+                            apply(inits_mb18S,2,sd),
+                            apply(inits_rna,2, sd),
+                            apply(inits_its2,2,sd),
+                            apply(inits_biomarkers,2,sd,na.rm=TRUE),
+                            apply(in_data$t2,2,sd),
+                            apply(in_data$t3,2,sd),
+                            apply(in_data$fab_T1_agg,2,sd,na.rm=TRUE),
+                            apply(in_data$fab_T2_agg,2,sd,na.rm=TRUE),
+                            rep(1,ncol(in_data$snps)),
+                            rep(1,ncol(in_data$hphoto)),
+                            rep(1,ncol(in_data$ephoto)),
+                            rep(1,ncol(in_data$species)),
+                            rep(1,ncol(in_data$svd)),
+                            rep(1,ncol(in_data$sites)))
 
 prior_intercept_centers <- intercepts_inits
 binary_count_intercept_centers <- binary_count_intercepts_inits
@@ -963,13 +961,10 @@ IC_higher[IC_higher > 0] <- 1
 B_higher <-nrow(IC_higher)
 G_higher <- sapply(1:length(Mc), function(x) sum(ICv[x,]*Mc[x]))
 
-varlabs <- c(colnames(bacteriaFilt), colnames(mm_h$mb_16S), colnames(euksFilt), colnames(mm_h$mb_18S), colnames(transcr), colnames(itsFilt), colnames(mm_h$its2), colnames(biomarkersLog), names_mm_h$biomarkers, colnames(t2log), colnames(mm_h$t2), colnames(t3log), colnames(mm_h$t3), colnames(fabT1agg), names(names_mm_h$fab_t1_agg), colnames(fabT2agg), colnames(mm_snps), colnames(mm_hphoto), names_mm_h$hphoto, colnames(mm_ephoto), names(names_mm_h$ephoto), colnames(mm_spec), colnames(mm_svd), colnames(mm_h$svd), colnames(mm_sites), colnames(mm_h$sites))
-varlabsM <- c(colnames(bacteriaFilt), colnames(euksFilt), colnames(transcr), colnames(itsFilt), colnames(biomarkersLog), colnames(t2log), colnames(t3log), colnames(fabT1agg), colnames(fabT2agg), colnames(mm_snps), colnames(mm_hphoto), colnames(mm_ephoto), colnames(mm_spec), colnames(mm_svd), colnames(mm_sites))
+varlabs <- c(colnames(in_data$mb16S), colnames(mm_h$mb_16S), colnames(in_data$mb18S), colnames(mm_h$mb_18S), colnames(in_data$rna), colnames(in_data$its2), colnames(mm_h$its2), colnames(in_data$biomarkers), names_mm_h$biomarkers, colnames(in_data$t2), colnames(mm_h$t2), colnames(in_data$t3), colnames(mm_h$t3), colnames(in_data$fab_T1_agg), names(names_mm_h$fab_t1_agg), colnames(in_data$fab_T2_agg), colnames(in_data$snps), colnames(in_data$hphoto), names_mm_h$hphoto, colnames(in_data$ephoto), names(names_mm_h$ephoto), colnames(in_data$species), colnames(in_data$svd), colnames(mm_h$svd), colnames(in_data$sites), colnames(mm_h$sites))
+varlabsM <- unlist(sapply(in_data, colnames))
 
-inv_log_max_contam <- 1 / (log(2) + log(c(max(apply(diag(1/rowSums(bacteriaFilt)) %*% bacteriaFilt, 2, function(x) max(x[x>0]) / min(x[x>0]))),
-                                          max(apply(diag(1/rowSums(euksFilt)) %*% euksFilt, 2, function(x) max(x[x>0]) / min(x[x>0]))),
-                                          max(apply(diag(1/rowSums(transcr)) %*% transcr, 2, function(x) max(x[x>0]) / min(x[x>0]))),
-                                          max(apply(diag(1/rowSums(itsFilt)) %*% itsFilt, 2, function(x) max(x[x>0]) / min(x[x>0]))))))
+inv_log_max_contam <- 1 / (log(2) + log(sapply(1:D, function(d) max(apply(diag(1/rowSums(in_data[[d]])) %*% in_data[[d]], 2, function(x) max(x[x>0]) / min(x[x>0]))))))
 
 data <- list(N            = N,
              N_var_groups = N_var_groups,
@@ -1026,10 +1021,10 @@ data <- list(N            = N,
              shape_gnorm         = shape_gnorm)
 
 #### create initiliazations
-abundance_true_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) bacteriaFilt_inits[I_cs[1,x],]),
-                                        sapply(1:N, function(x) if(I[2,x]) euksFilt_inits[I_cs[2,x],]),
-                                        sapply(1:N, function(x) if(I[3,x]) transcr_inits[I_cs[3,x],]),
-                                        sapply(1:N, function(x) if(I[4,x]) itsFilt_inits[I_cs[4,x],])))
+abundance_true_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) inits_mb16S[I_cs[1,x],]),
+                                        sapply(1:N, function(x) if(I[2,x]) inits_mb18S[I_cs[2,x],]),
+                                        sapply(1:N, function(x) if(I[3,x]) inits_rna[I_cs[3,x],]),
+                                        sapply(1:N, function(x) if(I[4,x]) inits_its2[I_cs[4,x],])))
 
 Z <- matrix(rnorm((K_linear+KG*K_gp)*N) * 0.001, nrow=K_linear+KG*K_gp)
 Z <- diag(sqrt(colSums(t(Z)^2))) %*% svd(t(Z))$v %*% t(svd(t(Z))$u)
