@@ -16,7 +16,7 @@ sumfunc <- median
 #sumfunc <- function(x) x[length(x)]
 #sumfunc <- function(x) x[maxind]
 
-labs <- c(varlabs, paste0(varlabs[1:sum(Mplus[1:D])],'.binary'), paste0('binary_count_dataset_int_',1:D))
+labs <- c(varlabs, paste0(varlabs[1:sum(M_all[1:D])],'.binary'), paste0('binary_count_dataset_int_',1:D))
 
 dataset_scales <- extract(stan.fit, pars='dataset_scales', permuted=FALSE)
 dataset_scales <- apply(dataset_scales,3,sumfunc)
@@ -80,7 +80,7 @@ rho_sites <- apply(rho_sites, 3, sumfunc)
 
 cov_sites <- extract(stan.fit, pars='cov_sites', permuted=FALSE)
 cov_sites <- apply(cov_sites, 3, sumfunc)
-dim(cov_sites) <- c(K,nSites,nSites)
+dim(cov_sites) <- c(K,N_sites,N_sites)
 cov_sites <- cov_sites[axisOrder,,]
 
 if('rho_Z' %in% importparams) {
@@ -109,7 +109,7 @@ nullfunc <- function() {
     drivers <- mytriplot(Z, W_norm, Z, 1,2, as.factor(filtData[allsamples,]$species), labs, 50, TRUE, NULL, NULL, FALSE, TRUE, anysig)
 
     i <- 1
-    hist((var_scales / prior_scales / dataset_scales[i])[(sum(Mplus[1:(i-1)])+1):sum(Mplus[1:i])])
+    hist((var_scales / prior_scales / dataset_scales[i])[(sum(M_all[1:(i-1)])+1):sum(M_all[1:i])])
 
     labs[negsig[,1]]
     labs[possig[,1]]

@@ -76,10 +76,10 @@ transformed data {
     int sum_IR[R,N_all];                               // Number of continuous observations in each sample, per dataset
     int idx_IR[R,N_all,max(M[(D+1):(DR)])];            // Indices mapping each sample to each continuous dataset
     int sum_IR_higher[R,N_all];                        // Number of continuous higher effects in each sample, per dataset
-    int idx_IR_higher[R,N_all,max(M_higher[(D+1):(DR)])];   // Indices mapping each sample to each continuous dataset
-    int sum_IC[C,N_all];                                // Number of categorical observations in each sample, per dataset
-    int idx_IC[C,N_all,max(M[(DR+1):(DRC)])];          // Indices mapping each sample to each categorical dataset
-    int sum_IC_higher[C,N_all];                        // Number of categorical higher effects in each sample, per dataset
+    int idx_IR_higher[R,N_all,max(M_higher[(D+1):(DR)])];    // Indices mapping each sample to each continuous dataset
+    int sum_IC[C,N_all];                                     // Number of categorical observations in each sample, per dataset
+    int idx_IC[C,N_all,max(M[(DR+1):(DRC)])];                // Indices mapping each sample to each categorical dataset
+    int sum_IC_higher[C,N_all];                              // Number of categorical higher effects in each sample, per dataset
     int idx_IC_higher[C,N_all,max(M_higher[(DR+1):(DRC)])];  // Indices mapping each sample to each categorical dataset
     real rho_Z_shape = 1.0 / K_linear;                       // More 'independent' latent variables means more need for sparsity in feature selection
     real rho_Z_scale = 6.0 / K_gp;                           // More 'dependent' latent variables per group means, in order to encourage orthogonality, length scale must be smaller
@@ -191,8 +191,8 @@ parameters {
     vector[H_higher] P_higher;
     vector[G_higher] Y_higher;
     vector[D] binary_count_dataset_intercepts;     // each count dataset could have biased prior intercepts
-    vector[N_multinom] multinomial_nuisance;           // per-sample parameter to convert independent poisson distributions to a multinomial one
-    vector<upper=0>[N_Pm] P_missing;                // latent estimates of continuous variables with partial information (truncated observations)
+    vector[N_multinom] multinomial_nuisance;       // per-sample parameter to convert independent poisson distributions to a multinomial one
+    vector<upper=0>[N_Pm] P_missing;               // latent estimates of continuous variables with partial information (truncated observations)
     matrix<lower=0>[DRC+D,K] nu_factors_raw;       // per-dataset-and-axis sparsity of variable loadings
     vector<lower=0>[K] rho_sites;                  // length scale for site gaussian process
     vector<lower=0, upper=1>[K] site_prop;         // importance of site covariance compared to nugget effect
@@ -412,7 +412,7 @@ model {
                 var_P[i_P:(i_P + sum_IR[r,n] - 1)] = segment(var_scales, sum_M[D+r] + 1, M[D+r])[idx_IR[r,n,1:sum_IR[r,n]]];
                 if(sum_IR_higher[r,n] > 0) {
                         P_predicted[i_P:(i_P + sum_IR[r,n] - 1)]
-                            += MM[idx_IR[r,n,1:sum_IR[r,n]],idx_IR_higher[r,n,1:sum_IR_higher[r,n]]]
+                            += MM[idx_IR[r,n,1:sum_IR[r,n]], idx_IR_higher[r,n,1:sum_IR_higher[r,n]]]
                                * segment(P_higher, i_P_higher, sum_IR_higher[r,n]);
                         var_P_higher[i_P_higher:(i_P_higher + sum_IR_higher[r,n] - 1)]
                             = segment(var_scales, sum_M_all[D+r] + M[D+r] + 1, M_higher[D+r])[idx_IR_higher[r,n,1:sum_IR_higher[r,n]]];
