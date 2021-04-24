@@ -712,12 +712,12 @@ transcr_intercept_inits <- transcr_intercept_inits - mean(transcr_intercept_init
 
 allclades <- as.character(unique(itsMeta[colnames(itsFilt), 'Clade']))
 allmaj <- as.character(unique(itsMeta[colnames(itsFilt), 'Majority.ITS2.sequence']))
-itsMat <- cbind(sapply(unique(itsMeta[colnames(itsFilt), 'Clade']), function(x) x == itsMeta[colnames(itsFilt), 'Clade']),
+mmh_its2 <- cbind(sapply(unique(itsMeta[colnames(itsFilt), 'Clade']), function(x) x == itsMeta[colnames(itsFilt), 'Clade']),
                 sapply(allmaj, function(x) x == itsMeta[colnames(itsFilt), 'Majority.ITS2.sequence']))
-colnames(itsMat) <- paste0('ITS2_', c(allclades,allmaj))
-itsMat <- itsMat[,apply(itsMat,2,function(x) sum(x) > 1)]
+colnames(mmh_its2) <- paste0('ITS2_', c(allclades,allmaj))
+mmh_its2 <- mmh_its2[,apply(mmh_its2,2,function(x) sum(x) > 1)]
 
-covits <- tcrossprod(itsMat)
+covits <- tcrossprod(mmh_its2)
 colnames(covits) <- rownames(covits) <- colnames(itsFilt)
 itsFilt_inits <- log(itsFilt)
 itsFilt_inits[itsFilt == 0] <- NA
@@ -749,106 +749,105 @@ itsFilt_inits <- itsFilt_inits - mean(its_intercept_inits)
 itsFilt_nuisance_inits <- itsFilt_nuisance_inits + mean(its_intercept_inits)
 its_intercept_inits <- its_intercept_inits - mean(its_intercept_inits)
 
-
-bactPhyMat <- matrix(0, NNodes + 1, NNodes + 1)
+mmh_16S <- matrix(0, NNodes + 1, NNodes + 1)
 for(node in 1:(NNodes + 1)) {
-    bactPhyMat[node, ] <- as.numeric(1:(NNodes + 1) %in% c(Ancestors(bacttreeY.root, node), node))
+    mmh_16S[node, ] <- as.numeric(1:(NNodes + 1) %in% c(Ancestors(bacttreeY.root, node), node))
 }
-colnames(bactPhyMat) <- rownames(bactPhyMat) <- paste0('16S_i', 1:(NNodes + 1))
-colnames(bactPhyMat)[1:NTips] <- rownames(bactPhyMat)[1:NTips] <- bacttreeY.root$tip.label
-bactPhyMat <- bactPhyMat[colnames(bacteriaFilt), (NTips+2):ncol(bactPhyMat)]
+colnames(mmh_16S) <- rownames(mmh_16S) <- paste0('16S_i', 1:(NNodes + 1))
+colnames(mmh_16S)[1:NTips] <- rownames(mmh_16S)[1:NTips] <- bacttreeY.root$tip.label
+mmh_16S <- mmh_16S[colnames(bacteriaFilt), (NTips+2):ncol(mmh_16S)]
 
-eukPhyMat <- matrix(0, NNodesEuks + 1, NNodesEuks + 1)
+mmh_18S <- matrix(0, NNodesEuks + 1, NNodesEuks + 1)
 for(node in 1:(NNodesEuks + 1)) {
-    eukPhyMat[node, ] <- as.numeric(1:(NNodesEuks + 1) %in% c(Ancestors(euktreeY.root, node), node))
+    mmh_18S[node, ] <- as.numeric(1:(NNodesEuks + 1) %in% c(Ancestors(euktreeY.root, node), node))
 }
-colnames(eukPhyMat) <- rownames(eukPhyMat) <- paste0('euk_i', 1:(NNodesEuks + 1))
-colnames(eukPhyMat)[1:NTipsEuks] <- rownames(eukPhyMat)[1:NTipsEuks] <- euktreeY.root$tip.label
-eukPhyMat <- eukPhyMat[colnames(euksFilt), (NTipsEuks+2):ncol(eukPhyMat)]
+colnames(mmh_18S) <- rownames(mmh_18S) <- paste0('euk_i', 1:(NNodesEuks + 1))
+colnames(mmh_18S)[1:NTipsEuks] <- rownames(mmh_18S)[1:NTipsEuks] <- euktreeY.root$tip.label
+mmh_18S <- mmh_18S[colnames(euksFilt), (NTipsEuks+2):ncol(mmh_18S)]
 
-biomarkermatNames <- c('symbiont_biomass','ubiquitin')
-biomarkermat <- sapply(biomarkermatNames, function(x) grepl(x,colnames(biomarkersLog),ignore.case = TRUE))
+names_mmh_biomarkers <- c('symbiont_biomass','ubiquitin')
+mmh_biomarkers <- sapply(names_mmh_biomarkers, function(x) grepl(x,colnames(biomarkersLog),ignore.case = TRUE))
 
-t2Mat <- cbind(1, as.numeric(grepl('raw', colnames(t2log))), as.numeric(grepl('norm', colnames(t2log))), as.numeric(grepl('Q1', colnames(t2log))), as.numeric(grepl('Q3', colnames(t2log))))
-colnames(t2Mat) <- c('T2_all', 'T2_raw_all', 'T2_norm_all', 'T2_Q1', 'T2_Q3')
-t3Mat <- cbind(1, as.numeric(grepl('raw', colnames(t3log))), as.numeric(grepl('norm', colnames(t3log))), as.numeric(grepl('Q1', colnames(t3log))), as.numeric(grepl('Q3', colnames(t3log))))
-colnames(t3Mat) <- c('T3_all', 'T3_raw_all', 'T3_norm_all', 'T3_Q1', 'T3_Q3')
+mmh_t2 <- cbind(1, as.numeric(grepl('raw', colnames(t2log))), as.numeric(grepl('norm', colnames(t2log))), as.numeric(grepl('Q1', colnames(t2log))), as.numeric(grepl('Q3', colnames(t2log))))
+colnames(mmh_t2) <- c('T2_all', 'T2_raw_all', 'T2_norm_all', 'T2_Q1', 'T2_Q3')
+mmh_t3 <- cbind(1, as.numeric(grepl('raw', colnames(t3log))), as.numeric(grepl('norm', colnames(t3log))), as.numeric(grepl('Q1', colnames(t3log))), as.numeric(grepl('Q3', colnames(t3log))))
+colnames(mmh_t3) <- c('T3_all', 'T3_raw_all', 'T3_norm_all', 'T3_Q1', 'T3_Q3')
 
-fabT1aggMatNames <- list(windspeed_group = 'speed',
-                         windspeed05_group = 'Q05.*speed',
-                         windspeed95_group = 'Q95.*speed',
-                         true_windspeed_group = 'true_wind_speed',
-                         windspeed_knots_group = 'wind_speed_knots',
-                         wind_direction_group = 'true_wind_dir|eastward_wind|orthward_wind',
-                         true_wind_dir_group = 'true_wind_dir',
-                         barometer_hp_group = 'barometer_hp',
-                         temperature_group = 'temp|sst|T_acs|T_tsg',
-                         air_temperature_group = 'airTemp',
-                         water_temperature_group = 'waterTemp|T_acs|sst_batos|T_tsg',
-                         waterTemp_group = 'waterTemp',
-                         T_acs_group = 'T_acs',
-                         sst_batos_group = 'sst_batos',
-                         T_tsg_group = 'T_tsg',
-                         temperature05_group = 'Q05.*(temp|sst|T_acs|T_tsg)',
-                         temperature95_group = 'Q95.*(temp|sst|T_acs|T_tsg)',
-                         water_temperature05_group = 'Q05.*(waterTemp|T_acs|sst_batos|T_tsg)',
-                         water_temperature95_group = 'Q95.*(waterTemp|T_acs|sst_batos|T_tsg)',
-                         dewPoint_group = 'dewPoint',
-                         salinity_group = 'S_tsg|S_acs|sal',
-                         salinity05_group = 'Q05.*(S_tsg|S_acs|sal)',
-                         salinity95_group = 'Q95.*(S_tsg|S_acs|sal)',
-                         S_tsg_group = 'S_tsg',
-                         S_acs_group = 'S_acs',
-                         S_tsg_uncorr_group = 'S_tsg_uncorr',
-                         S_tsg_corr_group = 'S_tsg_corr',
-                         chlorophyll_group = 'Chl',
-                         chlorophyll05_group = 'Q05.*Chl',
-                         chlorophyll95_group = 'Q95.*Chl',
-                         Chl_acs_group = 'Chl_acs$',
-                         Chl_acs_final_group = 'Chl_acs_final',
-                         POC_group = 'POC',
-                         POC05_group = 'Q05.*POC',
-                         POC95_group = 'Q95.*POC',
-                         POC_acs_group = 'POC_acs$',
-                         POC_acs_final_group = 'POC_acs_final',
-                         gamma_group = 'gamma',
-                         gamma05_group = 'Q05.*gamma',
-                         gamma95_group = 'Q95.*gamma',
-                         gamma_acs_group = 'gamma_acs$',
-                         gamma_acs_final_group = 'gamma_acs_final',
-                         fCDOM_group = 'fCDOM',
-                         PAR_group = 'PAR',
-                         PAR05_group = 'Q05.*PAR',
-                         PAR95_group = 'Q95.*PAR',
-                         PAR_bincount_group = 'PAR_bincount',
-                         PAR_sd_group = 'PAR_sd',
-                         PAR_higher_group = 'PAR$',
-                         Twilight_group = 'Twilight',
-                         AstronauticalTwilight_group = 'AstronauticalTwilight',
-                         CivilTwilight_group = 'CivilTwilight',
-                         NauticalTwilight_group = 'NauticalTwilight',
-                         astronomical_group = 'rise|set',
-                         rise_group = 'rise',
-                         set_group = 'set',
-                         zenith_group = 'zenith',
-                         azimuth_group = 'azimuth',
-                         moon_group = 'moon',
-                         moon_rise_set_group = 'moon_(rise|set)')
-fabT1aggMatNames <- fabT1aggMatNames[sapply(fabT1aggMatNames, function(x) sum(grepl(x,colnames(fabT1agg),ignore.case = TRUE))) > 1]
-fabT1aggMat <- sapply(fabT1aggMatNames, function(x) grepl(x,colnames(fabT1agg),ignore.case = TRUE))
+names_mmh_fab_t1_agg <- list(windspeed_group = 'speed',
+                             windspeed05_group = 'Q05.*speed',
+                             windspeed95_group = 'Q95.*speed',
+                             true_windspeed_group = 'true_wind_speed',
+                             windspeed_knots_group = 'wind_speed_knots',
+                             wind_direction_group = 'true_wind_dir|eastward_wind|orthward_wind',
+                             true_wind_dir_group = 'true_wind_dir',
+                             barometer_hp_group = 'barometer_hp',
+                             temperature_group = 'temp|sst|T_acs|T_tsg',
+                             air_temperature_group = 'airTemp',
+                             water_temperature_group = 'waterTemp|T_acs|sst_batos|T_tsg',
+                             waterTemp_group = 'waterTemp',
+                             T_acs_group = 'T_acs',
+                             sst_batos_group = 'sst_batos',
+                             T_tsg_group = 'T_tsg',
+                             temperature05_group = 'Q05.*(temp|sst|T_acs|T_tsg)',
+                             temperature95_group = 'Q95.*(temp|sst|T_acs|T_tsg)',
+                             water_temperature05_group = 'Q05.*(waterTemp|T_acs|sst_batos|T_tsg)',
+                             water_temperature95_group = 'Q95.*(waterTemp|T_acs|sst_batos|T_tsg)',
+                             dewPoint_group = 'dewPoint',
+                             salinity_group = 'S_tsg|S_acs|sal',
+                             salinity05_group = 'Q05.*(S_tsg|S_acs|sal)',
+                             salinity95_group = 'Q95.*(S_tsg|S_acs|sal)',
+                             S_tsg_group = 'S_tsg',
+                             S_acs_group = 'S_acs',
+                             S_tsg_uncorr_group = 'S_tsg_uncorr',
+                             S_tsg_corr_group = 'S_tsg_corr',
+                             chlorophyll_group = 'Chl',
+                             chlorophyll05_group = 'Q05.*Chl',
+                             chlorophyll95_group = 'Q95.*Chl',
+                             Chl_acs_group = 'Chl_acs$',
+                             Chl_acs_final_group = 'Chl_acs_final',
+                             POC_group = 'POC',
+                             POC05_group = 'Q05.*POC',
+                             POC95_group = 'Q95.*POC',
+                             POC_acs_group = 'POC_acs$',
+                             POC_acs_final_group = 'POC_acs_final',
+                             gamma_group = 'gamma',
+                             gamma05_group = 'Q05.*gamma',
+                             gamma95_group = 'Q95.*gamma',
+                             gamma_acs_group = 'gamma_acs$',
+                             gamma_acs_final_group = 'gamma_acs_final',
+                             fCDOM_group = 'fCDOM',
+                             PAR_group = 'PAR',
+                             PAR05_group = 'Q05.*PAR',
+                             PAR95_group = 'Q95.*PAR',
+                             PAR_bincount_group = 'PAR_bincount',
+                             PAR_sd_group = 'PAR_sd',
+                             PAR_higher_group = 'PAR$',
+                             Twilight_group = 'Twilight',
+                             AstronauticalTwilight_group = 'AstronauticalTwilight',
+                             CivilTwilight_group = 'CivilTwilight',
+                             NauticalTwilight_group = 'NauticalTwilight',
+                             astronomical_group = 'rise|set',
+                             rise_group = 'rise',
+                             set_group = 'set',
+                             zenith_group = 'zenith',
+                             azimuth_group = 'azimuth',
+                             moon_group = 'moon',
+                             moon_rise_set_group = 'moon_(rise|set)')
+names_mmh_fab_t1_agg <- names_mmh_fab_t1_agg[sapply(names_mmh_fab_t1_agg, function(x) sum(grepl(x,colnames(fabT1agg),ignore.case = TRUE))) > 1]
+mmh_fab_T1_agg <- sapply(names_mmh_fab_t1_agg, function(x) grepl(x,colnames(fabT1agg),ignore.case = TRUE))
 
-hostphotoHigherMatNames <- c('morphotype_Millepora','morphotype_Pocillopora','morphotype_Porites')
-hostphotoHigherMat <- sapply(hostphotoHigherMatNames, function(x) grepl(x,colnames(mm_hphoto),ignore.case = TRUE))
+names_mmh_hphoto <- c('morphotype_Millepora','morphotype_Pocillopora','morphotype_Porites')
+mmh_hphoto <- sapply(names_mmh_hphoto, function(x) grepl(x,colnames(mm_hphoto),ignore.case = TRUE))
 
-envphotoHigherMatNames <- list(bleached_group='bleached_light|bleached_bleached', borers_group='bivalve|Spirobranchus|Tridacna|boringurchin|other_polychaete|sponge|gallcrabs|ascidians', polychaetes_group='Spirobranchus|other_polychaete', bivalve_group='bivalve|Tridacna', algae_contact_group='Halimeda|Turbinaria|Dictyota|Lobophora|Galaxaura|Sargassum', sargassaceae_group='Turbinaria|Sargassum')
-envphotoHigherMatNames <- envphotoHigherMatNames[sapply(envphotoHigherMatNames, function(x) sum(grepl(x,colnames(mm_ephoto),ignore.case = TRUE))) > 1]
-envphotoHigherMat <- sapply(envphotoHigherMatNames, function(x) grepl(x,colnames(mm_ephoto),ignore.case = TRUE))
+names_mmh_ephoto <- list(bleached_group='bleached_light|bleached_bleached', borers_group='bivalve|Spirobranchus|Tridacna|boringurchin|other_polychaete|sponge|gallcrabs|ascidians', polychaetes_group='Spirobranchus|other_polychaete', bivalve_group='bivalve|Tridacna', algae_contact_group='Halimeda|Turbinaria|Dictyota|Lobophora|Galaxaura|Sargassum', sargassaceae_group='Turbinaria|Sargassum')
+names_mmh_ephoto <- names_mmh_ephoto[sapply(names_mmh_ephoto, function(x) sum(grepl(x,colnames(mm_ephoto),ignore.case = TRUE))) > 1]
+mmh_ephoto <- sapply(names_mmh_ephoto, function(x) grepl(x,colnames(mm_ephoto),ignore.case = TRUE))
 
-snpSVDHigherMatNames <- c('cladePOC','cladePOR')
-snpSVDHigherMat <- sapply(snpSVDHigherMatNames, function(x) grepl(x,colnames(mm_svd),ignore.case = TRUE))
+names_mmh_svd <- c('cladePOC','cladePOR')
+mmh_svd <- sapply(names_mmh_svd, function(x) grepl(x,colnames(mm_svd),ignore.case = TRUE))
 
-siteHigherMatNames <- levels(filtData$island)
-siteHigherMat <- sapply(siteHigherMatNames, function(x) grepl(x,colnames(mm_sites),ignore.case = TRUE))
+names_mmh_sites <- levels(filtData$island)
+mmh_sites <- sapply(names_mmh_sites, function(x) grepl(x,colnames(mm_sites),ignore.case = TRUE))
 
 ii_fun <- function(x,M,mm) {
     if(M[[x]] == 1) {
@@ -894,28 +893,28 @@ multinomial_nuisance_inits <- c(bacteriaFilt_nuisance_inits,
                                 itsFilt_nuisance_inits)
 
 
-biomarkersInv <- t(ginv(cbind(diag(ncol(biomarkersLog_inits)),biomarkermat)))
-fabT1aggMatInv <- t(ginv(cbind(diag(ncol(fabT1agg)),fabT1aggMat)))
+biomarkersInv <- t(ginv(cbind(diag(ncol(biomarkersLog_inits)),mmh_biomarkers)))
+fabT1aggMatInv <- t(ginv(cbind(diag(ncol(fabT1agg)),mmh_fab_T1_agg)))
 
-prior_scales <- c(apply(bacteriaFilt_inits %*% t(ginv(cbind(1,diag(ncol(bacteriaFilt_inits)),bactPhyMat))[-1,]),2,sd),
-                  apply(euksFilt_inits %*% t(ginv(cbind(1,diag(ncol(euksFilt_inits)),eukPhyMat))[-1,]),2,sd),
+prior_scales <- c(apply(bacteriaFilt_inits %*% t(ginv(cbind(1,diag(ncol(bacteriaFilt_inits)),mmh_16S))[-1,]),2,sd),
+                  apply(euksFilt_inits %*% t(ginv(cbind(1,diag(ncol(euksFilt_inits)),mmh_18S))[-1,]),2,sd),
                   apply(transcr_inits, 2, sd),
-                  apply(itsFilt_inits %*% t(ginv(cbind(1,diag(ncol(itsFilt_inits)),itsMat))[-1,]),2,sd),
+                  apply(itsFilt_inits %*% t(ginv(cbind(1,diag(ncol(itsFilt_inits)),mmh_its2))[-1,]),2,sd),
                   apply(sapply(1:ncol(biomarkersInv), function(x) matrix(biomarkersLog_inits[,biomarkersInv[,x]!=0],nrow=nrow(biomarkersLog_inits)) %*% biomarkersInv[biomarkersInv[,x]!=0,x]),2,sd,na.rm=TRUE),
-                  apply(t2log %*% t(ginv(cbind(diag(ncol(t2log)),t2Mat))),2,sd),
-                  apply(t3log %*% t(ginv(cbind(diag(ncol(t3log)),t3Mat))),2,sd),
+                  apply(t2log %*% t(ginv(cbind(diag(ncol(t2log)),mmh_t2))),2,sd),
+                  apply(t3log %*% t(ginv(cbind(diag(ncol(t3log)),mmh_t3))),2,sd),
                   apply(sapply(1:ncol(fabT1aggMatInv), function(x) matrix(fabT1agg[,fabT1aggMatInv[,x]!=0],nrow=nrow(fabT1agg)) %*% fabT1aggMatInv[fabT1aggMatInv[,x]!=0,x]),2,sd,na.rm=TRUE),
                   apply(fabT2agg,2,sd,na.rm=TRUE),
                   rep(1,ncol(mm_snps)),
                   rep(1,ncol(mm_hphoto)),
-                  rep(1,ncol(hostphotoHigherMat)),
+                  rep(1,ncol(mmh_hphoto)),
                   rep(1,ncol(mm_ephoto)),
-                  rep(1,ncol(envphotoHigherMat)),
+                  rep(1,ncol(mmh_ephoto)),
                   rep(1,ncol(mm_spec)),
                   rep(1,ncol(mm_svd)),
-                  rep(1,ncol(snpSVDHigherMat)),
+                  rep(1,ncol(mmh_svd)),
                   rep(1,ncol(mm_sites)),
-                  rep(1,ncol(siteHigherMat)))
+                  rep(1,ncol(mmh_sites)))
 
 prior_intercept_scales <- c(apply(bacteriaFilt_inits,2,sd),
                             apply(euksFilt_inits,2,sd),
@@ -936,31 +935,31 @@ prior_intercept_scales <- c(apply(bacteriaFilt_inits,2,sd),
 prior_intercept_centers <- intercepts_inits
 binary_count_intercept_centers <- binary_count_intercepts_inits
 
-M_higher <- c(ncol(bactPhyMat), ncol(eukPhyMat), 0, ncol(itsMat), ncol(biomarkermat), ncol(t2Mat), ncol(t3Mat), ncol(fabT1aggMat), 0, 0, ncol(hostphotoHigherMat), ncol(envphotoHigherMat), 0, ncol(snpSVDHigherMat), ncol(siteHigherMat))
+M_higher <- c(ncol(mmh_16S), ncol(mmh_18S), 0, ncol(mmh_its2), ncol(mmh_biomarkers), ncol(mmh_t2), ncol(mmh_t3), ncol(mmh_fab_T1_agg), 0, 0, ncol(mmh_hphoto), ncol(mmh_ephoto), 0, ncol(mmh_svd), ncol(mmh_sites))
 M_all <- M + M_higher
 VOBplus <- sum(M_all)
-mm <- c(bactPhyMat, eukPhyMat, itsMat, biomarkermat, t2Mat, t3Mat, fabT1aggMat, hostphotoHigherMat, envphotoHigherMat, snpSVDHigherMat, siteHigherMat)
+mm <- c(mmh_16S, mmh_18S, mmh_its2, mmh_biomarkers, mmh_t2, mmh_t3, mmh_fab_T1_agg, mmh_hphoto, mmh_ephoto, mmh_svd, mmh_sites)
 size_mm <- length(mm)
 
 F_higher <- sapply(1:D, function(x) sum(I[x,]*(M_all[x]-M[x])))
 
-IR_higher <- rbind(t(biomarkermat) %*% IR[1:M[D+1],],
-                   t(t2Mat) %*% IR[(M[D+1] + 1):sum(M[(D+1):(D+2)]),],
-                   t(t3Mat) %*% IR[(sum(M[(D+1):(D+2)]) + 1):sum(M[(D+1):(D+3)]),],
-                   t(fabT1aggMat) %*% IR[(sum(M[(D+1):(D+3)]) + 1):sum(M[(D+1):(D+4)]),])
+IR_higher <- rbind(t(mmh_biomarkers) %*% IR[1:M[D+1],],
+                   t(mmh_t2) %*% IR[(M[D+1] + 1):sum(M[(D+1):(D+2)]),],
+                   t(mmh_t3) %*% IR[(sum(M[(D+1):(D+2)]) + 1):sum(M[(D+1):(D+3)]),],
+                   t(mmh_fab_T1_agg) %*% IR[(sum(M[(D+1):(D+3)]) + 1):sum(M[(D+1):(D+4)]),])
 IR_higher[IR_higher > 0] <- 1
 O_higher = nrow(IR_higher)
 H_higher <- sum(IR_higher > 0)
 
-IC_higher <- rbind(t(hostphotoHigherMat) %*% IC[1:M[D+R+2],],
-                   t(envphotoHigherMat) %*% IC[(M[D+R+2] + 1):sum(M[(D+R+2):(D+R+3)]),],
-                   t(snpSVDHigherMat) %*% IC[(sum(M[(D+R+2):(D+R+4)]) + 1):sum(M[(D+R+2):(D+R+5)]),],
-                   t(siteHigherMat) %*% IC[(sum(M[(D+R+2):(D+R+5)]) + 1):sum(M[(D+R+2):(D+R+6)]),])
+IC_higher <- rbind(t(mmh_hphoto) %*% IC[1:M[D+R+2],],
+                   t(mmh_ephoto) %*% IC[(M[D+R+2] + 1):sum(M[(D+R+2):(D+R+3)]),],
+                   t(mmh_svd) %*% IC[(sum(M[(D+R+2):(D+R+4)]) + 1):sum(M[(D+R+2):(D+R+5)]),],
+                   t(mmh_sites) %*% IC[(sum(M[(D+R+2):(D+R+5)]) + 1):sum(M[(D+R+2):(D+R+6)]),])
 IC_higher[IC_higher > 0] <- 1
 B_higher <-nrow(IC_higher)
 G_higher <- sapply(1:length(Mc), function(x) sum(ICv[x,]*Mc[x]))
 
-varlabs <- c(colnames(bacteriaFilt), colnames(bactPhyMat), colnames(euksFilt), colnames(eukPhyMat), colnames(transcr), colnames(itsFilt), colnames(itsMat), colnames(biomarkersLog), biomarkermatNames, colnames(t2log), colnames(t2Mat), colnames(t3log), colnames(t3Mat), colnames(fabT1agg), names(fabT1aggMatNames), colnames(fabT2agg), colnames(mm_snps), colnames(mm_hphoto), hostphotoHigherMatNames, colnames(mm_ephoto), names(envphotoHigherMatNames), colnames(mm_spec), colnames(mm_svd), colnames(snpSVDHigherMat), colnames(mm_sites), colnames(siteHigherMat))
+varlabs <- c(colnames(bacteriaFilt), colnames(mmh_16S), colnames(euksFilt), colnames(mmh_18S), colnames(transcr), colnames(itsFilt), colnames(mmh_its2), colnames(biomarkersLog), names_mmh_biomarkers, colnames(t2log), colnames(mmh_t2), colnames(t3log), colnames(mmh_t3), colnames(fabT1agg), names(names_mmh_fab_t1_agg), colnames(fabT2agg), colnames(mm_snps), colnames(mm_hphoto), names_mmh_hphoto, colnames(mm_ephoto), names(names_mmh_ephoto), colnames(mm_spec), colnames(mm_svd), colnames(mmh_svd), colnames(mm_sites), colnames(mmh_sites))
 varlabsM <- c(colnames(bacteriaFilt), colnames(euksFilt), colnames(transcr), colnames(itsFilt), colnames(biomarkersLog), colnames(t2log), colnames(t3log), colnames(fabT1agg), colnames(fabT2agg), colnames(mm_snps), colnames(mm_hphoto), colnames(mm_ephoto), colnames(mm_spec), colnames(mm_svd), colnames(mm_sites))
 
 inv_log_max_contam <- 1 / (log(2) + log(c(max(apply(diag(1/rowSums(bacteriaFilt)) %*% bacteriaFilt, 2, function(x) max(x[x>0]) / min(x[x>0]))),
