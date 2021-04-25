@@ -83,5 +83,14 @@ functions {
         for(i in 1:rows(A)) if(lambda[i] < 0) lambda[i] = 0;
         return(qr_thin_R(diag_post_multiply(eigenvectors_sym(A), sqrt(lambda))')');
     } // https://math.stackexchange.com/questions/423138/cholesky-for-non-positive-definite-matrices
+    matrix mix_skew_normal(matrix Z1, matrix Z2, vector alpha) {
+        vector[rows(Z1)] delta = alpha ./ sqrt(1 - alpha^2);
+        matrix[rows(Z1),cols(Z1)] Z
+            = diag_pre_multiply(inv_sqrt(1 - square(delta) * 2 / pi()),
+                                diag_pre_multiply(delta ./ alpha,
+                                                  Z1 + diag_pre_multiply(alpha, Z2))
+                                - rep_matrix(delta * sqrt(2 / pi()), cols(Z1)));
+        return(Z);
+    } // skew-normal matrix with mean 0 and sd 1, assuming Z1 is normal, Z2 is half-normal, and each have location 0 and scale 1
 }
 

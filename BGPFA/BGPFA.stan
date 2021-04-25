@@ -36,7 +36,7 @@ data {
     vector[H] P;                                        // continuous data
     real<lower=0> global_scale_prior;
     real<lower=0> ortho_scale_prior;                    // prior degree of orthogonalization regularization
-    vector<lower=0>[sum(M_all)] prior_scales;
+    vector<lower=0>[sum(M_all) + sum(M-all[1:D]) + D] prior_scales;
     vector<lower=0>[sum(M)] prior_intercept_scales;
     vector[sum(M)] prior_intercept_centers;
     vector[sum(M[1:D])] binary_count_intercept_centers;
@@ -204,21 +204,13 @@ parameters {
     vector<lower=0>[D] contaminant_overdisp;       // dispersion parameter for amount of contamination in true negative count observations
 }
 transformed parameters {
-    vector[K] delta = skew_Z / sqrt(1 - skew_Z^2);
-    matrix[K,N] Z
-        = diag_pre_multiply(inv_sqrt(1 - 2 * square(delta) / pi()),
-                            diag_pre_multiply(delta ./ skew_Z,
-                                              Z1 + diag_pre_multiply(skew_Z, Z2))
-                            - rep_matrix(delta * sqrt(2 / pi()), N));             // skew-normal PCA axis scores with mean 0 and sd 1, assuming input Z1 and Z2 have those location and scales
+    matrix[K,N] Z = mix_skew_normal(Z1,Z2,skew_Z);
     matrix[K,N_var_groups] Z_higher = Z * samp2group;
     matrix[K_linear + KG * K_gp, N] Z_ortho = diag_pre_multiply(sqrt(rows_dot_self(Z)), svd_V(Z')) * svd_U(Z')';
     matrix[VOB_all+V_all+D,K] W_ortho = svd_U(W_norm) * diag_post_multiply(svd_V(W_norm)', sqrt(columns_dot_self(W_norm)));
     matrix[VOB,K] W;
     matrix[V,K] W_binary_counts;
-    vector<lower=0>[VOB_all+V_all+D] var_scales
-        = sds
-          .* append_row(prior_scales,
-                        ones_vector(V_all+D));
+    vector<lower=0>[VOB_all+V_all+D] var_scales = sds .* prior_scales;
     vector<upper=0>[D] log_less_contamination = inv(inv_log_less_contamination);
     vector[H] P_filled = P;
     cov_matrix[M[DRC]] cov_sites[K];

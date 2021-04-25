@@ -916,7 +916,12 @@ prior_scales <- c(apply(inits_mb16S %*% t(ginv(cbind(1,diag(ncol(inits_mb16S)),m
                   rep(1,ncol(in_data$svd)),
                   rep(1,ncol(mm_h$svd)),
                   rep(1,ncol(in_data$sites)),
-                  rep(1,ncol(mm_h$sites)))
+                  rep(1,ncol(mm_h$sites)),
+                  rep(1,ncol(inits_mb16S)),
+                  rep(1,ncol(inits_mb18S)),
+                  rep(1,ncol(inits_rna)),
+                  rep(1,ncol(inits_its2))
+                  rep(1,D))
 
 prior_intercept_scales <- c(apply(inits_mb16S,2,sd),
                             apply(inits_mb18S,2,sd),
@@ -1027,10 +1032,12 @@ abundance_true_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) inits
                                         sapply(1:N, function(x) if(I[3,x]) inits_rna[I_cs[3,x],]),
                                         sapply(1:N, function(x) if(I[4,x]) inits_its2[I_cs[4,x],])))
 skew_Z_prior_init <- skew_Z_prior * 5
-Z1 <- matrix(rnorm((K_linear+KG*K_gp)*N) * 0.001, nrow=K_linear+KG*K_gp)
+delta <- skew_Z_prior_init / sqrt(1 + skew_Z_prior_init^2)
+Z1r <- matrix(rnorm((K_linear+KG*K_gp)*N) * 0.001, nrow=K_linear+KG*K_gp)
 Z2 <- matrix(abs(rnorm((K_linear+KG*K_gp)*N)) * 0.001, nrow=K_linear+KG*K_gp)
-Z <- diag(sqrt(colSums(t((Z1+skew_Z_prior_init*Z2)/sqrt(1+skew_Z_prior_init^2))^2))) %*% svd(t((Z1+skew_Z_prior_init*Z2)/sqrt(1+skew_Z_prior_init^2)))$v %*% t(svd(t((Z1+skew_Z_prior_init*Z2)/sqrt(1+skew_Z_prior_init^2)))$u)
-Z1 <- Z - Z2
+Z <- ((Z1r+skew_Z_prior_init*Z2)/sqrt(1+skew_Z_prior_init^2) - delta * 0.001 *sqrt(2/pi)) / sqrt(1 - 2*delta^2/pi)
+Zo <- diag(sqrt(colSums(t(Z)^2))) %*% svd(t(Z))$v %*% t(svd(t(Z))$u)
+Z1 <- Zo - Z2
 
 W_norm <- matrix(rnorm((VOBplus+sum(M_all[1:D])+D) * K) * 0.001, ncol=K)
 W_norm <- svd(W_norm)$u %*% t(svd(W_norm)$v) %*% diag(sqrt(colSums(W_norm^2)))
