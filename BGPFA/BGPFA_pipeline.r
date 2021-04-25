@@ -19,7 +19,7 @@ inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 nMicrobeKeep <- 100#500
 K_linear <- 5#10
 K_gp <- 15
-KG <- 1#3
+KG <- 0#3
 K <- K_linear + KG * K_gp
 global_scale_prior = 2.5
 rate_gamma_fact = 10
@@ -27,7 +27,7 @@ shape_gamma_fact = 2
 site_smoothness <- 2
 nu_residuals <- 25
 ortho_scale_prior <- 0.25
-shape_gnorm <- 10
+shape_gnorm <- 7
 skew_Z_prior <- 10
 
 input_prefix <- file.path(Sys.getenv('HOME'), 'data/tara_unsupervised_analyses')
@@ -920,7 +920,7 @@ prior_scales <- c(apply(inits_mb16S %*% t(ginv(cbind(1,diag(ncol(inits_mb16S)),m
                   rep(1,ncol(inits_mb16S)),
                   rep(1,ncol(inits_mb18S)),
                   rep(1,ncol(inits_rna)),
-                  rep(1,ncol(inits_its2))
+                  rep(1,ncol(inits_its2)),
                   rep(1,D))
 
 prior_intercept_scales <- c(apply(inits_mb16S,2,sd),
