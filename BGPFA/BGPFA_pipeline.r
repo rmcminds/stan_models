@@ -144,7 +144,7 @@ for(i in 1:nMicrobeKeep) {
     if(!binar) {keepers_euk <- c(keepers_euk, abo_euks[!abo_euks %in% keepers_euk][[1]])}
     else {keepers_euk <- c(keepers_euk, bio_euks[!bio_euks %in% keepers_euk][[1]])}
     binar <- !binar
-}
+} ## filter based on shapiro-wilk divergence from normality rather than on variance? non-normal things likely to have small number of explanatory factors? need deseq2 shrunk data?
 keepers_euk <- sort(keepers_euk)
 
 in_data$mb18S <- t(euks[keepers_euk,])
@@ -917,10 +917,10 @@ prior_scales <- c(apply(inits_mb16S %*% t(ginv(cbind(1,diag(ncol(inits_mb16S)),m
                   rep(1,ncol(mm_h$svd)),
                   rep(1,ncol(in_data$sites)),
                   rep(1,ncol(mm_h$sites)),
-                  rep(1,ncol(inits_mb16S)),
-                  rep(1,ncol(inits_mb18S)),
+                  rep(1,ncol(inits_mb16S) + ncol(mm_h$mb_16S)),
+                  rep(1,ncol(inits_mb18S) + ncol(mm_h$mb_18S)),
                   rep(1,ncol(inits_rna)),
-                  rep(1,ncol(inits_its2)),
+                  rep(1,ncol(inits_its2) + ncol(mm_h$its2)),
                   rep(1,D))
 
 prior_intercept_scales <- c(apply(inits_mb16S,2,sd),

@@ -36,7 +36,7 @@ data {
     vector[H] P;                                        // continuous data
     real<lower=0> global_scale_prior;
     real<lower=0> ortho_scale_prior;                    // prior degree of orthogonalization regularization
-    vector<lower=0>[sum(M_all) + sum(M-all[1:D]) + D] prior_scales;
+    vector<lower=0>[sum(M_all) + sum(M_all[1:D]) + D] prior_scales;
     vector<lower=0>[sum(M)] prior_intercept_scales;
     vector[sum(M)] prior_intercept_centers;
     vector[sum(M[1:D])] binary_count_intercept_centers;
@@ -54,7 +54,7 @@ data {
     real nu_residuals;                                  // residual robustness
     vector[D] inv_log_max_contam;                       // prior expectation of contamination rate
     real<lower=0> shape_gnorm;                          // strength of prior pulling contamination toward zero
-    real<lower=0> skew_Z_prior;
+    real<lower=0> skew_Z_prior;                         // prior expectation for strength of skew of axes (soft identification against reflections)
 }
 transformed data {
     int K = K_linear + KG * K_gp;                      // Total number of latent axes
@@ -65,7 +65,7 @@ transformed data {
     int VOB = sum(M);                                  // Total number of observed variables
     int VOB_all = sum(M_all);                          // Total number of parameters per dim
     int sum_M[DRC+1];                                  // Cumulative number of base level variables
-    int sum_M_higher[DRC+1];                           // Cumulative number of base level variables
+    int sum_M_higher[DRC+1];                           // Cumulative number of higher variables
     int sum_M_all[DRC+1];                              // Cumulative number of base level and higher variables
     int MxM_all[DRC];                                  // size of model matrix for higher level variables
     int sum_MxM_all[DRC+1];                            // Cumulative size of model matrices for higher level variables
@@ -175,24 +175,24 @@ transformed data {
     //
 }
 parameters {
-    matrix[K,N] Z1;             // PCA axis scores, normal part
-    matrix<lower=0>[K,N] Z2;    // PCA axis scores, skew part
-    vector<lower=0>[K] skew_Z;
+    matrix[K,N] Z1;                                // PCA axis scores, normal part
+    matrix<lower=0>[K,N] Z2;                       // PCA axis scores, skew part (soft identification against reflections, if data are not symmetrical)
+    vector<lower=0>[K] skew_Z;                     // degree of skew for each axis
     matrix[VOB_all+V_all+D,K] W_norm;              // PCA variable loadings
     vector<lower=0>[VOB_all+V_all+D] sds;          // variable scales
     real<lower=0> global_effect_scale;             // overall scale of variable loadings
     real<lower=0> ortho_scale;                     // inverse strength of orthogonality shrinkage
-    real<lower=0,upper=1> order_prior_scales;      //
-    row_vector<lower=0>[K] latent_scales;      // overall scale of each axis
+    real<lower=0,upper=1> order_prior_scales;      // prior expectation for ratio of scales of adjacent axes (soft identification of order of axes)
+    row_vector<lower=0>[K] latent_scales;          // overall scale of each axis
     vector<lower=0>[DRC+D] dataset_scales;         // overall scale of each dataset
     matrix<lower=0>[DRC+D,K] weight_scales;        // per-dataset-and-axis scales
     vector[VOB] intercepts;
     vector[V] binary_count_intercepts;
     vector[F] abundance_true_vector;               // count dataset latent log abundance
-    vector[F_higher] abundance_higher_vector;
-    vector[F_higher] prevalence_higher_vector;
-    vector[H_higher] P_higher;
-    vector[G_higher] Y_higher_vector;
+    vector[F_higher] abundance_higher_vector;      // count dataset residual higher effects on log abundance
+    vector[F_higher] prevalence_higher_vector;     // count dataset residual higher effects on prevalence
+    vector[H_higher] P_higher;                     // continuous dataset residual higher effects
+    vector[G_higher] Y_higher_vector;              // categorical dataset residual higher effects
     vector[D] binary_count_dataset_intercepts;     // each count dataset could have biased prior intercepts
     vector[N_multinom] multinomial_nuisance;       // per-sample parameter to convert independent poisson distributions to a multinomial one
     vector<upper=0>[N_Pm] P_missing;               // latent estimates of continuous variables with partial information (truncated observations)
@@ -322,17 +322,17 @@ model {
     target += normal_lupdf(to_vector(W_norm) | to_vector(W_ortho), global_effect_scale * ortho_scale);       // shrink PCA variable loadings toward closes orthogonal matrix
     target += normal_lupdf(to_vector(Z) | to_vector(Z_ortho), ortho_scale);                                  // shrink PCA axis scores toward closes orthogonal matrix
     target += std_normal_lupdf(to_vector(Z1[1:K_linear,]));                                                  // first PCA axis scores are independent of one another
-    target += std_normal_lupdf(to_vector(Z2));                                                                // PCA scores have idependent positive skew to help identify
-    target += inv_gamma_lupdf(skew_Z | 5, 5 * skew_Z_prior);                                                // all Z are positively skewed, but each axis varies
+    target += std_normal_lupdf(to_vector(Z2));                                                               // PCA scores have idependent positive skew to help identify
+    target += inv_gamma_lupdf(skew_Z | 5, 5 * skew_Z_prior);                                                 // all Z are positively skewed, but each axis varies
     target += inv_gamma_lupdf(rho_sites | 5, 5 * rho_sites_prior);                                           // length scale for gaussian process on sites
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);                                  // length scale for gaussian process on PCA axis scores
     for(g in 1:KG) {
+        matrix[N_all,N_all] L = L_cov_exp_quad_ARD(Z[1:K_linear,], rho_Z[,g], 1e-9);
         target += student_t_lupdf(latent_scales[K_linear + K_gp * g] | 2, 0, global_effect_scale * order_prior_scales^(0.5*K_gp));
         target += student_t_lupdf(latent_scales[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g - 1)] |
                                   2,
                                   0,
                                   latent_scales[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g - 1)] / order_prior_scales);
-        matrix[N_all,N_all] L = L_cov_exp_quad_ARD(Z[1:K_linear,], rho_Z[,g], 1e-9);
         target += multi_gp_cholesky_lupdf(Z1[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g),] |
                                           L,
                                           ones_vector(K_gp));
@@ -380,22 +380,22 @@ model {
             prevalence
                 += MM * to_matrix(segment(prevalence_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]),
                                   M_higher[d], sum_ID[d]);
-            target += student_t_lpdf(segment(abundance_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]) |
-                                     nu_residuals,
-                                     0,
-                                     to_vector(rep_matrix(segment(var_scales, sum_M_all[d] + M[d] + 1, M_higher[d]), sum_ID[d])));
-            target += student_t_lpdf(segment(prevalence_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]) |
-                                     nu_residuals,
-                                     0,
-                                     to_vector(rep_matrix(segment(var_scales, VOB_all + sum_M_all[d] + M[d] + 1, M_higher[d]), sum_ID[d])));
+            target += student_t_lupdf(segment(abundance_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]) |
+                                      nu_residuals,
+                                      0,
+                                      to_vector(rep_matrix(segment(var_scales, sum_M_all[d] + M[d] + 1, M_higher[d]), sum_ID[d])));
+            target += student_t_lupdf(segment(prevalence_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]) |
+                                      nu_residuals,
+                                      0,
+                                      to_vector(rep_matrix(segment(var_scales, VOB_all + sum_M_all[d] + M[d] + 1, M_higher[d]), sum_ID[d])));
             i_X_higher += M_higher[d] * sum_ID[d];
         } else {
             phi = inv_square(contaminant_overdisp[d] * segment(var_scales, sum_M_all[d] + 1, M[d]));
         }
-        target += student_t_lpdf(to_vector(abundance_true) |
-                                 nu_residuals,
-                                 to_vector(predicted),
-                                 to_vector(rep_matrix(segment(var_scales, sum_M_all[d] + 1, M[d]), sum_ID[d])));
+        target += student_t_lupdf(to_vector(abundance_true) |
+                                  nu_residuals,
+                                  to_vector(predicted),
+                                  to_vector(rep_matrix(segment(var_scales, sum_M_all[d] + 1, M[d]), sum_ID[d])));
         for(n in 1:sum_ID[d]) {
             for(m in 1:M[d]) {
                 target += log_sum_exp(log1m_inv_logit(prevalence[m,n])
