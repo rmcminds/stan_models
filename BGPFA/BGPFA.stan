@@ -192,7 +192,7 @@ parameters {
     vector[F_higher] abundance_higher_vector;
     vector[F_higher] prevalence_higher_vector;
     vector[H_higher] P_higher;
-    vector[G_higher] Y_higher;
+    vector[G_higher] Y_higher_vector;
     vector[D] binary_count_dataset_intercepts;     // each count dataset could have biased prior intercepts
     vector[N_multinom] multinomial_nuisance;       // per-sample parameter to convert independent poisson distributions to a multinomial one
     vector<upper=0>[N_Pm] P_missing;               // latent estimates of continuous variables with partial information (truncated observations)
@@ -267,6 +267,7 @@ model {
     vector[H] P_predicted;
     vector[H] var_P;
     vector[H_higher] var_P_higher;
+    matrix[sum(M[(DR+1):DRC]), N_all] Y_higher_matrix = rep_matrix(0,sum(M[(DR+1):DRC]), N_all);
     int i_X = 1;
     int i_X_higher = 1;
     int i_P = 1;
@@ -343,6 +344,7 @@ model {
     target += student_t_lupdf(to_vector(W_norm) | to_vector(num), 0, to_vector(wsn));                        // PCA loadings shrink to zero with axis-and-dataset-specific nu and variance
     // end priors
     // likelihoods
+    // count likelihood
     for(d in 1:D) {
         matrix[M[d],sum_ID[d]] predicted
             = rep_matrix(intercepts[(sum_M[d] + 1):(sum_M[d] + M[d])], sum_ID[d])
@@ -408,7 +410,9 @@ model {
             i_multinom += 1;
             i_X += M[d];
         }
-    } // count likelihood
+    }
+    // end count likelihood
+    // continuous likelihood
     for(r in 1:R) {
         matrix[M[D+r],M_higher[D+r]] MM;
         if(M_all[D+r] > M[D+r]) {
@@ -442,65 +446,65 @@ model {
     target += student_t_lupdf(P_filled |
                               nu_residuals,
                               P_predicted,
-                              var_P);  // continuous likelihood
-    {
-        matrix[sum(M[(DR+1):DRC]), N_all] resids = rep_matrix(0,sum(M[(DR+1):DRC]), N_all);
-        for(c in 1:C) {
-            matrix[M[DR+c], M_higher[DR+c]] MM
-                = to_matrix(segment(mm, sum_MxM_all[DR+c] + 1, MxM_all[DR+c]),
-                            M[DR+c],
-                            M_higher[DR+c]);
-            for(n in 1:N_all) {
-                resids[(sum_M[DR+c] - sum_M[DR+1] + 1):(sum_M[DR+c] - sum_M[DR+1] + M[DR+c]),n]
-                    = MM[, idx_IC_higher[c,n,1:sum_IC_higher[c,n]]]
-                      * segment(Y_higher, i_Y_higher, sum_IC_higher[c,n]);
-                target += student_t_lupdf(segment(Y_higher, i_Y_higher, sum_IC_higher[c,n]) |
-                                          nu_residuals,
-                                          0,
-                                          segment(var_scales, sum_M_all[DR+c] + M[DR+c] + 1, M_higher[DR+c])[idx_IC_higher[c,n,1:sum_IC_higher[c,n]]]);
-                i_Y_higher += sum_IC_higher[c,n];
-            }
+                              var_P);
+    // end continuous likelihood
+    // categorical/binary likelihood allowing uncertain (real-valued) data
+    for(c in 1:C) {
+        matrix[M[DR+c], M_higher[DR+c]] MM
+            = to_matrix(segment(mm, sum_MxM_all[DR+c] + 1, MxM_all[DR+c]),
+                        M[DR+c],
+                        M_higher[DR+c]);
+        for(n in 1:N_all) {
+            Y_higher_matrix[(sum_M[DR+c] - sum_M[DR+1] + 1):(sum_M[DR+c] - sum_M[DR+1] + M[DR+c]),n]
+                = MM[, idx_IC_higher[c,n,1:sum_IC_higher[c,n]]]
+                  * segment(Y_higher_vector, i_Y_higher, sum_IC_higher[c,n]);
+            target += student_t_lupdf(segment(Y_higher_vector, i_Y_higher, sum_IC_higher[c,n]) |
+                                      nu_residuals,
+                                      0,
+                                      segment(var_scales, sum_M_all[DR+c] + M[DR+c] + 1, M_higher[DR+c])[idx_IC_higher[c,n,1:sum_IC_higher[c,n]]]);
+            i_Y_higher += sum_IC_higher[c,n];
         }
-        for(cv in 1:C_vars) {
-            for(n in 1:N_all) {
-                if(ICv[cv,n]) {
-                    if(Mc[cv] > 1) {
-                        vector[Mc[cv]] predicted
-                            = log_softmax(segment(intercepts, V + O + sum_Mc[cv] + 1, Mc[cv])
-                                          + W[(V + O + sum_Mc[cv] + 1):(V + O + sum_Mc[cv] + Mc[cv]),]
-                                            * Z_Z_higher[,n]
-                                          + resids[(sum_Mc[cv] + 1):(sum_Mc[cv] + Mc[cv]),n]);
-                        vector[Mc[cv]] observed = segment(Y, i_Y, Mc[cv]);
-                        real terms = 0;
-                        for(c in 1:Mc[cv]) {
-                            if(observed[c] > 0) {
-                                if(terms == 0) {
-                                    terms = log(observed[c]) + predicted[c];
-                                } else {
-                                    terms = log_sum_exp(terms, log(observed[c]) + predicted[c]);
-                                }
+    }
+    for(cv in 1:C_vars) {
+        for(n in 1:N_all) {
+            if(ICv[cv,n]) {
+                if(Mc[cv] > 1) {
+                    vector[Mc[cv]] predicted
+                        = log_softmax(segment(intercepts, V + O + sum_Mc[cv] + 1, Mc[cv])
+                                      + W[(V + O + sum_Mc[cv] + 1):(V + O + sum_Mc[cv] + Mc[cv]),]
+                                        * Z_Z_higher[,n]
+                                      + Y_higher_matrix[(sum_Mc[cv] + 1):(sum_Mc[cv] + Mc[cv]),n]);
+                    vector[Mc[cv]] observed = segment(Y, i_Y, Mc[cv]);
+                    real terms = 0;
+                    for(c in 1:Mc[cv]) {
+                        if(observed[c] > 0) {
+                            if(terms == 0) {
+                                terms = log(observed[c]) + predicted[c];
+                            } else {
+                                terms = log_sum_exp(terms, log(observed[c]) + predicted[c]);
                             }
                         }
-                        target += terms; // likelihood for categorical variables
+                    }
+                    target += terms; // likelihood for categorical variables
+                } else {
+                    real predicted
+                        = intercepts[V + O + sum_Mc[cv] + 1]
+                          + W[V + O + sum_Mc[cv] + 1,]
+                            * Z_Z_higher[,n]
+                          + Y_higher_matrix[sum_Mc[cv] + 1, n];
+                    if(Y[i_Y] == 1) {
+                        target += log_inv_logit(predicted);
+                    } else if(Y[i_Y] == 0) {
+                        target += log1m_inv_logit(predicted);
                     } else {
-                        real predicted
-                            = intercepts[V + O + sum_Mc[cv] + 1]
-                              + W[V + O + sum_Mc[cv] + 1,]
-                                * Z_Z_higher[,n]
-                              + resids[sum_Mc[cv] + 1, n];
-                        if(Y[i_Y] == 1) {
-                            target += log_inv_logit(predicted);
-                        } else if(Y[i_Y] == 0) {
-                            target += log1m_inv_logit(predicted);
-                        } else {
-                            target += log_mix(Y[i_Y],
-                                              log_inv_logit(predicted),
-                                              log1m_inv_logit(predicted));
-                        }
-                    } // likelihood for binary variables
-                    i_Y += Mc[cv];
-                }
+                        target += log_mix(Y[i_Y],
+                                          log_inv_logit(predicted),
+                                          log1m_inv_logit(predicted));
+                    }
+                } // likelihood for binary variables
+                i_Y += Mc[cv];
             }
         }
-    } // categorical/binary likelihood allowing uncertain (real-valued) data
+    }
+    // end categorical/binary likelihood
 }
