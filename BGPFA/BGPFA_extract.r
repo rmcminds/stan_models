@@ -115,4 +115,12 @@ nullfunc <- function() {
     labs[possig[,1]]
     list(positive=labs[possig[,1]],negative=labs[negsig[,1]])
 
+    skew_Z_prior_init <- skew_Z_prior * 5
+    delta <- skew_Z_prior_init / sqrt(1 + skew_Z_prior_init^2)
+    Z1r <- matrix(rnorm((K_linear+KG*K_gp)*N) * 0.001, nrow=K_linear+KG*K_gp)
+    Z2 <- matrix(abs(rnorm((K_linear+KG*K_gp)*N)) * 0.001, nrow=K_linear+KG*K_gp)
+    Z <- ((Z1r+skew_Z_prior_init*Z2)/sqrt(1+skew_Z_prior_init^2) - delta * 0.001 *sqrt(2/pi)) / (1 - 2*delta^2/pi)
+    Zo <- diag(sqrt(colSums(t(Z)^2))) %*% svd(t(Z))$v %*% t(svd(t(Z))$u)
+    Z1 <- Zo - Z2
+
 }

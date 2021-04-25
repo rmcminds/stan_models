@@ -16,10 +16,10 @@ options(mc.cores = parallel::detectCores())
 logit <- function(p) log(p/(1-p))
 inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 
-nMicrobeKeep <- 500
-K_linear <- 5
+nMicrobeKeep <- 100#500
+K_linear <- 5#10
 K_gp <- 15
-KG <- 3
+KG <- 1#3
 K <- K_linear + KG * K_gp
 global_scale_prior = 2.5
 rate_gamma_fact = 10
@@ -27,7 +27,8 @@ shape_gamma_fact = 2
 site_smoothness <- 2
 nu_residuals <- 25
 ortho_scale_prior <- 0.25
-shape_gnorm <- 5
+shape_gnorm <- 10
+skew_Z_prior <- 10
 
 input_prefix <- file.path(Sys.getenv('HOME'), 'data/tara_unsupervised_analyses')
 if(exists('myargs')) {if(length(myargs)==1) {input_prefix <- myargs[[1]]}} else if(length(commandArgs(trailingOnly=TRUE)) > 0) {input_prefix <- commandArgs(trailingOnly=TRUE)[[1]]}
@@ -67,13 +68,15 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                        'iter=30000',
                                        'eta=0.1',
                                        'adapt engaged=0',
-                                       'tol_rel_obj=0.001',
+                                       'tol_rel_obj=0.0001',
                                        'output_samples=200',
                                        ('opencl platform=0 device=0')[opencl],
                                        sep=' '))
 
 dataset_names <- c('mb16S','mb18S','rna','its2','biomarkers','t2','t3','fab_T1_agg','fab_T2_agg','snps','hphoto','ephoto','species','svd','sites')
 in_data <- list()
+mm_h <- list()
+names_mm_h <- list()
 
 sample_data <- read.table(file.path(input_prefix, 'Stephane/20201008/TARA-PACIFIC_samples-provenance_20200731d.txt'), sep='\t', skip=1, header=T, comment.char='', stringsAsFactors=TRUE)
 sample_data$species <- NA
@@ -570,7 +573,7 @@ I_cs <- t(apply(I, 1, cumsum))
 IR_cs <- t(apply(IR, 1, cumsum))
 IC_cs <- t(apply(ICv, 1, cumsum))
 
-X <- sapply(1:D, function(d) sapply(1:N_all, function(x) if(I[d,x]) in_data[[d]][I_cs[d,x],]))
+X <- unlist(sapply(1:D, function(d) sapply(1:N_all, function(x) if(I[d,x]) in_data[[d]][I_cs[d,x],])))
 
 P <- unlist(c(sapply(1:N_all, function(x) unlist(sapply(1:ncol(in_data$biomarkers), function(y) {
                                                           temp <- in_data$biomarkers[!is.na(in_data$biomarkers[,y]),y]
@@ -747,9 +750,6 @@ inits_its2_intercepts <- apply(inits_its2,2,mean)
 inits_its2 <- inits_its2 - mean(inits_its2_intercepts)
 inits_its2_nuisance <- inits_its2_nuisance + mean(inits_its2_intercepts)
 inits_its2_intercepts <- inits_its2_intercepts - mean(inits_its2_intercepts)
-
-mm_h <- list()
-names_mm_h <- list()
 
 mm_h$mb_16S <- matrix(0, NNodes + 1, NNodes + 1)
 for(node in 1:(NNodes + 1)) {
@@ -1018,16 +1018,19 @@ data <- list(N            = N,
              nu_residuals        = nu_residuals,
              inv_log_max_contam  = inv_log_max_contam,
              ortho_scale_prior   = ortho_scale_prior,
-             shape_gnorm         = shape_gnorm)
+             shape_gnorm         = shape_gnorm,
+             skew_Z_prior        = skew_Z_prior)
 
 #### create initiliazations
 abundance_true_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) inits_mb16S[I_cs[1,x],]),
                                         sapply(1:N, function(x) if(I[2,x]) inits_mb18S[I_cs[2,x],]),
                                         sapply(1:N, function(x) if(I[3,x]) inits_rna[I_cs[3,x],]),
                                         sapply(1:N, function(x) if(I[4,x]) inits_its2[I_cs[4,x],])))
-
-Z <- matrix(rnorm((K_linear+KG*K_gp)*N) * 0.001, nrow=K_linear+KG*K_gp)
-Z <- diag(sqrt(colSums(t(Z)^2))) %*% svd(t(Z))$v %*% t(svd(t(Z))$u)
+skew_Z_prior_init <- skew_Z_prior * 5
+Z1 <- matrix(rnorm((K_linear+KG*K_gp)*N) * 0.001, nrow=K_linear+KG*K_gp)
+Z2 <- matrix(abs(rnorm((K_linear+KG*K_gp)*N)) * 0.001, nrow=K_linear+KG*K_gp)
+Z <- diag(sqrt(colSums(t((Z1+skew_Z_prior_init*Z2)/sqrt(1+skew_Z_prior_init^2))^2))) %*% svd(t((Z1+skew_Z_prior_init*Z2)/sqrt(1+skew_Z_prior_init^2)))$v %*% t(svd(t((Z1+skew_Z_prior_init*Z2)/sqrt(1+skew_Z_prior_init^2)))$u)
+Z1 <- Z - Z2
 
 W_norm <- matrix(rnorm((VOBplus+sum(M_all[1:D])+D) * K) * 0.001, ncol=K)
 W_norm <- svd(W_norm)$u %*% t(svd(W_norm)$v) %*% diag(sqrt(colSums(W_norm^2)))
@@ -1039,7 +1042,7 @@ init <- list(abundance_true_vector           = abundance_true_vector_inits,
              multinomial_nuisance            = multinomial_nuisance_inits,
              global_effect_scale  = global_scale_prior * 10,
              ortho_scale          = 1,
-             latent_scales        = rep(global_scale_prior * 10,K),
+             latent_scales    = rep(global_scale_prior * (K:1) / K * 20,K),
              sds            = rep(0.01, VOBplus+sum(M_all[1:D])+D),
              dataset_scales = rep(0.01, 2*D+R+C),
              nu_factors_raw = matrix(10, nrow=2*D+R+C, ncol=K),
@@ -1049,12 +1052,16 @@ init <- list(abundance_true_vector           = abundance_true_vector_inits,
              abundance_higher_vector = rep(0,sum(F_higher)),
              prevalence_higher_vector = rep(0,sum(F_higher)),
              P_higher  = rep(0,H_higher),
-             Z         = Z,
+             Y_higher  = rep(0,sum(G_higher)),
+             Z1        = Z1,
+             Z2        = Z2,
              W_norm    = W_norm,
              P_missing = rep(-1,N_Pm),
              rho_Z = matrix(0.0001, nrow = K_linear, ncol = KG),
              inv_log_less_contamination  = -inv_log_max_contam,
-             contaminant_overdisp        = rep(10,D))
+             contaminant_overdisp        = rep(10,D),
+             skew_Z                      = rep(skew_Z_prior_init,K),
+             order_prior_scales          = 1/K)
 
 save.image(file.path(output_prefix, 'setup.RData'))
 
@@ -1069,7 +1076,7 @@ print(sampling_commands[[engine]])
 print(date())
 system(sampling_commands[[engine]])
 
-importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','dataset_scales','var_scales','weight_scales','nu_factors','rho_sites', 'site_prop', 'cov_sites', 'binary_count_dataset_intercepts', 'log_less_contamination', 'contaminant_overdisp', 'rho_Z')
+importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','dataset_scales','var_scales','weight_scales','nu_factors','rho_sites', 'site_prop', 'cov_sites', 'binary_count_dataset_intercepts', 'log_less_contamination', 'contaminant_overdisp', 'rho_Z', 'ortho_scale')
 
 stan.fit <- read_stan_csv_subset(file.path(output_prefix, paste0('samples_',engine,'.txt')),
                                  params = importparams)
