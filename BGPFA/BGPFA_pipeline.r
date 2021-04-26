@@ -38,7 +38,7 @@ model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
 engine <- 'advi'
 opencl <- FALSE
-output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
+output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_earlier_', nMicrobeKeep)
 
 dir.create(output_prefix, recursive = TRUE)
 
@@ -635,6 +635,14 @@ H <- sum(sapply((D+1):(D+R), function(x) sum(!is.na(in_data[[x]]))))
 G <- length(Y)
 
 
+mm_h$mb_16S <- matrix(0, NNodes + 1, NNodes + 1)
+for(node in 1:(NNodes + 1)) {
+    mm_h$mb_16S[node, ] <- as.numeric(1:(NNodes + 1) %in% c(Ancestors(bacttreeY.root, node), node))
+}
+colnames(mm_h$mb_16S) <- rownames(mm_h$mb_16S) <- paste0('16S_i', 1:(NNodes + 1))
+colnames(mm_h$mb_16S)[1:NTips] <- rownames(mm_h$mb_16S)[1:NTips] <- bacttreeY.root$tip.label
+mm_h$mb_16S <- mm_h$mb_16S[colnames(in_data$mb16S), (NTips+2):ncol(mm_h$mb_16S)]
+
 cophenbact <- cophenetic(bacttreeY.root)[colnames(in_data$mb16S),colnames(in_data$mb16S)]
 inits_mb16S <- log(in_data$mb16S)
 inits_mb16S[in_data$mb16S == 0] <- NA
@@ -644,6 +652,13 @@ for(x in 1:nrow(in_data$mb16S)) {
     inits_mb16S_nuisance <- c(inits_mb16S_nuisance,nuisance)
     inits_mb16S[x,] <- inits_mb16S[x,] - nuisance
 }
+inits_mb16S_intercepts <- apply(inits_mb16S,2,mean,na.rm=TRUE)
+inits_mb16S <- inits_mb16S - mean(inits_mb16S_intercepts)
+inits_mb16S_nuisance <- inits_mb16S_nuisance + mean(inits_mb16S_intercepts)
+inits_mb16S_intercepts <- inits_mb16S_intercepts - mean(inits_mb16S_intercepts)
+prior_intercept_scales_mb16S <- apply(inits_mb16S,2,sd,na.rm=TRUE)
+prior_intercept_scales_mb16S[prior_intercept_scales_mb16S == 0] <- min(prior_intercept_scales_mb16S[prior_intercept_scales_mb16S > 0],na.rm=TRUE)
+prior_intercept_scales_mb16S[is.na(prior_intercept_scales_mb16S)] <- mean(prior_intercept_scales_mb16S, na.rm=TRUE)
 for(x in 1:nrow(in_data$mb16S)) {
     wObs <- which(!is.na(inits_mb16S[x,]))
     for(y in which(is.na(inits_mb16S[x,]))) {
@@ -657,11 +672,17 @@ for(x in 1:nrow(in_data$mb16S)) {
             inits_mb16S[x,y] <- inits_mb16S[x,closestRel] + mean(inits_mb16S[ypres,y],na.rm=TRUE) - mean(inits_mb16S[closepres,closestRel],na.rm=TRUE)
     }
 }
-inits_mb16S_intercepts <- apply(inits_mb16S,2,mean)
-inits_mb16S <- inits_mb16S - mean(inits_mb16S_intercepts)
-inits_mb16S_nuisance <- inits_mb16S_nuisance + mean(inits_mb16S_intercepts)
-inits_mb16S_intercepts <- inits_mb16S_intercepts - mean(inits_mb16S_intercepts)
-##might want to modify the replacement by doing something like the ITS version, where the mean of multiple close relatives is used (or better some kind of ancestral state estimate)
+prior_scales_mb16S <- apply(inits_mb16S %*% t(MASS:::ginv(cbind(1,diag(ncol(inits_mb16S)),mm_h$mb_16S))[-1,]),2,sd)
+inits_mb16S <- t(sapply(1:nrow(inits_mb16S), function(x) {y <- inits_mb16S[x,]; y[in_data$mb16S[x,] == 0] <- min(y); y}))
+
+
+mm_h$mb_18S <- matrix(0, NNodesEuks + 1, NNodesEuks + 1)
+for(node in 1:(NNodesEuks + 1)) {
+    mm_h$mb_18S[node, ] <- as.numeric(1:(NNodesEuks + 1) %in% c(Ancestors(euktreeY.root, node), node))
+}
+colnames(mm_h$mb_18S) <- rownames(mm_h$mb_18S) <- paste0('euk_i', 1:(NNodesEuks + 1))
+colnames(mm_h$mb_18S)[1:NTipsEuks] <- rownames(mm_h$mb_18S)[1:NTipsEuks] <- euktreeY.root$tip.label
+mm_h$mb_18S <- mm_h$mb_18S[colnames(in_data$mb18S), (NTipsEuks+2):ncol(mm_h$mb_18S)]
 
 copheneuk <- cophenetic(euktreeY.root)[colnames(in_data$mb18S),colnames(in_data$mb18S)]
 inits_mb18S <- log(in_data$mb18S)
@@ -672,6 +693,13 @@ for(x in 1:nrow(in_data$mb18S)) {
     inits_mb18S_nuisance <- c(inits_mb18S_nuisance,nuisance)
     inits_mb18S[x,] <- inits_mb18S[x,] - nuisance
 }
+inits_mb18S_intercepts <- apply(inits_mb18S,2,mean,na.rm=TRUE)
+inits_mb18S <- inits_mb18S - mean(inits_mb18S_intercepts)
+inits_mb18S_nuisance <- inits_mb18S_nuisance + mean(inits_mb18S_intercepts)
+inits_mb18S_intercepts <- inits_mb18S_intercepts - mean(inits_mb18S_intercepts)
+prior_intercept_scales_mb18S <- apply(inits_mb18S,2,sd,na.rm=TRUE)
+prior_intercept_scales_mb18S[prior_intercept_scales_mb18S == 0] <- min(prior_intercept_scales_mb18S[prior_intercept_scales_mb18S > 0],na.rm=TRUE)
+prior_intercept_scales_mb18S[is.na(prior_intercept_scales_mb18S)] <- mean(prior_intercept_scales_mb18S,na.rm=TRUE)
 for(x in 1:nrow(in_data$mb18S)) {
     wObs <- which(!is.na(inits_mb18S[x,]))
     for(y in which(is.na(inits_mb18S[x,]))) {
@@ -685,10 +713,8 @@ for(x in 1:nrow(in_data$mb18S)) {
             inits_mb18S[x,y] <- inits_mb18S[x,closestRel] + mean(inits_mb18S[ypres,y],na.rm=TRUE) - mean(inits_mb18S[closepres,closestRel],na.rm=TRUE)
     }
 }
-inits_mb18S_intercepts <- apply(inits_mb18S,2,mean)
-inits_mb18S <- inits_mb18S - mean(inits_mb18S_intercepts)
-inits_mb18S_nuisance <- inits_mb18S_nuisance + mean(inits_mb18S_intercepts)
-inits_mb18S_intercepts <- inits_mb18S_intercepts - mean(inits_mb18S_intercepts)
+prior_scales_mb18S <- apply(inits_mb18S %*% t(MASS:::ginv(cbind(1,diag(ncol(inits_mb18S)),mm_h$mb_18S))[-1,]),2,sd)
+inits_mb18S <- t(sapply(1:nrow(inits_mb18S), function(x) {y <- inits_mb18S[x,]; y[in_data$mb18S[x,] == 0] <- min(y); y}))
 
 
 inits_rna <- log(in_data$rna)
@@ -699,6 +725,13 @@ for(x in 1:nrow(in_data$rna)) {
     inits_rna_nuisance <- c(inits_rna_nuisance,nuisance)
     inits_rna[x,] <- inits_rna[x,] - nuisance
 }
+inits_rna_intercepts <- apply(inits_rna,2,mean,na.rm=TRUE)
+inits_rna <- inits_rna - mean(inits_rna_intercepts)
+inits_rna_nuisance <- inits_rna_nuisance + mean(inits_rna_intercepts)
+inits_rna_intercepts <- inits_rna_intercepts - mean(inits_rna_intercepts)
+prior_intercept_scales_rna <- apply(inits_rna,2,sd,na.rm=TRUE)
+prior_intercept_scales_rna[prior_intercept_scales_rna == 0] <- min(prior_intercept_scales_rna[prior_intercept_scales_rna > 0],na.rm=TRUE)
+prior_intercept_scales_rna[is.na(prior_intercept_scales_rna)] <- mean(prior_intercept_scales_rna, na.rm=TRUE)
 for(x in 1:nrow(in_data$rna)) {
     for(y in 1:ncol(in_data$rna)) {
         if(is.na(inits_rna[x,y])) {
@@ -706,10 +739,8 @@ for(x in 1:nrow(in_data$rna)) {
         }
     }
 }
-inits_rna_intercepts <- apply(inits_rna,2,mean)
-inits_rna <- inits_rna - mean(inits_rna_intercepts)
-inits_rna_nuisance <- inits_rna_nuisance + mean(inits_rna_intercepts)
-inits_rna_intercepts <- inits_rna_intercepts - mean(inits_rna_intercepts)
+prior_scales_rna <- apply(inits_rna, 2, sd)
+inits_rna <- t(sapply(1:nrow(inits_rna), function(x) {y <- inits_rna[x,]; y[in_data$rna[x,] == 0] <- min(y); y}))
 
 
 allclades <- as.character(unique(itsMeta[colnames(in_data$its2), 'Clade']))
@@ -729,6 +760,13 @@ for(x in 1:nrow(in_data$its2)) {
     inits_its2_nuisance <- c(inits_its2_nuisance,nuisance)
     inits_its2[x,] <- inits_its2[x,] - nuisance
 }
+inits_its2_intercepts <- apply(inits_its2,2,mean,na.rm=TRUE)
+inits_its2 <- inits_its2 - mean(inits_its2_intercepts)
+inits_its2_nuisance <- inits_its2_nuisance + mean(inits_its2_intercepts)
+inits_its2_intercepts <- inits_its2_intercepts - mean(inits_its2_intercepts)
+prior_intercept_scales_its2 <- apply(inits_its2,2,sd,na.rm=TRUE)
+prior_intercept_scales_its2[prior_intercept_scales_its2 == 0] <- min(prior_intercept_scales_its2[prior_intercept_scales_its2 > 0],na.rm=TRUE)
+prior_intercept_scales_its2[is.na(prior_intercept_scales_its2)] <- mean(prior_intercept_scales_its2,na.rm=TRUE)
 for(x in 1:nrow(in_data$its2)) {
     wObs <- which(!is.na(inits_its2[x,]))
     for(y in which(is.na(inits_its2[x,]))) {
@@ -746,26 +784,9 @@ for(x in 1:nrow(in_data$its2)) {
         }
     }
 }
-inits_its2_intercepts <- apply(inits_its2,2,mean)
-inits_its2 <- inits_its2 - mean(inits_its2_intercepts)
-inits_its2_nuisance <- inits_its2_nuisance + mean(inits_its2_intercepts)
-inits_its2_intercepts <- inits_its2_intercepts - mean(inits_its2_intercepts)
+prior_scales_its2 <- apply(inits_its2 %*% t(MASS:::ginv(cbind(1,diag(ncol(inits_its2)),mm_h$its2))[-1,]),2,sd)
+inits_its2 <- t(sapply(1:nrow(inits_its2), function(x) {y <- inits_its2[x,]; y[in_data$its2[x,] == 0] <- min(y); y}))
 
-mm_h$mb_16S <- matrix(0, NNodes + 1, NNodes + 1)
-for(node in 1:(NNodes + 1)) {
-    mm_h$mb_16S[node, ] <- as.numeric(1:(NNodes + 1) %in% c(Ancestors(bacttreeY.root, node), node))
-}
-colnames(mm_h$mb_16S) <- rownames(mm_h$mb_16S) <- paste0('16S_i', 1:(NNodes + 1))
-colnames(mm_h$mb_16S)[1:NTips] <- rownames(mm_h$mb_16S)[1:NTips] <- bacttreeY.root$tip.label
-mm_h$mb_16S <- mm_h$mb_16S[colnames(in_data$mb16S), (NTips+2):ncol(mm_h$mb_16S)]
-
-mm_h$mb_18S <- matrix(0, NNodesEuks + 1, NNodesEuks + 1)
-for(node in 1:(NNodesEuks + 1)) {
-    mm_h$mb_18S[node, ] <- as.numeric(1:(NNodesEuks + 1) %in% c(Ancestors(euktreeY.root, node), node))
-}
-colnames(mm_h$mb_18S) <- rownames(mm_h$mb_18S) <- paste0('euk_i', 1:(NNodesEuks + 1))
-colnames(mm_h$mb_18S)[1:NTipsEuks] <- rownames(mm_h$mb_18S)[1:NTipsEuks] <- euktreeY.root$tip.label
-mm_h$mb_18S <- mm_h$mb_18S[colnames(in_data$mb18S), (NTipsEuks+2):ncol(mm_h$mb_18S)]
 
 names_mm_h$biomarkers <- c('symbiont_biomass','ubiquitin')
 mm_h$biomarkers <- sapply(names_mm_h$biomarkers, function(x) grepl(x,colnames(in_data$biomarkers),ignore.case = TRUE))
@@ -895,16 +916,16 @@ multinomial_nuisance_inits <- c(inits_mb16S_nuisance,
                                 inits_its2_nuisance)
 
 
-biomarkersInv <- t(ginv(cbind(diag(ncol(inits_biomarkers)),mm_h$biomarkers)))
-fabT1aggMatInv <- t(ginv(cbind(diag(ncol(in_data$fab_T1_agg)),mm_h$fab_T1_agg)))
+biomarkersInv <- t(MASS:::ginv(cbind(diag(ncol(inits_biomarkers)),mm_h$biomarkers)))
+fabT1aggMatInv <- t(MASS:::ginv(cbind(diag(ncol(in_data$fab_T1_agg)),mm_h$fab_T1_agg)))
 
-prior_scales <- c(apply(inits_mb16S %*% t(ginv(cbind(1,diag(ncol(inits_mb16S)),mm_h$mb_16S))[-1,]),2,sd),
-                  apply(inits_mb18S %*% t(ginv(cbind(1,diag(ncol(inits_mb18S)),mm_h$mb_18S))[-1,]),2,sd),
-                  apply(inits_rna, 2, sd),
-                  apply(inits_its2 %*% t(ginv(cbind(1,diag(ncol(inits_its2)),mm_h$its2))[-1,]),2,sd),
+prior_scales <- c(prior_scales_mb16S,
+                  prior_scales_mb18S,
+                  prior_scales_rna,
+                  prior_scales_its2,
                   apply(sapply(1:ncol(biomarkersInv), function(x) matrix(inits_biomarkers[,biomarkersInv[,x]!=0],nrow=nrow(inits_biomarkers)) %*% biomarkersInv[biomarkersInv[,x]!=0,x]),2,sd,na.rm=TRUE),
-                  apply(in_data$t2 %*% t(ginv(cbind(diag(ncol(in_data$t2)),mm_h$t2))),2,sd),
-                  apply(in_data$t3 %*% t(ginv(cbind(diag(ncol(in_data$t3)),mm_h$t3))),2,sd),
+                  apply(in_data$t2 %*% t(MASS:::ginv(cbind(diag(ncol(in_data$t2)),mm_h$t2))),2,sd),
+                  apply(in_data$t3 %*% t(MASS:::ginv(cbind(diag(ncol(in_data$t3)),mm_h$t3))),2,sd),
                   apply(sapply(1:ncol(fabT1aggMatInv), function(x) matrix(in_data$fab_T1_agg[,fabT1aggMatInv[,x]!=0],nrow=nrow(in_data$fab_T1_agg)) %*% fabT1aggMatInv[fabT1aggMatInv[,x]!=0,x]),2,sd,na.rm=TRUE),
                   apply(in_data$fab_T2_agg,2,sd,na.rm=TRUE),
                   rep(1,ncol(in_data$snps)),
@@ -923,10 +944,10 @@ prior_scales <- c(apply(inits_mb16S %*% t(ginv(cbind(1,diag(ncol(inits_mb16S)),m
                   rep(1,ncol(inits_its2) + ncol(mm_h$its2)),
                   rep(1,D))
 
-prior_intercept_scales <- c(apply(inits_mb16S,2,sd),
-                            apply(inits_mb18S,2,sd),
-                            apply(inits_rna,2, sd),
-                            apply(inits_its2,2,sd),
+prior_intercept_scales <- c(prior_intercept_scales_mb16S,
+                            prior_intercept_scales_mb18S,
+                            prior_intercept_scales_rna,
+                            prior_intercept_scales_its2,
                             apply(inits_biomarkers,2,sd,na.rm=TRUE),
                             apply(in_data$t2,2,sd),
                             apply(in_data$t3,2,sd),
@@ -1027,10 +1048,10 @@ data <- list(N            = N,
              skew_Z_prior        = skew_Z_prior)
 
 #### create initiliazations
-abundance_true_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) inits_mb16S[I_cs[1,x],]),
-                                        sapply(1:N, function(x) if(I[2,x]) inits_mb18S[I_cs[2,x],]),
-                                        sapply(1:N, function(x) if(I[3,x]) inits_rna[I_cs[3,x],]),
-                                        sapply(1:N, function(x) if(I[4,x]) inits_its2[I_cs[4,x],])))
+abundance_observed_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) inits_mb16S[I_cs[1,x],]),
+                                            sapply(1:N, function(x) if(I[2,x]) inits_mb18S[I_cs[2,x],]),
+                                            sapply(1:N, function(x) if(I[3,x]) inits_rna[I_cs[3,x],]),
+                                            sapply(1:N, function(x) if(I[4,x]) inits_its2[I_cs[4,x],])))
 skew_Z_prior_init <- skew_Z_prior * 5
 delta <- skew_Z_prior_init / sqrt(1 + skew_Z_prior_init^2)
 Z1r <- matrix(rnorm((K_linear+KG*K_gp)*N) * 0.001, nrow=K_linear+KG*K_gp)
@@ -1042,7 +1063,7 @@ Z1 <- Zo - Z2
 W_norm <- matrix(rnorm((VOBplus+sum(M_all[1:D])+D) * K) * 0.001, ncol=K)
 W_norm <- svd(W_norm)$u %*% t(svd(W_norm)$v) %*% diag(sqrt(colSums(W_norm^2)))
 
-init <- list(abundance_true_vector           = abundance_true_vector_inits,
+init <- list(abundance_observed_vector       = abundance_true_vector_inits,
              intercepts                      = intercepts_inits,
              binary_count_intercepts         = binary_count_intercepts_inits,
              binary_count_dataset_intercepts = rep(0,D),
@@ -1059,7 +1080,7 @@ init <- list(abundance_true_vector           = abundance_true_vector_inits,
              abundance_higher_vector = rep(0,sum(F_higher)),
              prevalence_higher_vector = rep(0,sum(F_higher)),
              P_higher  = rep(0,H_higher),
-             Y_higher  = rep(0,sum(G_higher)),
+             Y_higher_vector  = rep(0,sum(G_higher)),
              Z1        = Z1,
              Z2        = Z2,
              W_norm    = W_norm,

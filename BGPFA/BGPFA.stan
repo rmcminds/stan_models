@@ -188,13 +188,13 @@ parameters {
     matrix<lower=0>[DRC+D,K] weight_scales;        // per-dataset-and-axis scales
     vector[VOB] intercepts;
     vector[V] binary_count_intercepts;
-    vector[F] abundance_true_vector;               // count dataset latent log abundance
+    vector[F] abundance_observed_vector;               // count dataset latent log abundance
     vector[F_higher] abundance_higher_vector;      // count dataset residual higher effects on log abundance
     vector[F_higher] prevalence_higher_vector;     // count dataset residual higher effects on prevalence
     vector[H_higher] P_higher;                     // continuous dataset residual higher effects
     vector[G_higher] Y_higher_vector;              // categorical dataset residual higher effects
     vector[D] binary_count_dataset_intercepts;     // each count dataset could have biased prior intercepts
-    vector[N_multinom] multinomial_nuisance;       // per-sample parameter to convert independent poisson distributions to a multinomial one
+    row_vector[N_multinom] multinomial_nuisance;       // per-sample parameter to convert independent poisson distributions to a multinomial one
     vector<upper=0>[N_Pm] P_missing;               // latent estimates of continuous variables with partial information (truncated observations)
     matrix<lower=0>[DRC+D,K] nu_factors_raw;       // per-dataset-and-axis sparsity of variable loadings
     vector<lower=0>[K] rho_sites;                  // length scale for site gaussian process
@@ -346,7 +346,7 @@ model {
     // likelihoods
     // count likelihood
     for(d in 1:D) {
-        matrix[M[d],sum_ID[d]] predicted
+        matrix[M[d],sum_ID[d]] abundance_predicted
             = rep_matrix(intercepts[(sum_M[d] + 1):(sum_M[d] + M[d])], sum_ID[d])
               + W[(sum_M[d] + 1):(sum_M[d] + M[d]),]
                 * Z_Z_higher[,idx_ID[d,1:sum_ID[d]]];
@@ -356,30 +356,27 @@ model {
                          sum_ID[d])
               + W_binary_counts[(sum_M[d] + 1):(sum_M[d] + M[d]),]
                 * Z_Z_higher[,idx_ID[d,1:sum_ID[d]]];
-        vector[M[d]] abundance_contam
-            = segment(intercepts, sum_M[d] + 1, M[d])
-              + log_inv_logit(binary_count_dataset_intercepts[d]
-                              + segment(binary_count_intercepts, sum_M[d] + 1, M[d]))
-              + log_less_contamination[d];
-        matrix[M[d],sum_ID[d]] abundance_true
-            = to_matrix(segment(abundance_true_vector, i_X, M[d] * sum_ID[d]),
+        matrix[M[d],sum_ID[d]] abundance_contam
+            = rep_matrix(segment(intercepts, sum_M[d] + 1, M[d])
+                         + log_inv_logit(binary_count_dataset_intercepts[d]
+                                      + segment(binary_count_intercepts, sum_M[d] + 1, M[d]))
+                         + log_less_contamination[d],
+              sum_ID[d]);
+        matrix[M[d],sum_ID[d]] abundance_observed
+            = to_matrix(segment(abundance_observed_vector, i_X, M[d] * sum_ID[d]),
                         M[d], sum_ID[d]);
-        vector[M[d]] phi;
         if(M_all[d] > M[d]) {
             matrix[M[d],M_higher[d]] MM
                 = to_matrix(segment(mm, sum_MxM_all[d] + 1, MxM_all[d]),
                             M[d],
                             M_higher[d]);
-            phi = inv_square(contaminant_overdisp[d])
-                  * inv(rows_dot_self(diag_post_multiply(MM,
-                                                         segment(var_scales, sum_M_all[d] + M[d] + 1, M_higher[d])))
-                        + square(segment(var_scales, sum_M_all[d] + 1, M[d])));
-            predicted
-                += MM * to_matrix(segment(abundance_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]),
-                                  M_higher[d], sum_ID[d]);
-            prevalence
-                += MM * to_matrix(segment(prevalence_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]),
-                                  M_higher[d], sum_ID[d]);
+            matrix[M[d],sum_ID[d]] higher_summed
+                = MM * to_matrix(segment(abundance_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]),
+                                 M_higher[d], sum_ID[d]);
+            abundance_predicted += higher_summed;
+            abundance_contam += contaminant_overdisp[d] * higher_summed;
+            prevalence += MM * to_matrix(segment(prevalence_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]),
+                                         M_higher[d], sum_ID[d]);
             target += student_t_lupdf(segment(abundance_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]) |
                                       nu_residuals,
                                       0,
@@ -389,23 +386,21 @@ model {
                                       0,
                                       to_vector(rep_matrix(segment(var_scales, VOB_all + sum_M_all[d] + M[d] + 1, M_higher[d]), sum_ID[d])));
             i_X_higher += M_higher[d] * sum_ID[d];
-        } else {
-            phi = inv_square(contaminant_overdisp[d] * segment(var_scales, sum_M_all[d] + 1, M[d]));
         }
-        target += student_t_lupdf(to_vector(abundance_true) |
-                                  nu_residuals,
-                                  to_vector(predicted),
-                                  to_vector(rep_matrix(segment(var_scales, sum_M_all[d] + 1, M[d]), sum_ID[d])));
+        target += poisson_log_lpmf(segment(X, i_X, M[d] * sum_ID[d]) |
+                                   to_vector(abundance_observed + rep_matrix(segment(multinomial_nuisance, i_multinom, sum_ID[d]), M[d])));
         for(n in 1:sum_ID[d]) {
             for(m in 1:M[d]) {
                 target += log_sum_exp(log1m_inv_logit(prevalence[m,n])
-                                      + neg_binomial_2_log_lpmf(X[i_X + m - 1] |
-                                                                abundance_contam[m] + multinomial_nuisance[i_multinom],
-                                                                phi[m]), //estimated abundance if true negative
-                                        log_inv_logit(prevalence[m,n])
-                                        + poisson_log_lpmf(X[i_X + m - 1] |
-                                                           log_sum_exp(abundance_contam[m], abundance_true[m,n])
-                                                           + multinomial_nuisance[i_multinom])); //estimated abundance if true positive
+                                      + student_t_lpdf(abundance_observed[m,n] |
+                                                       nu_residuals,
+                                                       abundance_contam[m,n],
+                                                       contaminant_overdisp[d] * var_scales[sum_M_all[d] + m]), //estimated abundance if true negative
+                                      log_inv_logit(prevalence[m,n])
+                                      + student_t_lpdf(abundance_observed[m,n] |
+                                                       nu_residuals,
+                                                       log_sum_exp(abundance_contam[m,n], abundance_predicted[m,n]),
+                                                       var_scales[sum_M_all[d] + m])); //estimated abundance if true positive
             }
             i_multinom += 1;
             i_X += M[d];
