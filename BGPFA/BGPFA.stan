@@ -205,9 +205,7 @@ parameters {
 }
 transformed parameters {
     matrix[K,N] Z;
-    matrix[K,N_var_groups] Z_higher = Z * samp2group;
-    matrix[K_linear + KG * K_gp, N] Z_ortho = diag_pre_multiply(sqrt(rows_dot_self(Z)), svd_V(Z')) * svd_U(Z')';
-    matrix[VOB_all+V_all+D,K] W_ortho = svd_U(W_norm) * diag_post_multiply(svd_V(W_norm)', sqrt(columns_dot_self(W_norm)));
+    matrix[K,N_var_groups] Z_higher;
     matrix[VOB,K] W;
     matrix[V,K] W_binary_counts;
     vector<lower=0>[VOB_all+V_all+D] var_scales = sds .* prior_scales;
@@ -216,14 +214,14 @@ transformed parameters {
     corr_matrix[M[DRC]] corr_sites[K];
     matrix<lower=2>[DRC+D,K] nu_factors = nu_factors_raw + 2;
     for(miss in 1:N_Pm) P_filled[idx_Pm[miss]] = P_missing[miss] + P_max[miss];
-    Z[1:K_linear,] = mix_skew_normal(Z1_raw[1:K_linear,], Z2_raw[1:K_linear,], skew_Z);
+    Z[1:K_linear,] = mix_skew_normal(Z1_raw[1:K_linear,], Z2_raw[1:K_linear,], skew_Z[1:K_linear]);
     for(g in 1:KG) {
         matrix[N,N] L = L_cov_exp_quad_ARD(Z[1:K_linear,], rho_Z[,g], 1e-9)';
-        Z[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g), ]
-            = mix_skew_normal(Z1_raw[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g),] * L,
-                              Z2_raw[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g),] * L,
-                              skew_Z);
+        int s = K_linear + (K_gp * (g-1)) + 1;
+        int f = K_linear + K_gp * g;
+        Z[s:f,] = mix_skew_normal(Z1_raw[s:f,] * L, Z2_raw[s:f,] * L, skew_Z[s:f]);
     }
+    Z_higher = Z * samp2group;
     for(k in 1:K) {
         corr_sites[k]
             = fill_sym(site_prop[k]
@@ -325,8 +323,12 @@ model {
     target += student_t_lupdf(to_vector(weight_scales) | 2, 0, to_vector(rep_matrix(latent_scales, DRC+D))); // sparse selection of datasets per axis
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, shape_gnorm);      // shrink amount of contamination in 'true zeros' toward zero
     target += std_normal_lupdf(contaminant_overdisp);                                                        // shrink overdispersion of contaminant counts in 'true zeros' toward zero
-    target += normal_lupdf(to_vector(W_norm) | to_vector(W_ortho), global_effect_scale * ortho_scale);       // shrink PCA variable loadings toward closes orthogonal matrix
-    target += normal_lupdf(to_vector(Z) | to_vector(Z_ortho), ortho_scale);                                  // shrink PCA axis scores toward closes orthogonal matrix
+    target += normal_lupdf(to_vector(W_norm) |
+                           to_vector(svd_U(W_norm) * diag_post_multiply(svd_V(W_norm)', sqrt(columns_dot_self(W_norm)))),
+                           global_effect_scale * ortho_scale);       // shrink PCA variable loadings toward closes orthogonal matrix
+    target += normal_lupdf(to_vector(Z) |
+                           to_vector(diag_pre_multiply(sqrt(rows_dot_self(Z)), svd_V(Z')) * svd_U(Z')'),
+                           ortho_scale);                                                                     // shrink PCA axis scores toward closes orthogonal matrix
     target += std_normal_lupdf(to_vector(Z1_raw));                                                           // first PCA axis scores are independent of one another
     target += std_normal_lupdf(to_vector(Z2_raw));                                                           // PCA scores have idependent positive skew to help identify
     target += inv_gamma_lupdf(skew_Z | 5, 5 * skew_Z_prior);                                                 // all Z are positively skewed, but each axis varies
