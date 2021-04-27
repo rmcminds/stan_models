@@ -1060,8 +1060,8 @@ Z2 <- matrix(abs(rnorm((K_linear+KG*K_gp)*N)), nrow=K_linear+KG*K_gp)
 Z <- ((Z1r+skew_Z_prior_init*Z2)/sqrt(1+skew_Z_prior_init^2) - delta * sqrt(2/pi)) / sqrt(1 - 2*delta^2/pi)
 Zo <- diag(sqrt(colSums(t(Z)^2))) %*% svd(t(Z))$v %*% t(svd(t(Z))$u)
 Z1 <- (Zo * sqrt(1 - 2*delta^2/pi) + delta * sqrt(2/pi)) * sqrt(1+skew_Z_prior_init^2) - skew_Z_prior_init*Z2
-Z1 <- Z1 * 0.001
-Z2 <- Z2 * 0.001
+Z1_raw_init <- Z1 * 0.001
+Z2_raw_init <- Z2 * 0.001
 
 W_norm <- matrix(rnorm((VOBplus+sum(M_all[1:D])+D) * K) * 0.001, ncol=K)
 W_norm <- svd(W_norm)$u %*% t(svd(W_norm)$v) %*% diag(sqrt(colSums(W_norm^2)))
@@ -1084,8 +1084,8 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              prevalence_higher_vector = rep(0,sum(F_higher)),
              P_higher         = rep(0,H_higher),
              Y_higher_vector  = rep(0,sum(G_higher)),
-             Z1        = Z1,
-             Z2        = Z2,
+             Z1_raw    = Z1_raw_init,
+             Z2_raw    = Z2_raw_init,
              W_norm    = W_norm,
              P_missing = rep(-1,N_Pm),
              rho_Z     = matrix(0.0001, nrow = K_linear, ncol = KG),

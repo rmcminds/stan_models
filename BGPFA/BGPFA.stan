@@ -175,8 +175,8 @@ transformed data {
     //
 }
 parameters {
-    matrix[K,N] Z1;                                // PCA axis scores, normal part
-    matrix<lower=0>[K,N] Z2;                       // PCA axis scores, skew part (soft identification against reflections, if data are not symmetrical)
+    matrix[K,N] Z1_raw;                            // PCA axis scores, normal part
+    matrix<lower=0>[K,N] Z2_raw;                   // PCA axis scores, skew part (soft identification against reflections, if data are not symmetrical)
     vector<lower=0>[K] skew_Z;                     // degree of skew for each axis
     matrix[VOB_all+V_all+D,K] W_norm;              // PCA variable loadings
     vector<lower=0>[VOB_all+V_all+D] sds;          // variable scales
@@ -204,7 +204,7 @@ parameters {
     vector<lower=0>[D] contaminant_overdisp;       // dispersion parameter for amount of contamination in true negative count observations
 }
 transformed parameters {
-    matrix[K,N] Z = mix_skew_normal(Z1,Z2,skew_Z);
+    matrix[K,N] Z;
     matrix[K,N_var_groups] Z_higher = Z * samp2group;
     matrix[K_linear + KG * K_gp, N] Z_ortho = diag_pre_multiply(sqrt(rows_dot_self(Z)), svd_V(Z')) * svd_U(Z')';
     matrix[VOB_all+V_all+D,K] W_ortho = svd_U(W_norm) * diag_post_multiply(svd_V(W_norm)', sqrt(columns_dot_self(W_norm)));
@@ -216,6 +216,14 @@ transformed parameters {
     corr_matrix[M[DRC]] corr_sites[K];
     matrix<lower=2>[DRC+D,K] nu_factors = nu_factors_raw + 2;
     for(miss in 1:N_Pm) P_filled[idx_Pm[miss]] = P_missing[miss] + P_max[miss];
+    Z[1:K_linear,] = mix_skew_normal(Z1_raw[1:K_linear,], Z2_raw[1:K_linear,], skew_Z);
+    for(g in 1:KG) {
+        matrix[N,N] L = L_cov_exp_quad_ARD(Z[1:K_linear,], rho_Z[,g], 1e-9)';
+        Z[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g), ]
+            = mix_skew_normal(Z1_raw[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g),] * L,
+                              Z2_raw[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g),] * L,
+                              skew_Z);
+    }
     for(k in 1:K) {
         corr_sites[k]
             = fill_sym(site_prop[k]
@@ -319,24 +327,17 @@ model {
     target += std_normal_lupdf(contaminant_overdisp);                                                        // shrink overdispersion of contaminant counts in 'true zeros' toward zero
     target += normal_lupdf(to_vector(W_norm) | to_vector(W_ortho), global_effect_scale * ortho_scale);       // shrink PCA variable loadings toward closes orthogonal matrix
     target += normal_lupdf(to_vector(Z) | to_vector(Z_ortho), ortho_scale);                                  // shrink PCA axis scores toward closes orthogonal matrix
-    target += std_normal_lupdf(to_vector(Z1[1:K_linear,]));                                                  // first PCA axis scores are independent of one another
-    target += std_normal_lupdf(to_vector(Z2[1:K_linear,]));                                                  // PCA scores have idependent positive skew to help identify
+    target += std_normal_lupdf(to_vector(Z1_raw));                                                           // first PCA axis scores are independent of one another
+    target += std_normal_lupdf(to_vector(Z2_raw));                                                           // PCA scores have idependent positive skew to help identify
     target += inv_gamma_lupdf(skew_Z | 5, 5 * skew_Z_prior);                                                 // all Z are positively skewed, but each axis varies
     target += inv_gamma_lupdf(rho_sites | 5, 5 * rho_sites_prior);                                           // length scale for gaussian process on sites
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);                                  // length scale for gaussian process on PCA axis scores
     for(g in 1:KG) {
-        matrix[N_all,N_all] L = L_cov_exp_quad_ARD(Z[1:K_linear,], rho_Z[,g], 1e-9);
         target += student_t_lupdf(latent_scales[K_linear + K_gp * g] | 2, 0, global_effect_scale * order_prior_scales^(0.5*K_gp));
         target += student_t_lupdf(latent_scales[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g - 1)] |
                                   2,
                                   0,
                                   latent_scales[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g - 1)] / order_prior_scales);
-        target += multi_gp_cholesky_lupdf(Z1[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g),] |
-                                          L,
-                                          ones_vector(K_gp));
-        target += multi_gp_cholesky_lupdf(Z2[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g),] |
-                                          L,
-                                          ones_vector(K_gp));
     }                                                                                                        // final KG * K_gp PCA axis scores are functions of first K_linear ones
     target += normal_lupdf(sds | 0, dsv);                                                                    // per-variable sigmas shrink toward dataset scales
     target += student_t_lupdf(to_vector(W_norm) | to_vector(num), 0, to_vector(wsn));                        // PCA loadings shrink to zero with axis-and-dataset-specific nu and variance
