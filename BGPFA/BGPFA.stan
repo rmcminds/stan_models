@@ -334,8 +334,9 @@ model {
     target += normal_lupdf(to_vector(Z) |
                            to_vector(diag_pre_multiply(sqrt(rows_dot_self(Z)), svd_V(Z')) * svd_U(Z')'),
                            ortho_scale);                                                                     // shrink PCA axis scores toward closes orthogonal matrix
-    target += std_normal_lupdf(to_vector(Z1_raw));                                                           // first PCA axis scores are independent of one another
-    target += std_normal_lupdf(to_vector(Z2_raw));                                                           // PCA scores have idependent positive skew to help identify
+    target += std_normal_lupdf(to_vector(Z1_linear_raw));                                                    // first PCA axis scores are independent of one another
+    target += std_normal_lupdf(to_vector(Z2_linear_raw));                                                    // PCA scores have idependent positive skew to help identify
+    target += std_normal_lupdf(to_vector(Z1_gp_raw));                                                        // normal part of gp effects, prior to correlation with cholesky
     target += inv_gamma_lupdf(skew_Z | 5, 5 * skew_Z_prior);                                                 // all Z are positively skewed, but each axis varies
     target += inv_gamma_lupdf(rho_sites | 5, 5 * rho_sites_prior);                                           // length scale for gaussian process on sites
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);                                  // length scale for gaussian process on PCA axis scores
