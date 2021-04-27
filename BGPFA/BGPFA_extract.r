@@ -49,7 +49,7 @@ if('sds' %in% importparams) {
 nu_factors <- extract(stan.fit, pars='nu_factors', permuted=FALSE)
 nu_factors <- matrix(apply(nu_factors, 3, sumfunc), ncol=K)
 nu_factors <- nu_factors[,axisOrder]
-rownames(nu_factors) <- dataset_names
+rownames(nu_factors) <- dataset_names_expanded
 
 if('log_less_contamination' %in% importparams) {
     log_less_contamination <- extract(stan.fit, pars='log_less_contamination', permuted=FALSE)

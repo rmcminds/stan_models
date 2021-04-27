@@ -320,7 +320,7 @@ model {
     target += normal_lupdf(to_vector(W_norm) | to_vector(W_ortho), global_effect_scale * ortho_scale);       // shrink PCA variable loadings toward closes orthogonal matrix
     target += normal_lupdf(to_vector(Z) | to_vector(Z_ortho), ortho_scale);                                  // shrink PCA axis scores toward closes orthogonal matrix
     target += std_normal_lupdf(to_vector(Z1[1:K_linear,]));                                                  // first PCA axis scores are independent of one another
-    target += std_normal_lupdf(to_vector(Z2));                                                               // PCA scores have idependent positive skew to help identify
+    target += std_normal_lupdf(to_vector(Z2[1:K_linear,]));                                                  // PCA scores have idependent positive skew to help identify
     target += inv_gamma_lupdf(skew_Z | 5, 5 * skew_Z_prior);                                                 // all Z are positively skewed, but each axis varies
     target += inv_gamma_lupdf(rho_sites | 5, 5 * rho_sites_prior);                                           // length scale for gaussian process on sites
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);                                  // length scale for gaussian process on PCA axis scores
