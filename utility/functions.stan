@@ -108,8 +108,8 @@ functions {
         int N = cols(u);
         matrix[K,N] z;
             for (n in 1:N) {
-                int np1 = n + 1;
-                vector[K] u_star = Phi(((n > 1) ? z[,1:np1] * L[1:np1,n] : zeros_vector(K)) / L[n,n]);
+                int nm1 = n - 1;
+                vector[K] u_star = Phi(((n > 1) ? z[,1:nm1] * L[1:nm1,n] : zeros_vector(K)) / L[n,n]);
                 z[,n] = inv_Phi(u_star + u[,n] - u_star .* u[,n]);
                 target += log1m(u_star);
             }
