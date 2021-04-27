@@ -213,17 +213,16 @@ transformed parameters {
     vector<lower=0>[VOB_all+V_all+D] var_scales = sds .* prior_scales;
     vector<upper=0>[D] log_less_contamination = inv(inv_log_less_contamination);
     vector[H] P_filled = P;
-    cov_matrix[M[DRC]] cov_sites[K];
-    matrix<lower=2>[DRC,K] nu_factors = nu_factors_raw + 2;
+    corr_matrix[M[DRC]] corr_sites[K];
+    matrix<lower=2>[DRC+D,K] nu_factors = nu_factors_raw + 2;
     for(miss in 1:N_Pm) P_filled[idx_Pm[miss]] = P_missing[miss] + P_max[miss];
     for(k in 1:K) {
-        cov_sites[k]
+        corr_sites[k]
             = fill_sym(site_prop[k]
-                       * square(weight_scales[DRC,k])
-                   //  * circular_matern(dist_sites, site_smoothness, inv(rho_sites[k]), ffKJ, chooseRJ),
+                  //   * circular_matern(dist_sites, site_smoothness, inv(rho_sites[k]), ffKJ, chooseRJ),
                        * exp(-dist_sites / rho_sites[k]),
                        M[DRC],
-                       square(weight_scales[DRC,k]) + 1e-9);
+                       1 + 1e-9);
     } // determine covariance of sites
     for(drc in 1:DRC) {
         W[(sum_M[drc] + 1):(sum_M[drc] + M[drc]),]
@@ -232,8 +231,7 @@ transformed parameters {
         if(drc == DRC) {
             for(k in 1:K) {
                 W[(sum_M[drc] + 1):(sum_M[drc] + M[drc]),k]
-                    = cholesky_decompose(cov_sites[k])
-                      * sqrt(nu_factors_raw[DRC,k] / nu_factors[DRC,k])
+                    = cholesky_decompose(corr_sites[k])
                       * W[(sum_M[drc] + 1):(sum_M[drc] + M[drc]),k];
             }
         } // induce correlation among sites
@@ -288,16 +286,16 @@ model {
         }
         if(drc <= D) {
             dsv[(VOB_all + sum_M_all[drc] + 1):(VOB_all + sum_M_all[drc] + M_all[drc])] = rep_vector(dataset_scales[DRC+drc], M_all[drc]);
-            dsv[VOB_all + V_all + drc] = dataset_scales[drc];
+            dsv[VOB_all + V_all + drc] = dataset_scales[DRC+drc];
             for(k in 1:K) {
                 num[(VOB_all + sum_M_all[drc] + 1):(VOB_all + sum_M_all[drc] + M_all[drc]),k]
-                    = rep_vector(nu_factors[drc,k],
+                    = rep_vector(nu_factors[DRC+drc,k],
                                  M_all[drc]);
                 num[VOB_all+V_all+drc,k]
                     = nu_factors[DRC+drc,k];
                 wsn[(VOB_all + sum_M_all[drc] + 1):(VOB_all + sum_M_all[drc] + M_all[drc]),k]
-                    = rep_vector(weight_scales[drc,k]
-                                 * sqrt(nu_factors_raw[drc,k] / nu_factors[drc,k]),
+                    = rep_vector(weight_scales[DRC+drc,k]
+                                 * sqrt(nu_factors_raw[DRC+drc,k] / nu_factors[DRC+drc,k]),
                                  M_all[drc]);
                 wsn[VOB_all+V_all+drc,k]
                     = weight_scales[DRC+drc,k]
@@ -389,6 +387,8 @@ model {
         }
         target += poisson_log_lpmf(segment(X, i_X, M[d] * sum_ID[d]) |
                                    to_vector(abundance_observed + rep_matrix(segment(multinomial_nuisance, i_multinom, sum_ID[d]), M[d])));
+        i_X += M[d] * sum_ID[d];
+        i_multinom += sum_ID[d];
         for(n in 1:sum_ID[d]) {
             for(m in 1:M[d]) {
                 target += log_sum_exp(log1m_inv_logit(prevalence[m,n])
@@ -402,8 +402,6 @@ model {
                                                        log_sum_exp(abundance_contam[m,n], abundance_predicted[m,n]),
                                                        var_scales[sum_M_all[d] + m])); //estimated abundance if true positive
             }
-            i_multinom += 1;
-            i_X += M[d];
         }
     }
     // end count likelihood

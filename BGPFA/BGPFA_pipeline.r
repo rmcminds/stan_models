@@ -17,7 +17,7 @@ logit <- function(p) log(p/(1-p))
 inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 
 nMicrobeKeep <- 100#500
-K_linear <- 5#10
+K_linear <- 25#10
 K_gp <- 15
 KG <- 0#3
 K <- K_linear + KG * K_gp
@@ -38,7 +38,7 @@ model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
 engine <- 'advi'
 opencl <- FALSE
-output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_earlier_', nMicrobeKeep)
+output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
 
 dir.create(output_prefix, recursive = TRUE)
 
@@ -1052,42 +1052,45 @@ abundance_observed_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) i
                                             sapply(1:N, function(x) if(I[2,x]) inits_mb18S[I_cs[2,x],]),
                                             sapply(1:N, function(x) if(I[3,x]) inits_rna[I_cs[3,x],]),
                                             sapply(1:N, function(x) if(I[4,x]) inits_its2[I_cs[4,x],])))
-skew_Z_prior_init <- skew_Z_prior * 5
+
+skew_Z_prior_init <- skew_Z_prior
 delta <- skew_Z_prior_init / sqrt(1 + skew_Z_prior_init^2)
-Z1r <- matrix(rnorm((K_linear+KG*K_gp)*N) * 0.001, nrow=K_linear+KG*K_gp)
-Z2 <- matrix(abs(rnorm((K_linear+KG*K_gp)*N)) * 0.001, nrow=K_linear+KG*K_gp)
-Z <- ((Z1r+skew_Z_prior_init*Z2)/sqrt(1+skew_Z_prior_init^2) - delta * 0.001 *sqrt(2/pi)) / sqrt(1 - 2*delta^2/pi)
+Z1r <- matrix(rnorm((K_linear+KG*K_gp)*N), nrow=K_linear+KG*K_gp)
+Z2 <- matrix(abs(rnorm((K_linear+KG*K_gp)*N)), nrow=K_linear+KG*K_gp)
+Z <- ((Z1r+skew_Z_prior_init*Z2)/sqrt(1+skew_Z_prior_init^2) - delta * sqrt(2/pi)) / sqrt(1 - 2*delta^2/pi)
 Zo <- diag(sqrt(colSums(t(Z)^2))) %*% svd(t(Z))$v %*% t(svd(t(Z))$u)
-Z1 <- Zo - Z2
+Z1 <- (Zo * sqrt(1 - 2*delta^2/pi) + delta * sqrt(2/pi)) * sqrt(1+skew_Z_prior_init^2) - skew_Z_prior_init*Z2
+Z1 <- Z1 * 0.001
+Z2 <- Z2 * 0.001
 
 W_norm <- matrix(rnorm((VOBplus+sum(M_all[1:D])+D) * K) * 0.001, ncol=K)
 W_norm <- svd(W_norm)$u %*% t(svd(W_norm)$v) %*% diag(sqrt(colSums(W_norm^2)))
 
-init <- list(abundance_observed_vector       = abundance_true_vector_inits,
+init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              intercepts                      = intercepts_inits,
              binary_count_intercepts         = binary_count_intercepts_inits,
              binary_count_dataset_intercepts = rep(0,D),
              multinomial_nuisance            = multinomial_nuisance_inits,
-             global_effect_scale  = global_scale_prior * 10,
+             global_effect_scale  = global_scale_prior,
              ortho_scale          = 1,
-             latent_scales    = rep(global_scale_prior * (K:1) / K * 20,K),
-             sds            = rep(0.01, VOBplus+sum(M_all[1:D])+D),
-             dataset_scales = rep(0.01, 2*D+R+C),
+             latent_scales        = rep(global_scale_prior * (K:1) / K * 2,K),
+             sds            = rep(1, VOBplus+sum(M_all[1:D])+D),
+             dataset_scales = rep(1, 2*D+R+C),
              nu_factors_raw = matrix(10, nrow=2*D+R+C, ncol=K),
-             weight_scales  = matrix(global_scale_prior * 10, nrow=2*D+R+C, ncol=K),
+             weight_scales  = matrix(global_scale_prior, nrow=2*D+R+C, ncol=K),
              rho_sites = as.array(rep(mean(dist_sites[lower.tri(dist_sites)]), K)),
              site_prop = as.array(rep(0.5, K)),
-             abundance_higher_vector = rep(0,sum(F_higher)),
+             abundance_higher_vector  = rep(0,sum(F_higher)),
              prevalence_higher_vector = rep(0,sum(F_higher)),
-             P_higher  = rep(0,H_higher),
+             P_higher         = rep(0,H_higher),
              Y_higher_vector  = rep(0,sum(G_higher)),
              Z1        = Z1,
              Z2        = Z2,
              W_norm    = W_norm,
              P_missing = rep(-1,N_Pm),
-             rho_Z = matrix(0.0001, nrow = K_linear, ncol = KG),
+             rho_Z     = matrix(0.0001, nrow = K_linear, ncol = KG),
              inv_log_less_contamination  = -inv_log_max_contam,
-             contaminant_overdisp        = rep(10,D),
+             contaminant_overdisp        = rep(1,D),
              skew_Z                      = rep(skew_Z_prior_init,K),
              order_prior_scales          = 1/K)
 
@@ -1104,7 +1107,7 @@ print(sampling_commands[[engine]])
 print(date())
 system(sampling_commands[[engine]])
 
-importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','dataset_scales','var_scales','weight_scales','nu_factors','rho_sites', 'site_prop', 'cov_sites', 'binary_count_dataset_intercepts', 'log_less_contamination', 'contaminant_overdisp', 'rho_Z', 'ortho_scale')
+importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','dataset_scales','var_scales','weight_scales','nu_factors','rho_sites', 'site_prop', 'corr_sites', 'binary_count_dataset_intercepts', 'log_less_contamination', 'contaminant_overdisp', 'rho_Z', 'ortho_scale','skew_Z', 'order_prior_scales')
 
 stan.fit <- read_stan_csv_subset(file.path(output_prefix, paste0('samples_',engine,'.txt')),
                                  params = importparams)

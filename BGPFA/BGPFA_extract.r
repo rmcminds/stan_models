@@ -16,10 +16,12 @@ sumfunc <- median
 #sumfunc <- function(x) x[length(x)]
 #sumfunc <- function(x) x[maxind]
 
-labs <- c(varlabs, paste0(varlabs[1:sum(M_all[1:D])],'.binary'), paste0('binary_count_dataset_int_',1:D))
+labs <- c(varlabs, paste0(varlabs[1:sum(M_all[1:D])],'.binary'), paste0('binary_count_dataset_int_',dataset_names[1:D]))
+dataset_names_expanded <- c(dataset_names, paste0(dataset_names[1:D],'.binary'))
 
 dataset_scales <- extract(stan.fit, pars='dataset_scales', permuted=FALSE)
 dataset_scales <- apply(dataset_scales,3,sumfunc)
+names(dataset_scales) <- dataset_names_expanded
 
 var_scales <- extract(stan.fit, pars='var_scales', permuted=FALSE)
 var_scales <- apply(var_scales,3,sumfunc)
@@ -37,6 +39,7 @@ weight_scales <- extract(stan.fit, pars='weight_scales', permuted=FALSE)
 weight_scales <- apply(weight_scales,3,sumfunc)
 weight_scales <- array(weight_scales,dim=c(length(weight_scales)/K,K))
 weight_scales <- array(weight_scales[,axisOrder], dim=c(length(weight_scales)/K,K))
+rownames(weight_scales) <- dataset_names_expanded
 
 if('sds' %in% importparams) {
     sds <- extract(stan.fit, pars='sds', permuted=FALSE)
@@ -46,6 +49,7 @@ if('sds' %in% importparams) {
 nu_factors <- extract(stan.fit, pars='nu_factors', permuted=FALSE)
 nu_factors <- matrix(apply(nu_factors, 3, sumfunc), ncol=K)
 nu_factors <- nu_factors[,axisOrder]
+rownames(nu_factors) <- dataset_names
 
 if('log_less_contamination' %in% importparams) {
     log_less_contamination <- extract(stan.fit, pars='log_less_contamination', permuted=FALSE)
@@ -72,24 +76,33 @@ W_norm <- array(W_norm,dim=c(length(W_norm)/K,K))[,axisOrder]
 
 binary_count_dataset_intercepts <- extract(stan.fit, pars='binary_count_dataset_intercepts', permuted=FALSE)
 binary_count_dataset_intercepts <- apply(binary_count_dataset_intercepts, 3, sumfunc)
+names(binary_count_dataset_intercepts) <- dataset_names[1:D]
 
 DRC <- D+R+C
 
 rho_sites <- extract(stan.fit, pars='rho_sites', permuted=FALSE)
 rho_sites <- apply(rho_sites, 3, sumfunc)
 
-cov_sites <- extract(stan.fit, pars='cov_sites', permuted=FALSE)
-cov_sites <- apply(cov_sites, 3, sumfunc)
-dim(cov_sites) <- c(K,N_sites,N_sites)
-cov_sites <- cov_sites[axisOrder,,]
+if('corr_sites' %in% importparams) {
+    corr_sites <- extract(stan.fit, pars='corr_sites', permuted=FALSE)
+    corr_sites <- apply(corr_sites, 3, sumfunc)
+    dim(corr_sites) <- c(K,N_sites,N_sites)
+    corr_sites <- corr_sites[axisOrder,,]
+}
 
-if('rho_Z' %in% importparams) {
+if('rho_Z' %in% importparams & KG > 0) {
     rho_Z <- extract(stan.fit, pars='rho_Z', permuted=FALSE)
-    if(exists('KG')) {
-        rho_Z <- array(apply(rho_Z, 3, sumfunc),dim=c(K_linear,KG))[axisOrder[axisOrder <= K_linear],]
-    } else {
-        rho_Z <- apply(rho_Z, 3, sumfunc)[axisOrder[axisOrder <= K_linear]]
-    }
+    rho_Z <- array(apply(rho_Z, 3, sumfunc),dim=c(K_linear,KG))[axisOrder[axisOrder <= K_linear],]
+}
+
+if('skew_Z' %in% importparams) {
+    skew_Z <- extract(stan.fit, pars='skew_Z', permuted=FALSE)
+    skew_Z <- apply(skew_Z, 3, sumfunc)[axisOrder]
+}
+
+if('order_prior_scales' %in% importparams) {
+    order_prior_scales <- extract(stan.fit, pars='order_prior_scales', permuted=FALSE)
+    order_prior_scales <- apply(order_prior_scales, 3, sumfunc)
 }
 
 pos1 <- array(apply(W_norm_all,3,monteCarloP,pn='p'),dim=c(dim(W_norm_all)[[3]]/K,K))[,axisOrder]
