@@ -16,10 +16,10 @@ options(mc.cores = parallel::detectCores())
 logit <- function(p) log(p/(1-p))
 inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 
-nMicrobeKeep <- 100#500
-K_linear <- 25#10
+nMicrobeKeep <- 500
+K_linear <- 10
 K_gp <- 15
-KG <- 0#3
+KG <- 3
 K <- K_linear + KG * K_gp
 global_scale_prior = 2.5
 rate_gamma_fact = 10
