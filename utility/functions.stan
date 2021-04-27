@@ -92,7 +92,7 @@ functions {
                                 - rep_matrix(delta * sqrt(2 / pi()), cols(Z1)));
         return(Z);
     } // skew-normal matrix with mean 0 and sd 1, assuming Z1 is normal, Z2 is half-normal, and each have location 0 and scale 1
-    vector transform_tMVN_vector(matrix L, vector u) {
+    vector transform_tMVN_vector_lp(matrix L, vector u) {
         int N = rows(u);
         vector[N] z;
             for(n in 1:N) {
@@ -103,7 +103,7 @@ functions {
             }
             return z;
     } // simplified from https://discourse.mc-stan.org/t/multi-normal-lcdf/6652/6
-    matrix transform_tMVN_lpdf(matrix L, matrix u) {
+    matrix transform_tMVN_lp(matrix L, matrix u) {
         int K = rows(u);
         int N = cols(u);
         matrix[K,N] z;
