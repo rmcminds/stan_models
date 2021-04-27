@@ -94,30 +94,26 @@ functions {
     } // skew-normal matrix with mean 0 and sd 1, assuming Z1 is normal, Z2 is half-normal, and each have location 0 and scale 1
     vector transform_tMVN_vector_lpdf(matrix L, vector u) {
         int N = rows(u);
-        vector[N] d;
         vector[N] z;
             for(n in 1:) {
                 int nm1 = n - 1;
                 real u_star = Phi(((n > 1) ? L[n,1:nm1] * head(z,nm1) : 0) / L[n,n]);
-                d[n] = log1m(u_star);
+                target += log1m(u_star);
                 z[n] = inv_Phi(u_star + u[n] - u_star * u[n]);
             }
-            target += sum(d);
             return z;
     } // simplified from https://discourse.mc-stan.org/t/multi-normal-lcdf/6652/6
     matrix transform_tMVN_lpdf(matrix L, matrix u) {
-        int N = rows(u);
-        int K = cols(u);
-        matrix[K,N] d;
+        int K = rows(u);
+        int N = cols(u);
         matrix[K,N] z;
             for (n in 1:N) {
-                int nm1 = n - 1;
-                vector[K] u_star = Phi(((n > 1) ? L[n,1:nm1] * z[1:nm1,] : 0) / L[n,n]);
-                d[,n] = log1m(u_star);
+                int np1 = n + 1;
+                vector[K] u_star = Phi(((n > 1) ? z[,1:np1] * L[1:np1,n] : zeros_vector(K)) / L[n,n]);
                 z[,n] = inv_Phi(u_star + u[,n] - u_star .* u[,n]);
+                target += log1m(u_star);
             }
-            target += sum(d);
-            return z;
-    } // vectorized from above
+        return z;
+    } // vectorized and transposed from above
 }
 
