@@ -221,10 +221,10 @@ transformed parameters {
         matrix[N,N] L = L_cov_exp_quad_ARD(Z[1:K_linear,], rho_Z[,g], 1e-9)';
         int s = K_gp * (g-1) + 1;
         int f = K_gp * g;
-        Z[K_linear + s:f,]
+        Z[(K_linear + s):(K_linear + f),]
             = mix_skew_normal(Z1_gp_raw[s:f,] * L,
                               transform_tMVN_lp(L, Z2_gp_raw[s:f,]) * L,
-                              skew_Z[K_linear + s:f]);
+                              skew_Z[(K_linear + s):(K_linear + f)]);
     } // other axes are skew normal and dependent on the first axes through gaussian processes
     Z_higher = Z * samp2group;
     for(k in 1:K) {

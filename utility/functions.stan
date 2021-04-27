@@ -97,7 +97,7 @@ functions {
         vector[N] z;
             for(n in 1:N) {
                 int nm1 = n - 1;
-                real u_star = Phi(((n > 1) ? L[n,1:nm1] * head(z,nm1) : 0) / L[n,n]);
+                real u_star = Phi((n > 1) ? L[n,1:nm1] * head(z,nm1) / L[n,n] : 0);
                 target += log1m(u_star);
                 z[n] = inv_Phi(u_star + u[n] - u_star * u[n]);
             }
@@ -107,9 +107,14 @@ functions {
         int K = rows(u);
         int N = cols(u);
         matrix[K,N] z;
-            for (n in 1:N) {
+            for(n in 1:N) {
                 int nm1 = n - 1;
-                vector[K] u_star = Phi(((n > 1) ? z[,1:nm1] * L[1:nm1,n] : zeros_vector(K)) / L[n,n]);
+                vector[K] u_star;
+                if(n > 1) {
+                    u_star = Phi(z[,1:nm1] * L[1:nm1,n] / L[n,n]);
+                } else {
+                    u_star = rep_vector(0.5,K);
+                }
                 z[,n] = inv_Phi(u_star + u[,n] - u_star .* u[,n]);
                 target += log1m(u_star);
             }
