@@ -92,7 +92,7 @@ functions {
                                 - rep_matrix(delta * sqrt(2 / pi()), cols(Z1)));
         return(Z);
     } // skew-normal matrix with mean 0 and sd 1, assuming Z1 is normal, Z2 is half-normal, and each have location 0 and scale 1
-    vector transform_tMVN_vector_lpdf(matrix L, vector u) {
+    vector transform_tMVN_vector(matrix L, vector u) {
         int N = rows(u);
         vector[N] z;
             for(n in 1:N) {
