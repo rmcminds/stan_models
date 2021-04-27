@@ -16,10 +16,10 @@ options(mc.cores = parallel::detectCores())
 logit <- function(p) log(p/(1-p))
 inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 
-nMicrobeKeep <- 500
-K_linear <- 10
+nMicrobeKeep <- 100#500
+K_linear <- 30#10
 K_gp <- 15
-KG <- 3
+KG <- 0#3
 K <- K_linear + KG * K_gp
 global_scale_prior = 2.5
 rate_gamma_fact = 10
@@ -1084,8 +1084,10 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              prevalence_higher_vector = rep(0,sum(F_higher)),
              P_higher         = rep(0,H_higher),
              Y_higher_vector  = rep(0,sum(G_higher)),
-             Z1_raw    = Z1_raw_init,
-             Z2_raw    = Z2_raw_init,
+             Z1_linear_raw    = Z1_raw_init[1:K_linear,],
+             Z2_linear_raw    = Z2_raw_init[1:K_linear,],
+             Z1_gp_raw        = Z1_raw_init[(K_linear+1):K,],
+             Z2_gp_raw        = pnorm(Z2_raw_init[(K_linear+1):K,]),
              W_norm    = W_norm,
              P_missing = rep(-1,N_Pm),
              rho_Z     = matrix(0.0001, nrow = K_linear, ncol = KG),

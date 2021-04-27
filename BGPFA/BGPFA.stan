@@ -175,8 +175,10 @@ transformed data {
     //
 }
 parameters {
-    matrix[K,N] Z1_raw;                            // PCA axis scores, normal part
-    matrix<lower=0>[K,N] Z2_raw;                   // PCA axis scores, skew part (soft identification against reflections, if data are not symmetrical)
+    matrix[K_linear,N] Z1_linear_raw;              // PCA axis scores, normal part
+    matrix<lower=0>[K_linear,N] Z2_linear_raw;     // PCA axis scores, skew part (soft identification against reflections, if data are not symmetrical)
+    matrix[KG*K_gp,N] Z1_gp_raw;                   // PCA axis scores for gaussian process variables, normal part
+    matrix<lower=0,upper=1>[KG*K_gp,N] Z2_gp_raw;  // PCA axis scores for gaussian process variables, skew part
     vector<lower=0>[K] skew_Z;                     // degree of skew for each axis
     matrix[VOB_all+V_all+D,K] W_norm;              // PCA variable loadings
     vector<lower=0>[VOB_all+V_all+D] sds;          // variable scales
@@ -214,13 +216,16 @@ transformed parameters {
     corr_matrix[M[DRC]] corr_sites[K];
     matrix<lower=2>[DRC+D,K] nu_factors = nu_factors_raw + 2;
     for(miss in 1:N_Pm) P_filled[idx_Pm[miss]] = P_missing[miss] + P_max[miss];
-    Z[1:K_linear,] = mix_skew_normal(Z1_raw[1:K_linear,], Z2_raw[1:K_linear,], skew_Z[1:K_linear]);
+    Z[1:K_linear,] = mix_skew_normal(Z1_linear_raw, Z2_linear_raw, skew_Z[1:K_linear]); // first axes are independent skew-normal
     for(g in 1:KG) {
         matrix[N,N] L = L_cov_exp_quad_ARD(Z[1:K_linear,], rho_Z[,g], 1e-9)';
-        int s = K_linear + (K_gp * (g-1)) + 1;
-        int f = K_linear + K_gp * g;
-        Z[s:f,] = mix_skew_normal(Z1_raw[s:f,] * L, Z2_raw[s:f,] * L, skew_Z[s:f]);
-    }
+        int s = K_gp * (g-1) + 1;
+        int f = K_gp * g;
+        Z[K_linear + s:f,]
+            = mix_skew_normal(Z1_gp_raw[s:f,] * L,
+                              transform_tMVN_lpdf(L', Z2_gp_raw[s:f,]')' * L,
+                              skew_Z[K_linear + s:f]);
+    } // other axes are skew normal and dependent on the first axes through gaussian processes
     Z_higher = Z * samp2group;
     for(k in 1:K) {
         corr_sites[k]
