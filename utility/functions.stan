@@ -95,7 +95,7 @@ functions {
     vector transform_tMVN_vector_lpdf(matrix L, vector u) {
         int N = rows(u);
         vector[N] z;
-            for(n in 1:) {
+            for(n in 1:N) {
                 int nm1 = n - 1;
                 real u_star = Phi(((n > 1) ? L[n,1:nm1] * head(z,nm1) : 0) / L[n,n]);
                 target += log1m(u_star);
