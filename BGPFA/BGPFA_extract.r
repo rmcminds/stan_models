@@ -66,7 +66,7 @@ latent_scales <- latent_scales[axisOrder]
 WZ <- apply(WZ_all,c(2,3),sumfunc)
 WZ <- array(WZ, dim = c(length(WZ)/K, K))[,axisOrder]
 W_norm <- WZ[1:dim(W_norm_all)[2],]
-Z <- WZ[(dim(W_norm_all)[2]+1):nrow(WZ_2),]
+Z <- WZ[(dim(W_norm_all)[2]+1):nrow(WZ),]
 rownames(Z) <- allsamples
 
 weight_scales <- extract(stan.fit, pars='weight_scales', permuted=FALSE)
@@ -126,9 +126,9 @@ if('order_prior_scales' %in% importparams) {
     order_prior_scales <- apply(order_prior_scales, 3, sumfunc)
 }
 
-pos1 <- array(apply(W_norm_all,3,monteCarloP,pn='p'),dim=c(dim(W_norm_all)[[3]]/K,K))[,axisOrder]
+pos1 <- apply(W_norm_all,c(2,3),monteCarloP,pn='p')[,axisOrder]
 possig <- pos1 < 0.05
-neg1 <- array(apply(W_norm_all,3,monteCarloP,pn='n'),dim=c(dim(W_norm_all)[[3]]/K,K))[,axisOrder]
+neg1 <- apply(W_norm_all,c(2,3),monteCarloP,pn='n')[,axisOrder]
 negsig <- neg1 < 0.05
 anysig <- possig | negsig
 rownames(pos1) <- rownames(neg1) <- labs
