@@ -223,7 +223,7 @@ transformed parameters {
         int f = K_gp * g;
         Z[(K_linear + s):(K_linear + f),]
             = mix_skew_normal(Z1_gp_raw[s:f,] * L,
-                              transform_tMVN_lp(L, Z2_gp_raw[s:f,]) * L,
+                              transform_tMVN_lp(Z2_gp_raw[s:f,], L),
                               skew_Z[(K_linear + s):(K_linear + f)]);
     } // other axes are skew normal and dependent on the first axes through gaussian processes
     Z_higher = Z * samp2group;

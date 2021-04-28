@@ -16,10 +16,10 @@ options(mc.cores = parallel::detectCores())
 logit <- function(p) log(p/(1-p))
 inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 
-nMicrobeKeep <- 500
-K_linear <- 10
+nMicrobeKeep <- 100#500
+K_linear <- 25#10
 K_gp <- 15
-KG <- 3
+KG <- 0#3
 K <- K_linear + KG * K_gp
 global_scale_prior = 2.5
 rate_gamma_fact = 10
@@ -36,7 +36,7 @@ preprocess_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/intermediate/')
 include_path <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utility/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
-engine <- 'advi'
+engine <- 'sampling' #'advi'
 opencl <- FALSE
 output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
 
@@ -674,7 +674,8 @@ for(x in 1:nrow(in_data$mb16S)) {
 }
 prior_scales_mb16S <- apply(inits_mb16S %*% t(MASS:::ginv(cbind(1,diag(ncol(inits_mb16S)),mm_h$mb_16S))[-1,]),2,sd)
 inits_mb16S <- t(sapply(1:nrow(inits_mb16S), function(x) {y <- inits_mb16S[x,]; y[in_data$mb16S[x,] == 0] <- min(y); y}))
-
+prior_scales_mb16S_binary <- apply(matrix(as.numeric(in_data$mb16S > 0),ncol=ncol(in_data$mb16S)) %*% t(MASS:::ginv(cbind(1,diag(ncol(inits_mb16S)),mm_h$mb_16S))[-1,]),2,sd)
+prior_scales_mb16S_binary[prior_scales_mb16S_binary==0] <- min(c(prior_scales_mb16S_binary[prior_scales_mb16S_binary>0],1)) / 2
 
 mm_h$mb_18S <- matrix(0, NNodesEuks + 1, NNodesEuks + 1)
 for(node in 1:(NNodesEuks + 1)) {
@@ -715,7 +716,8 @@ for(x in 1:nrow(in_data$mb18S)) {
 }
 prior_scales_mb18S <- apply(inits_mb18S %*% t(MASS:::ginv(cbind(1,diag(ncol(inits_mb18S)),mm_h$mb_18S))[-1,]),2,sd)
 inits_mb18S <- t(sapply(1:nrow(inits_mb18S), function(x) {y <- inits_mb18S[x,]; y[in_data$mb18S[x,] == 0] <- min(y); y}))
-
+prior_scales_mb18S_binary <- apply(matrix(as.numeric(in_data$mb18S > 0),ncol=ncol(in_data$mb18S)) %*% t(MASS:::ginv(cbind(1,diag(ncol(inits_mb18S)),mm_h$mb_18S))[-1,]),2,sd)
+prior_scales_mb18S_binary[prior_scales_mb18S_binary==0] <- min(c(prior_scales_mb18S_binary[prior_scales_mb18S_binary>0],1)) / 2
 
 inits_rna <- log(in_data$rna)
 inits_rna[in_data$rna == 0] <- NA
@@ -741,7 +743,8 @@ for(x in 1:nrow(in_data$rna)) {
 }
 prior_scales_rna <- apply(inits_rna, 2, sd)
 inits_rna <- t(sapply(1:nrow(inits_rna), function(x) {y <- inits_rna[x,]; y[in_data$rna[x,] == 0] <- min(y); y}))
-
+prior_scales_rna_binary <- apply(matrix(as.numeric(in_data$rna > 0),ncol=ncol(in_data$rna)),2,sd)
+prior_scales_rna_binary[prior_scales_rna_binary==0] <- min(c(prior_scales_rna_binary[prior_scales_rna_binary>0],1)) / 2
 
 allclades <- as.character(unique(itsMeta[colnames(in_data$its2), 'Clade']))
 allmaj <- as.character(unique(itsMeta[colnames(in_data$its2), 'Majority.ITS2.sequence']))
@@ -786,7 +789,8 @@ for(x in 1:nrow(in_data$its2)) {
 }
 prior_scales_its2 <- apply(inits_its2 %*% t(MASS:::ginv(cbind(1,diag(ncol(inits_its2)),mm_h$its2))[-1,]),2,sd)
 inits_its2 <- t(sapply(1:nrow(inits_its2), function(x) {y <- inits_its2[x,]; y[in_data$its2[x,] == 0] <- min(y); y}))
-
+prior_scales_its2_binary <- apply(matrix(as.numeric(in_data$its2 > 0),ncol=ncol(in_data$its2)) %*% t(MASS:::ginv(cbind(1,diag(ncol(inits_its2)),mm_h$its2))[-1,]),2,sd)
+prior_scales_its2_binary[prior_scales_its2_binary==0] <- min(c(prior_scales_its2_binary[prior_scales_its2_binary>0],1)) / 2
 
 names_mm_h$biomarkers <- c('symbiont_biomass','ubiquitin')
 mm_h$biomarkers <- sapply(names_mm_h$biomarkers, function(x) grepl(x,colnames(in_data$biomarkers),ignore.case = TRUE))
@@ -861,16 +865,24 @@ mm_h$fab_T1_agg <- sapply(names_mm_h$fab_t1_agg, function(x) grepl(x,colnames(in
 
 names_mm_h$hphoto <- c('morphotype_Millepora','morphotype_Pocillopora','morphotype_Porites')
 mm_h$hphoto <- sapply(names_mm_h$hphoto, function(x) grepl(x,colnames(in_data$hphoto),ignore.case = TRUE))
+prior_scales_hphoto <- apply(matrix(as.numeric(in_data$hphoto > 0),ncol=ncol(in_data$hphoto)) %*% t(MASS:::ginv(cbind(1,diag(ncol(in_data$hphoto)),mm_h$hphoto))[-1,]),2,sd,na.rm=TRUE)
+prior_scales_hphoto[prior_scales_hphoto==0] <- min(c(prior_scales_hphoto[prior_scales_hphoto>0],1)) / 2
 
 names_mm_h$ephoto <- list(bleached_group='bleached_light|bleached_bleached', borers_group='bivalve|Spirobranchus|Tridacna|boringurchin|other_polychaete|sponge|gallcrabs|ascidians', polychaetes_group='Spirobranchus|other_polychaete', bivalve_group='bivalve|Tridacna', algae_contact_group='Halimeda|Turbinaria|Dictyota|Lobophora|Galaxaura|Sargassum', sargassaceae_group='Turbinaria|Sargassum')
 names_mm_h$ephoto <- names_mm_h$ephoto[sapply(names_mm_h$ephoto, function(x) sum(grepl(x,colnames(in_data$ephoto),ignore.case = TRUE))) > 1]
 mm_h$ephoto <- sapply(names_mm_h$ephoto, function(x) grepl(x,colnames(in_data$ephoto),ignore.case = TRUE))
+prior_scales_ephoto <- apply(matrix(as.numeric(in_data$ephoto > 0),ncol=ncol(in_data$ephoto)) %*% t(MASS:::ginv(cbind(1,diag(ncol(in_data$ephoto)),mm_h$ephoto))[-1,]),2,sd,na.rm=TRUE)
+prior_scales_ephoto[prior_scales_ephoto==0] <- min(c(prior_scales_ephoto[prior_scales_ephoto>0],1)) / 2
 
 names_mm_h$svd <- c('cladePOC','cladePOR')
 mm_h$svd <- sapply(names_mm_h$svd, function(x) grepl(x,colnames(in_data$svd),ignore.case = TRUE))
+prior_scales_svd <- apply(matrix(as.numeric(in_data$svd > 0),ncol=ncol(in_data$svd)) %*% t(MASS:::ginv(cbind(1,diag(ncol(in_data$svd)),mm_h$svd))[-1,]),2,sd,na.rm=TRUE)
+prior_scales_svd[prior_scales_svd==0] <- min(c(prior_scales_svd[prior_scales_svd>0],1)) / 2
 
 names_mm_h$sites <- levels(filtData$island)
 mm_h$sites <- sapply(names_mm_h$sites, function(x) grepl(x,colnames(in_data$sites),ignore.case = TRUE))
+prior_scales_sites <- apply(matrix(as.numeric(in_data$sites > 0),ncol=ncol(in_data$sites)) %*% t(MASS:::ginv(cbind(1,diag(ncol(in_data$sites)),mm_h$sites))[-1,]),2,sd,na.rm=TRUE)
+prior_scales_sites[prior_scales_sites==0] <- min(c(prior_scales_sites[prior_scales_sites>0],1)) / 2
 
 ii_fun <- function(x,M,mm) {
     if(M[[x]] == 1) {
@@ -928,21 +940,20 @@ prior_scales <- c(prior_scales_mb16S,
                   apply(in_data$t3 %*% t(MASS:::ginv(cbind(diag(ncol(in_data$t3)),mm_h$t3))),2,sd),
                   apply(sapply(1:ncol(fabT1aggMatInv), function(x) matrix(in_data$fab_T1_agg[,fabT1aggMatInv[,x]!=0],nrow=nrow(in_data$fab_T1_agg)) %*% fabT1aggMatInv[fabT1aggMatInv[,x]!=0,x]),2,sd,na.rm=TRUE),
                   apply(in_data$fab_T2_agg,2,sd,na.rm=TRUE),
-                  rep(1,ncol(in_data$snps)),
-                  rep(1,ncol(in_data$hphoto)),
-                  rep(1,ncol(mm_h$hphoto)),
-                  rep(1,ncol(in_data$ephoto)),
-                  rep(1,ncol(mm_h$ephoto)),
-                  rep(1,ncol(in_data$species)),
-                  rep(1,ncol(in_data$svd)),
-                  rep(1,ncol(mm_h$svd)),
-                  rep(1,ncol(in_data$sites)),
-                  rep(1,ncol(mm_h$sites)),
-                  rep(1,ncol(inits_mb16S) + ncol(mm_h$mb_16S)),
-                  rep(1,ncol(inits_mb18S) + ncol(mm_h$mb_18S)),
-                  rep(1,ncol(inits_rna)),
-                  rep(1,ncol(inits_its2) + ncol(mm_h$its2)),
-                  rep(1,D))
+                  apply(in_data$snps,2,sd,na.rm=TRUE),
+                  prior_scales_hphoto,
+                  prior_scales_ephoto,
+                  apply(in_data$species,2,sd,na.rm=TRUE),
+                  prior_scales_svd,
+                  prior_scales_sites,
+                  prior_scales_mb16S_binary,
+                  prior_scales_mb18S_binary,
+                  prior_scales_rna_binary,
+                  prior_scales_its2_binary,
+                  exp(mean(log(prior_scales_mb16S_binary))),
+                  exp(mean(log(prior_scales_mb18S_binary))),
+                  exp(mean(log(prior_scales_rna_binary))),
+                  exp(mean(log(prior_scales_its2_binary))))
 
 prior_intercept_scales <- c(prior_intercept_scales_mb16S,
                             prior_intercept_scales_mb18S,
@@ -953,12 +964,12 @@ prior_intercept_scales <- c(prior_intercept_scales_mb16S,
                             apply(in_data$t3,2,sd),
                             apply(in_data$fab_T1_agg,2,sd,na.rm=TRUE),
                             apply(in_data$fab_T2_agg,2,sd,na.rm=TRUE),
-                            rep(1,ncol(in_data$snps)),
-                            rep(1,ncol(in_data$hphoto)),
-                            rep(1,ncol(in_data$ephoto)),
-                            rep(1,ncol(in_data$species)),
-                            rep(1,ncol(in_data$svd)),
-                            rep(1,ncol(in_data$sites)))
+                            apply(in_data$snps,2,sd,na.rm=TRUE),
+                            apply(in_data$hphoto,2,sd,na.rm=TRUE),
+                            apply(in_data$ephoto,2,sd,na.rm=TRUE),
+                            apply(in_data$species,2,sd,na.rm=TRUE),
+                            apply(in_data$svd,2,sd,na.rm=TRUE),
+                            apply(in_data$sites,2,sd,na.rm=TRUE))
 
 prior_intercept_centers <- intercepts_inits
 binary_count_intercept_centers <- binary_count_intercepts_inits

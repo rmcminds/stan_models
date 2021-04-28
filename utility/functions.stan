@@ -103,7 +103,7 @@ functions {
             }
             return z;
     } // simplified from https://discourse.mc-stan.org/t/multi-normal-lcdf/6652/6
-    matrix transform_tMVN_lp(matrix L, matrix u) {
+    matrix transform_tMVN_lp(matrix u, matrix L) {
         int K = rows(u);
         int N = cols(u);
         matrix[K,N] z;
@@ -118,7 +118,7 @@ functions {
                 z[,n] = inv_Phi(u_star + u[,n] - u_star .* u[,n]);
                 target += log1m(u_star);
             }
-        return z;
+        return z * L;
     } // vectorized and transposed from above
 }
 
