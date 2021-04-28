@@ -38,7 +38,7 @@ model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
 engine <- 'sampling' #'advi'
 opencl <- FALSE
-output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
+output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_bs_', nMicrobeKeep)
 
 dir.create(output_prefix, recursive = TRUE)
 
@@ -51,7 +51,7 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                           'method=sample algorithm=hmc',
                                           'stepsize=0.1',
                                           'engine=nuts',
-                                          'max_depth=7',
+                                          'max_depth=8',
                                           'num_warmup=300',
                                           'num_samples=100',
                                           ('opencl platform=0 device=0')[opencl],
@@ -1071,10 +1071,10 @@ Z2 <- matrix(abs(rnorm((K_linear+KG*K_gp)*N)), nrow=K_linear+KG*K_gp)
 Z <- ((Z1r+skew_Z_prior_init*Z2)/sqrt(1+skew_Z_prior_init^2) - delta * sqrt(2/pi)) / sqrt(1 - 2*delta^2/pi)
 Zo <- diag(sqrt(colSums(t(Z)^2))) %*% svd(t(Z))$v %*% t(svd(t(Z))$u)
 Z1 <- (Zo * sqrt(1 - 2*delta^2/pi) + delta * sqrt(2/pi)) * sqrt(1+skew_Z_prior_init^2) - skew_Z_prior_init*Z2
-Z1_raw_init <- Z1 * 0.001
-Z2_raw_init <- Z2 * 0.001
+Z1_raw_init <- Z1 * 0.0001
+Z2_raw_init <- Z2 * 0.0001
 
-W_norm <- matrix(rnorm((VOBplus+sum(M_all[1:D])+D) * K) * 0.001, ncol=K)
+W_norm <- matrix(rnorm((VOBplus+sum(M_all[1:D])+D) * K) * 0.00001, ncol=K)
 W_norm <- svd(W_norm)$u %*% t(svd(W_norm)$v) %*% diag(sqrt(colSums(W_norm^2)))
 
 init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
@@ -1097,11 +1097,11 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              Y_higher_vector  = rep(0,sum(G_higher)),
              Z1_linear_raw    = Z1_raw_init[1:K_linear,],
              Z2_linear_raw    = Z2_raw_init[1:K_linear,],
-             Z1_gp_raw        = Z1_raw_init[(K_linear+1):K,],
-             Z2_gp_raw        = pnorm(Z2_raw_init[(K_linear+1):K,]),
+             Z1_gp_raw        = {if(K > K_linear) Z1_raw_init[(K_linear+1):K,] else 1},
+             Z2_gp_raw        = {if(K > K_linear) pnorm(Z2_raw_init[(K_linear+1):K,]) else 1},
              W_norm    = W_norm,
              P_missing = rep(-1,N_Pm),
-             rho_Z     = matrix(0.0001, nrow = K_linear, ncol = KG),
+             rho_Z     = matrix(0.00001, nrow = K_linear, ncol = KG),
              inv_log_less_contamination  = -inv_log_max_contam,
              contaminant_overdisp        = rep(1,D),
              skew_Z                      = rep(skew_Z_prior_init,K),

@@ -11,6 +11,24 @@ monteCarloP <- function(x, pn='p') {
     }
 } # https://arxiv.org/pdf/1603.05766.pdf
 
+orient_axes <- function(extracted, refdraw = NULL) {
+    K <- dim(extracted)[[3]]
+    if(is.null(refdraw)) refdraw <- sample(dim(extracted)[[1]],1)
+    comparisons <- extracted[-refdraw,,]
+    oriented <- array(NA, dim=dim(extracted))
+    oriented[1,,] <- extracted[refdraw,,]
+    which_match <- array(NA,dim(extracted)[c(1,3)])
+    which_match[1,] <- 1:K
+    for(axis in 1:K) {
+        for(draw in 1:dim(comparisons)[[1]]) {
+            which_match[1+draw,axis] <- which.max(sapply(1:K, function(k) cor(comparisons[draw,,k],oriented[1,,axis])))
+            oriented[1+draw,,axis] <- comparisons[draw,,which_match[1+draw,axis]]
+        }
+    }
+    return(list(oriented=oriented, which_match=which_match))
+} # swap axes such that they best match a reference (by default a random draw). If axes are degenerate during model fitting, this should orient them. May have issues if there are multiple very highly correlated axes?
+
+
 sumfunc <- median
 #sumfunc <- mean
 #sumfunc <- function(x) x[length(x)]
@@ -30,10 +48,26 @@ names(var_scales) <- labs
 global_effect_scale <- extract(stan.fit, pars='global_effect_scale', permuted=FALSE)
 global_effect_scale <- apply(global_effect_scale, 3, sumfunc)
 
+W_norm_all <- extract(stan.fit, pars='W_norm', permuted=FALSE)
+W_norm_all <- array(W_norm_all, dim = c(dim(W_norm_all)[[1]], dim(W_norm_all)[[3]]/K, K))
+Z_all <- extract(stan.fit, pars='Z', permuted=FALSE)
+Z_all <- aperm(array(Z_all, dim = c(dim(Z_all)[[1]], K, dim(Z_all)[[3]]/K)), c(1,3,2))
+refdraw <- sample(dim(W_norm_all)[[1]],1)
+oriented <- orient_axes(abind:::abind(W_norm_all,Z_all,along=2), refdraw)
+WZ_all <- oriented$oriented
+which_match <- oriented$which_match
+
 latent_scales <- extract(stan.fit, pars='latent_scales', permuted=FALSE)
-latent_scales <- apply(latent_scales, 3, sumfunc)
+latent_scales <- sapply(1:nrow(which_match), function(draw) latent_scales[draw,,which_match[draw,]])
+latent_scales <- apply(latent_scales, 1, sumfunc)
 axisOrder <- order(latent_scales, decreasing=TRUE)
 latent_scales <- latent_scales[axisOrder]
+
+WZ <- apply(WZ_all,c(2,3),sumfunc)
+WZ <- array(WZ, dim = c(length(WZ)/K, K))[,axisOrder]
+W_norm <- WZ[1:dim(W_norm_all)[2],]
+Z <- WZ[(dim(W_norm_all)[2]+1):nrow(WZ_2),]
+rownames(Z) <- allsamples
 
 weight_scales <- extract(stan.fit, pars='weight_scales', permuted=FALSE)
 weight_scales <- apply(weight_scales,3,sumfunc)
@@ -60,19 +94,6 @@ if('contaminant_overdisp' %in% importparams) {
     contaminant_overdisp <- extract(stan.fit, pars='contaminant_overdisp', permuted=FALSE)
     contaminant_overdisp <- apply(contaminant_overdisp, 3, sumfunc)
 }
-
-Z_all <- extract(stan.fit, pars='Z', permuted=FALSE)
-
-Z <- apply(Z_all,3,sumfunc)
-Z <- t(array(Z,dim=c(K,length(Z)/K)))
-Z <- array(Z[,axisOrder],dim=c(length(Z)/K,K))
-rownames(Z) <- allsamples
-
-Z_all <- array(Z_all, dim=c(dim(Z_all)[[1]],N,K))[,,axisOrder,drop=FALSE]
-
-W_norm_all <- extract(stan.fit, pars='W_norm', permuted=FALSE)
-W_norm <- apply(W_norm_all,3,sumfunc)
-W_norm <- array(W_norm,dim=c(length(W_norm)/K,K))[,axisOrder]
 
 binary_count_dataset_intercepts <- extract(stan.fit, pars='binary_count_dataset_intercepts', permuted=FALSE)
 binary_count_dataset_intercepts <- apply(binary_count_dataset_intercepts, 3, sumfunc)
