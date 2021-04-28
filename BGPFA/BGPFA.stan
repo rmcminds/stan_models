@@ -323,6 +323,7 @@ model {
     target += cauchy_lupdf(binary_count_dataset_intercepts | 0, 2.5);                                        // allow entire count datasets to have biased difference in prevalence compared to priors
     target += normal_lupdf(global_effect_scale | 0, global_scale_prior);                                     // shrink global scale of effects toward zero
     target += normal_lupdf(ortho_scale | 0, ortho_scale_prior);                                              // estimate necessary strength of orthonogonalization
+    target += beta_lupdf(order_prior_scales | 3,3);
     target += student_t_lupdf(latent_scales[K_linear] | 2, 0, global_effect_scale * order_prior_scales^(0.5*K_linear));// final axis scale centered on global scale diminished by the distance between scales K/2 times
     target += student_t_lupdf(latent_scales[1:(K_linear-1)] | 2, 0, latent_scales[2:K_linear] / order_prior_scales);   // each axis scale has prior expectation to be larger than the next by a fit distance
     target += student_t_lupdf(to_vector(weight_scales) | 2, 0, to_vector(rep_matrix(latent_scales, DRC+D))); // sparse selection of datasets per axis
@@ -349,6 +350,8 @@ model {
     }                                                                                                        // final KG * K_gp PCA axis scores are functions of first K_linear ones
     target += normal_lupdf(sds | 0, dsv);                                                                    // per-variable sigmas shrink toward dataset scales
     target += student_t_lupdf(to_vector(W_norm) | to_vector(num), 0, to_vector(wsn));                        // PCA loadings shrink to zero with axis-and-dataset-specific nu and variance
+    target += student_t_lupdf(abundance_higher_vector | nu_residuals, 0, 1);
+    target += student_t_lupdf(prevalence_higher_vector | nu_residuals, 0, 1);
     // end priors
     // likelihoods
     // count likelihood
@@ -378,20 +381,14 @@ model {
                             M[d],
                             M_higher[d]);
             matrix[M[d],sum_ID[d]] higher_summed
-                = MM * to_matrix(segment(abundance_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]),
-                                 M_higher[d], sum_ID[d]);
+                = diag_post_multiply(MM, segment(var_scales, sum_M_all[d] + M[d] + 1, M_higher[d]))
+                  * to_matrix(segment(abundance_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]),
+                              M_higher[d], sum_ID[d]);
             abundance_predicted += higher_summed;
             abundance_contam += contaminant_overdisp[d] * higher_summed;
-            prevalence += MM * to_matrix(segment(prevalence_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]),
-                                         M_higher[d], sum_ID[d]);
-            target += student_t_lupdf(segment(abundance_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]) |
-                                      nu_residuals,
-                                      0,
-                                      to_vector(rep_matrix(segment(var_scales, sum_M_all[d] + M[d] + 1, M_higher[d]), sum_ID[d])));
-            target += student_t_lupdf(segment(prevalence_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]) |
-                                      nu_residuals,
-                                      0,
-                                      to_vector(rep_matrix(segment(var_scales, VOB_all + sum_M_all[d] + M[d] + 1, M_higher[d]), sum_ID[d])));
+            prevalence += diag_post_multiply(MM, segment(var_scales, VOB_all + sum_M_all[d] + M[d] + 1, M_higher[d]))
+                          * to_matrix(segment(prevalence_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]),
+                                      M_higher[d], sum_ID[d]);
             i_X_higher += M_higher[d] * sum_ID[d];
         }
         target += poisson_log_lpmf(segment(X, i_X, M[d] * sum_ID[d]) |
