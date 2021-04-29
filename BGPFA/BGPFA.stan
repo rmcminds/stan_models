@@ -323,10 +323,10 @@ model {
     target += cauchy_lupdf(binary_count_dataset_intercepts | 0, 2.5);                                        // allow entire count datasets to have biased difference in prevalence compared to priors
     target += normal_lupdf(global_effect_scale | 0, global_scale_prior);                                     // shrink global scale of effects toward zero
     target += normal_lupdf(ortho_scale | 0, ortho_scale_prior);                                              // estimate necessary strength of orthonogonalization
-    target += beta_lupdf(order_prior_scales | 3,3);
-    target += student_t_lupdf(latent_scales[K_linear] | 2, 0, global_effect_scale * order_prior_scales^(0.5*K_linear));// final axis scale centered on global scale diminished by the distance between scales K/2 times
-    target += student_t_lupdf(latent_scales[1:(K_linear-1)] | 2, 0, latent_scales[2:K_linear] / order_prior_scales);   // each axis scale has prior expectation to be larger than the next by a fit distance
-    target += student_t_lupdf(to_vector(weight_scales) | 2, 0, to_vector(rep_matrix(latent_scales, DRC+D))); // sparse selection of datasets per axis
+    target += beta_lupdf(order_prior_scales | K,1);
+    target += student_t_lupdf(latent_scales[K_linear] | 3, 0, global_effect_scale * order_prior_scales^(0.5*K_linear));// final axis scale centered on global scale diminished by the distance between scales K/2 times
+    target += student_t_lupdf(latent_scales[1:(K_linear-1)] | 3, 0, latent_scales[2:K_linear] / order_prior_scales);   // each axis scale has prior expectation to be larger than the next by a fit distance
+    target += student_t_lupdf(to_vector(weight_scales) | 3, 0, to_vector(rep_matrix(latent_scales, DRC+D))); // sparse selection of datasets per axis
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, shape_gnorm);      // shrink amount of contamination in 'true zeros' toward zero
     target += std_normal_lupdf(contaminant_overdisp);                                                        // shrink overdispersion of contaminant counts in 'true zeros' toward zero
     target += normal_lupdf(to_vector(W_norm) |
@@ -342,9 +342,9 @@ model {
     target += inv_gamma_lupdf(rho_sites | 5, 5 * rho_sites_prior);                                           // length scale for gaussian process on sites
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);                                  // length scale for gaussian process on PCA axis scores
     for(g in 1:KG) {
-        target += student_t_lupdf(latent_scales[K_linear + K_gp * g] | 2, 0, global_effect_scale * order_prior_scales^(0.5*K_gp));
+        target += student_t_lupdf(latent_scales[K_linear + K_gp * g] | 3, 0, global_effect_scale * order_prior_scales^(0.5*K_gp));
         target += student_t_lupdf(latent_scales[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g - 1)] |
-                                  2,
+                                  3,
                                   0,
                                   latent_scales[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g - 1)] / order_prior_scales);
     }                                                                                                        // final KG * K_gp PCA axis scores are functions of first K_linear ones
@@ -400,7 +400,7 @@ model {
                 target += log_sum_exp(log1m_inv_logit(prevalence[m,n])
                                       + student_t_lpdf(abundance_observed[m,n] |
                                                        nu_residuals,
-                                                       abundance_contam[m,n],
+                                                       fmax(abundance_contam[m,n],1e-12),
                                                        contaminant_overdisp[d] * var_scales[sum_M_all[d] + m]), //estimated abundance if true negative
                                       log_inv_logit(prevalence[m,n])
                                       + student_t_lpdf(abundance_observed[m,n] |

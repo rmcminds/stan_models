@@ -17,7 +17,7 @@ logit <- function(p) log(p/(1-p))
 inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 
 nMicrobeKeep <- 100#500
-K_linear <- 25#10
+K_linear <- 35#10
 K_gp <- 15
 KG <- 0#3
 K <- K_linear + KG * K_gp
@@ -25,7 +25,7 @@ global_scale_prior = 2.5
 rate_gamma_fact = 10
 shape_gamma_fact = 2
 site_smoothness <- 2
-nu_residuals <- 25
+nu_residuals <- 35
 ortho_scale_prior <- 0.25
 shape_gnorm <- 7
 skew_Z_prior <- 10
@@ -36,9 +36,9 @@ preprocess_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/intermediate/')
 include_path <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utility/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
-engine <- 'advi' #'sampling' #
+engine <- 'sampling' #'advi' #
 opencl <- FALSE
-output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_ex_', nMicrobeKeep)
+output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
 
 dir.create(output_prefix, recursive = TRUE)
 
@@ -49,9 +49,9 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                           paste0('file=', file.path(output_prefix, 'samples_sampling.txt')),
                                           paste0('refresh=', 1),
                                           'method=sample algorithm=hmc',
-                                          'stepsize=0.1',
+                                          'stepsize=0.01',
                                           'engine=nuts',
-                                          'max_depth=8',
+                                          'max_depth=10',
                                           'num_warmup=300',
                                           'num_samples=100',
                                           ('opencl platform=0 device=0')[opencl],
@@ -1082,13 +1082,13 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              binary_count_intercepts         = binary_count_intercepts_inits,
              binary_count_dataset_intercepts = rep(0,D),
              multinomial_nuisance            = multinomial_nuisance_inits,
-             global_effect_scale  = global_scale_prior,
+             global_effect_scale  = 0.1,
              ortho_scale          = 1,
-             latent_scales        = rep(global_scale_prior * (K:1) / K * 2,K),
-             sds            = rep(1, VOBplus+sum(M_all[1:D])+D),
-             dataset_scales = rep(1, 2*D+R+C),
+             latent_scales        = rep(0.1,K),
+             sds            = rep(50, VOBplus+sum(M_all[1:D])+D),
+             dataset_scales = rep(50, 2*D+R+C),
              nu_factors_raw = matrix(10, nrow=2*D+R+C, ncol=K),
-             weight_scales  = matrix(global_scale_prior, nrow=2*D+R+C, ncol=K),
+             weight_scales  = matrix(0.1, nrow=2*D+R+C, ncol=K),
              rho_sites = as.array(rep(mean(dist_sites[lower.tri(dist_sites)]), K)),
              site_prop = as.array(rep(0.5, K)),
              abundance_higher_vector  = rep(0,sum(F_higher)),
@@ -1105,7 +1105,7 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              inv_log_less_contamination  = -inv_log_max_contam,
              contaminant_overdisp        = rep(1,D),
              skew_Z                      = rep(skew_Z_prior_init,K),
-             order_prior_scales          = 1/K)
+             order_prior_scales          = 0.9)
 
 save.image(file.path(output_prefix, 'setup.RData'))
 
