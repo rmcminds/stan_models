@@ -164,5 +164,15 @@ functions {
         }
         return(weighted_mean);
     } // https://scicomp.stackexchange.com/questions/30631/how-to-find-the-nearest-a-near-positive-definite-from-a-given-matrix
+    matrix mean_special_orthogonal_points_2(matrix x) {
+        matrix[rows(x),cols(x)] Q = diag_post_multiply(qr_thin_Q(svd_U(x) * svd_V(x)'), sqrt(columns_dot_self(x)));
+        matrix[rows(x),cols(x)] weighted_mean;
+        for(i in 1:cols(x)) {
+            vector[cols(x)] weights = columns_dot_self(rep_matrix(x[,i],cols(x)) - Q)';
+            weights = 0.5 * weights / mean(weights);
+            weighted_mean[,i] = Q * exp(weights - log_sum_exp(weights));
+        }
+        return(weighted_mean);
+    } // https://scicomp.stackexchange.com/questions/30631/how-to-find-the-nearest-a-near-positive-definite-from-a-given-matrix
 }
 
