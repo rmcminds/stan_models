@@ -159,7 +159,7 @@ functions {
         matrix[rows(x),cols(x)] Q = diag_post_multiply(qr_thin_Q(svd_U(x) * svd_V(x)'), sqrt(columns_dot_self(x)));
         matrix[rows(x),cols(x)] weighted_mean;
         for(i in 1:cols(x)) {
-            vector[cols(x)] inv_dists = inv(columns_dot_self(rep_matrix(x[,i],cols(x)) - Q))';
+            vector[cols(x)] inv_dists = inv(ones_row_vector(rows(x)) * (rep_matrix(x[,i],cols(x)) - Q))';
             weighted_mean[,i] = Q * (inv_dists / sum(inv_dists));
         }
         return(weighted_mean);
