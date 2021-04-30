@@ -329,12 +329,8 @@ model {
     target += student_t_lupdf(to_vector(weight_scales) | 3, 0, to_vector(rep_matrix(latent_scales, DRC+D))); // sparse selection of datasets per axis
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, shape_gnorm);      // shrink amount of contamination in 'true zeros' toward zero
     target += std_normal_lupdf(contaminant_overdisp);                                                        // shrink overdispersion of contaminant counts in 'true zeros' toward zero
-    target += normal_lupdf(to_vector(W_norm) |
-                           to_vector(svd_U(W_norm) * diag_post_multiply(svd_V(W_norm)', sqrt(columns_dot_self(W_norm)))),
-                           global_effect_scale * ortho_scale);       // shrink PCA variable loadings toward closes orthogonal matrix
-    target += normal_lupdf(to_vector(Z) |
-                           to_vector(diag_pre_multiply(sqrt(rows_dot_self(Z)), svd_V(Z')) * svd_U(Z')'),
-                           ortho_scale);                                                                     // shrink PCA axis scores toward closes orthogonal matrix
+    target += normal_lupdf(to_vector(W_norm) | to_vector(mean_special_orthogonal_points(W_norm)), global_effect_scale * ortho_scale);// shrink PCA variable loadings toward closes orthogonal matrix
+    target += normal_lupdf(to_vector(Z) | to_vector(mean_special_orthogonal_points(Z')'), ortho_scale);                          // shrink PCA axis scores toward closes orthogonal matrix
     target += std_normal_lupdf(to_vector(Z1_linear_raw));                                                    // first PCA axis scores are independent of one another
     target += std_normal_lupdf(to_vector(Z2_linear_raw));                                                    // PCA scores have idependent positive skew to help identify
     target += std_normal_lupdf(to_vector(Z1_gp_raw));                                                        // normal part of gp effects, prior to correlation with cholesky

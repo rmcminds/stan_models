@@ -36,7 +36,7 @@ preprocess_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/intermediate/')
 include_path <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utility/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
-engine <- 'sampling' #'advi' #
+engine <- 'advi' #'sampling' #
 opencl <- FALSE
 output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
 
@@ -49,9 +49,11 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                           paste0('file=', file.path(output_prefix, 'samples_sampling.txt')),
                                           paste0('refresh=', 1),
                                           'method=sample algorithm=hmc',
-                                          'stepsize=0.01',
+                                          'stepsize=0.1',
                                           'engine=nuts',
                                           'max_depth=10',
+                                          'adapt t0=100',
+                                          'kappa=0.55',
                                           'num_warmup=300',
                                           'num_samples=100',
                                           ('opencl platform=0 device=0')[opencl],
@@ -64,11 +66,12 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                        paste0('refresh=', 100),
                                        'method=variational algorithm=meanfield',
                                        'grad_samples=1',
-                                       'elbo_samples=100',
+                                       'elbo_samples=1',
                                        'iter=30000',
                                        'eta=0.1',
                                        'adapt engaged=0',
                                        'tol_rel_obj=0.0001',
+                                       'eval_elbo=1',
                                        'output_samples=200',
                                        ('opencl platform=0 device=0')[opencl],
                                        sep=' '))
@@ -1082,13 +1085,13 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              binary_count_intercepts         = binary_count_intercepts_inits,
              binary_count_dataset_intercepts = rep(0,D),
              multinomial_nuisance            = multinomial_nuisance_inits,
-             global_effect_scale  = 0.1,
+             global_effect_scale  = 1,
              ortho_scale          = 1,
-             latent_scales        = rep(0.1,K),
-             sds            = rep(50, VOBplus+sum(M_all[1:D])+D),
-             dataset_scales = rep(50, 2*D+R+C),
+             latent_scales        = rep(11,K),
+             sds            = rep(1, VOBplus+sum(M_all[1:D])+D),
+             dataset_scales = rep(1, 2*D+R+C),
              nu_factors_raw = matrix(10, nrow=2*D+R+C, ncol=K),
-             weight_scales  = matrix(0.1, nrow=2*D+R+C, ncol=K),
+             weight_scales  = matrix(1, nrow=2*D+R+C, ncol=K),
              rho_sites = as.array(rep(mean(dist_sites[lower.tri(dist_sites)]), K)),
              site_prop = as.array(rep(0.5, K)),
              abundance_higher_vector  = rep(0,sum(F_higher)),
@@ -1105,7 +1108,7 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              inv_log_less_contamination  = -inv_log_max_contam,
              contaminant_overdisp        = rep(1,D),
              skew_Z                      = rep(skew_Z_prior_init,K),
-             order_prior_scales          = 0.9)
+             order_prior_scales          = 0.5)
 
 save.image(file.path(output_prefix, 'setup.RData'))
 
