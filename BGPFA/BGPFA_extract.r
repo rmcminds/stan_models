@@ -55,13 +55,15 @@ W_norm_all <- array(W_norm_all, dim = c(dim(W_norm_all)[[1]], dim(W_norm_all)[[3
 Z_all <- extract(stan.fit, pars='Z', permuted=FALSE)
 Z_all <- aperm(array(Z_all, dim = c(dim(Z_all)[[1]], K, dim(Z_all)[[3]]/K)), c(1,3,2))
 WZ_all_raw <- aperm(abind:::abind(W_norm_all,Z_all,along=2), c(2,3,1))
-mutated <- Morpho:::procSym(WZ_all_raw, CSinit = FALSE, scale = FALSE, reflect = TRUE, orp = FALSE, bending = FALSE)
-oriented <- orient_axes(WZ_all_raw, mutated$mshape)
+mutated <- Morpho:::procSym(WZ_all_raw, CSinit = FALSE, scale = FALSE, reflect = TRUE, orp = FALSE, bending = FALSE, pcAlign = FALSE)
+mutated_projected <- shapes:::procOPA(WZ_all_raw[,,1], mutated$mshape, scale=FALSE)
+oriented <- orient_axes(WZ_all_raw, mutated_projected$Bhat)
 WZ_all <- aperm(oriented$oriented, c(3,1,2))
+axisOrder_all <- oriented$which_match
 
 latent_scales <- extract(stan.fit, pars='latent_scales', permuted=FALSE)
-## need to use rotations from procrustes to make these match
-latent_scales <- apply(latent_scales, 3, sumfunc)
+latent_scales <- sapply(1:dim(latent_scales)[[1]], function(x) latent_scales[x,,axisOrder_all[,x]])
+latent_scales <- apply(latent_scales, 1, sumfunc)
 axisOrder <- order(latent_scales, decreasing=TRUE)
 latent_scales <- latent_scales[axisOrder]
 
@@ -72,6 +74,7 @@ Z <- WZ[(dim(W_norm_all)[2]+1):nrow(WZ),]
 rownames(Z) <- allsamples
 
 weight_scales <- extract(stan.fit, pars='weight_scales', permuted=FALSE)
+##need to reorder each draw according to axisOrder_all- this is currently inaccurate
 weight_scales <- apply(weight_scales,3,sumfunc)
 weight_scales <- array(weight_scales,dim=c(length(weight_scales)/K,K))
 weight_scales <- array(weight_scales[,axisOrder], dim=c(length(weight_scales)/K,K))
@@ -83,6 +86,7 @@ if('sds' %in% importparams) {
 }
 
 nu_factors <- extract(stan.fit, pars='nu_factors', permuted=FALSE)
+##need to reorder each draw according to axisOrder_all- this is currently inaccurate
 nu_factors <- matrix(apply(nu_factors, 3, sumfunc), ncol=K)
 nu_factors <- nu_factors[,axisOrder]
 rownames(nu_factors) <- dataset_names_expanded
@@ -115,20 +119,22 @@ if('corr_sites' %in% importparams) {
 
 if('rho_Z' %in% importparams & KG > 0) {
     rho_Z <- extract(stan.fit, pars='rho_Z', permuted=FALSE)
+    ##need to reorder each draw according to axisOrder_all- this is currently inaccurate
     rho_Z <- array(apply(rho_Z, 3, sumfunc),dim=c(K_linear,KG))[axisOrder[axisOrder <= K_linear],]
 }
 
 if('skew_Z' %in% importparams) {
     skew_Z <- extract(stan.fit, pars='skew_Z', permuted=FALSE)
+    ##need to reorder each draw according to axisOrder_all- this is currently inaccurate
     skew_Z <- apply(skew_Z, 3, sumfunc)[axisOrder]
 }
 
-pos1 <- apply(W_norm_all,c(2,3),monteCarloP,pn='p')[,axisOrder]
+pos1 <- apply(WZ_all,c(2,3),monteCarloP,pn='p')[,axisOrder]
 possig <- pos1 < 0.05
-neg1 <- apply(W_norm_all,c(2,3),monteCarloP,pn='n')[,axisOrder]
+neg1 <- apply(WZ_all,c(2,3),monteCarloP,pn='n')[,axisOrder]
 negsig <- neg1 < 0.05
 anysig <- possig | negsig
-rownames(pos1) <- rownames(neg1) <- labs
+rownames(pos1) <- rownames(neg1) <- c(labs,allsamples)
 gc()
 
 nullfunc <- function() {
@@ -142,8 +148,8 @@ nullfunc <- function() {
     i <- 1
     hist((var_scales / prior_scales / dataset_scales[i])[(sum(M_all[1:(i-1)])+1):sum(M_all[1:i])])
 
-    labs[negsig[,1]]
-    labs[possig[,1]]
-    list(positive=labs[possig[,1]],negative=labs[negsig[,1]])
+    c(labs,allsamples)[negsig[,1]]
+    c(labs,allsamples)[possig[,1]]
+    list(positive=c(labs,allsamples)[possig[,1]],negative=c(labs,allsamples)[negsig[,1]])
 
 }
