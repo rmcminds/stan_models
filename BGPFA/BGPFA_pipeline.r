@@ -1057,9 +1057,7 @@ data <- list(N            = N,
              site_smoothness     = site_smoothness,
              nu_residuals        = nu_residuals,
              inv_log_max_contam  = inv_log_max_contam,
-             ortho_scale_prior   = ortho_scale_prior,
-             shape_gnorm         = shape_gnorm,
-             skew_Z_prior        = skew_Z_prior)
+             shape_gnorm         = shape_gnorm)
 
 #### create initiliazations
 abundance_observed_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) inits_mb16S[I_cs[1,x],]),
@@ -1067,17 +1065,10 @@ abundance_observed_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) i
                                             sapply(1:N, function(x) if(I[3,x]) inits_rna[I_cs[3,x],]),
                                             sapply(1:N, function(x) if(I[4,x]) inits_its2[I_cs[4,x],])))
 
-skew_Z_prior_init <- skew_Z_prior
-delta <- skew_Z_prior_init / sqrt(1 + skew_Z_prior_init^2)
-Z1r <- matrix(rnorm((K_linear+KG*K_gp)*N), nrow=K_linear+KG*K_gp)
-Z2 <- matrix(abs(rnorm((K_linear+KG*K_gp)*N)), nrow=K_linear+KG*K_gp)
-Z <- ((Z1r+skew_Z_prior_init*Z2)/sqrt(1+skew_Z_prior_init^2) - delta * sqrt(2/pi)) / sqrt(1 - 2*delta^2/pi)
-Zo <- diag(sqrt(colSums(t(Z)^2))) %*% svd(t(Z))$v %*% t(svd(t(Z))$u)
-Z1 <- (Zo * sqrt(1 - 2*delta^2/pi) + delta * sqrt(2/pi)) * sqrt(1+skew_Z_prior_init^2) - skew_Z_prior_init*Z2
-Z1_raw_init <- Z1 * 0.0001
-Z2_raw_init <- Z2 * 0.0001
+Z1 <- matrix(rnorm((K_linear+KG*K_gp)*N), nrow=K_linear+KG*K_gp) * 0.001
+Z2 <- matrix(abs(rnorm((K_linear+KG*K_gp)*N)), nrow=K_linear+KG*K_gp) * 0.001
 
-W_norm <- matrix(rnorm((VOBplus+sum(M_all[1:D])+D) * K) * 0.00001, ncol=K)
+W_norm <- matrix(rnorm((VOBplus+sum(M_all[1:D])+D) * K) * 0.001, ncol=K)
 W_norm <- svd(W_norm)$u %*% t(svd(W_norm)$v) %*% diag(sqrt(colSums(W_norm^2)))
 
 init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
@@ -1086,7 +1077,6 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              binary_count_dataset_intercepts = rep(0,D),
              multinomial_nuisance            = multinomial_nuisance_inits,
              global_effect_scale  = 1,
-             ortho_scale          = 1,
              latent_scales        = rep(11,K),
              sds            = rep(1, VOBplus+sum(M_all[1:D])+D),
              dataset_scales = rep(1, 2*D+R+C),
@@ -1098,17 +1088,16 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              prevalence_higher_vector = rep(0,sum(F_higher)),
              P_higher         = rep(0,H_higher),
              Y_higher_vector  = rep(0,sum(G_higher)),
-             Z1_linear_raw    = Z1_raw_init[1:K_linear,],
-             Z2_linear_raw    = Z2_raw_init[1:K_linear,],
-             Z1_gp_raw        = {if(K > K_linear) Z1_raw_init[(K_linear+1):K,] else 1},
-             Z2_gp_raw        = {if(K > K_linear) pnorm(Z2_raw_init[(K_linear+1):K,]) else 1},
+             Z1_linear_raw    = Z1[1:K_linear,],
+             Z2_linear_raw    = Z2[1:K_linear,],
+             Z1_gp_raw        = {if(K > K_linear) Z1[(K_linear+1):K,] else 1},
+             Z2_gp_raw        = {if(K > K_linear) pnorm(Z2[(K_linear+1):K,]) else 1},
              W_norm    = W_norm,
              P_missing = rep(-1,N_Pm),
-             rho_Z     = matrix(0.00001, nrow = K_linear, ncol = KG),
+             rho_Z     = matrix(0.0001, nrow = K_linear, ncol = KG),
              inv_log_less_contamination  = -inv_log_max_contam,
              contaminant_overdisp        = rep(1,D),
-             skew_Z                      = rep(skew_Z_prior_init,K),
-             order_prior_scales          = 0.5)
+             skew_Z                      = rep(0,K))
 
 save.image(file.path(output_prefix, 'setup.RData'))
 
@@ -1123,7 +1112,7 @@ print(sampling_commands[[engine]])
 print(date())
 system(sampling_commands[[engine]])
 
-importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','dataset_scales','var_scales','weight_scales','nu_factors','rho_sites', 'site_prop', 'corr_sites', 'binary_count_dataset_intercepts', 'log_less_contamination', 'contaminant_overdisp', 'rho_Z', 'ortho_scale','skew_Z', 'order_prior_scales')
+importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','dataset_scales','var_scales','weight_scales','nu_factors','rho_sites', 'site_prop', 'corr_sites', 'binary_count_dataset_intercepts', 'log_less_contamination', 'contaminant_overdisp', 'rho_Z','skew_Z')
 
 stan.fit <- read_stan_csv_subset(file.path(output_prefix, paste0('samples_',engine,'.txt')),
                                  params = importparams)

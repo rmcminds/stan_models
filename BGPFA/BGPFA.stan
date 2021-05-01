@@ -35,7 +35,6 @@ data {
     int<lower=0> H_higher;                              // Total number of higher effects for continuous observations
     vector[H] P;                                        // continuous data
     real<lower=0> global_scale_prior;
-    real<lower=0> ortho_scale_prior;                    // prior degree of orthogonalization regularization
     vector<lower=0>[sum(M_all) + sum(M_all[1:D]) + D] prior_scales;
     vector<lower=0>[sum(M)] prior_intercept_scales;
     vector[sum(M)] prior_intercept_centers;
@@ -54,7 +53,6 @@ data {
     real nu_residuals;                                  // residual robustness
     vector[D] inv_log_max_contam;                       // prior expectation of contamination rate
     real<lower=0> shape_gnorm;                          // strength of prior pulling contamination toward zero
-    real<lower=0> skew_Z_prior;                         // prior expectation for strength of skew of axes (soft identification against reflections)
 }
 transformed data {
     int K = K_linear + KG * K_gp;                      // Total number of latent axes
@@ -179,12 +177,11 @@ parameters {
     matrix<lower=0>[K_linear,N] Z2_linear_raw;     // PCA axis scores, skew part (soft identification against reflections, if data are not symmetrical)
     matrix[KG*K_gp,N] Z1_gp_raw;                   // PCA axis scores for gaussian process variables, normal part
     matrix<lower=0,upper=1>[KG*K_gp,N] Z2_gp_raw;  // PCA axis scores for gaussian process variables, skew part
-    vector<lower=0>[K] skew_Z;                     // degree of skew for each axis
+    vector[K] skew_Z;                              // degree of skew for each axis
     matrix[VOB_all+V_all+D,K] W_norm;              // PCA variable loadings
     vector<lower=0>[VOB_all+V_all+D] sds;          // variable scales
     real<lower=0> global_effect_scale;             // overall scale of variable loadings
     real<lower=0> ortho_scale;                     // inverse strength of orthogonality shrinkage
-    real<lower=0,upper=1> order_prior_scales;      // prior expectation for ratio of scales of adjacent axes (soft identification of order of axes)
     row_vector<lower=0>[K] latent_scales;          // overall scale of each axis
     vector<lower=0>[DRC+D] dataset_scales;         // overall scale of each dataset
     matrix<lower=0>[DRC+D,K] weight_scales;        // per-dataset-and-axis scales
@@ -322,28 +319,16 @@ model {
     target += cauchy_lupdf(binary_count_intercepts | binary_count_intercept_centers, 2.5);                   // overall prevalence may differ from priors
     target += cauchy_lupdf(binary_count_dataset_intercepts | 0, 2.5);                                        // allow entire count datasets to have biased difference in prevalence compared to priors
     target += normal_lupdf(global_effect_scale | 0, global_scale_prior);                                     // shrink global scale of effects toward zero
-    target += normal_lupdf(ortho_scale | 0, ortho_scale_prior);                                              // estimate necessary strength of orthonogonalization
-    target += beta_lupdf(order_prior_scales | K,1);
-    target += student_t_lupdf(latent_scales[K_linear] | 3, 0, global_effect_scale * order_prior_scales^(0.5*K_linear));// final axis scale centered on global scale diminished by the distance between scales K/2 times
-    target += student_t_lupdf(latent_scales[1:(K_linear-1)] | 3, 0, latent_scales[2:K_linear] / order_prior_scales);   // each axis scale has prior expectation to be larger than the next by a fit distance
+    target += student_t_lupdf(latent_scales | 3, 0, global_effect_scale);                                    // final axis scale centered on global scale diminished by the distance between scales K/2 times
     target += student_t_lupdf(to_vector(weight_scales) | 3, 0, to_vector(rep_matrix(latent_scales, DRC+D))); // sparse selection of datasets per axis
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, shape_gnorm);      // shrink amount of contamination in 'true zeros' toward zero
     target += std_normal_lupdf(contaminant_overdisp);                                                        // shrink overdispersion of contaminant counts in 'true zeros' toward zero
-    target += normal_lupdf(to_vector(W_norm) | to_vector(mean_special_orthogonal_points(W_norm)), global_effect_scale * ortho_scale);// shrink PCA variable loadings toward closes orthogonal matrix
-    target += normal_lupdf(to_vector(Z) | to_vector(mean_special_orthogonal_points(Z')'), ortho_scale);                          // shrink PCA axis scores toward closes orthogonal matrix
     target += std_normal_lupdf(to_vector(Z1_linear_raw));                                                    // first PCA axis scores are independent of one another
     target += std_normal_lupdf(to_vector(Z2_linear_raw));                                                    // PCA scores have idependent positive skew to help identify
     target += std_normal_lupdf(to_vector(Z1_gp_raw));                                                        // normal part of gp effects, prior to correlation with cholesky
-    target += inv_gamma_lupdf(skew_Z | 5, 5 * skew_Z_prior);                                                 // all Z are positively skewed, but each axis varies
+    target += std_normal_lupdf(skew_Z);                                                                      //
     target += inv_gamma_lupdf(rho_sites | 5, 5 * rho_sites_prior);                                           // length scale for gaussian process on sites
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);                                  // length scale for gaussian process on PCA axis scores
-    for(g in 1:KG) {
-        target += student_t_lupdf(latent_scales[K_linear + K_gp * g] | 3, 0, global_effect_scale * order_prior_scales^(0.5*K_gp));
-        target += student_t_lupdf(latent_scales[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g - 1)] |
-                                  3,
-                                  0,
-                                  latent_scales[(K_linear + (K_gp * (g-1)) + 1):(K_linear + K_gp * g - 1)] / order_prior_scales);
-    }                                                                                                        // final KG * K_gp PCA axis scores are functions of first K_linear ones
     target += normal_lupdf(sds | 0, dsv);                                                                    // per-variable sigmas shrink toward dataset scales
     target += student_t_lupdf(to_vector(W_norm) | to_vector(num), 0, to_vector(wsn));                        // PCA loadings shrink to zero with axis-and-dataset-specific nu and variance
     target += student_t_lupdf(abundance_higher_vector | nu_residuals, 0, 1);

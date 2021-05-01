@@ -11,26 +11,25 @@ monteCarloP <- function(x, pn='p') {
     }
 } # https://arxiv.org/pdf/1603.05766.pdf
 
-orient_axes <- function(extracted, refdraw = NULL) {
-    K <- dim(extracted)[[3]]
-    if(is.null(refdraw)) refdraw <- sample(dim(extracted)[[1]],1)
-    comparisons <- extracted[-refdraw,,]
+orient_axes <- function(extracted, reference = NULL) {
+    K <- dim(extracted)[[2]]
+    if(is.null(reference)) reference <- extracted[,,sample(dim(extracted)[[3]],1)]
     oriented <- array(NA, dim=dim(extracted))
-    oriented[1,,] <- extracted[refdraw,,]
-    which_match <- array(NA,dim(extracted)[c(1,3)])
-    which_match[1,] <- 1:K
-    reflected <- 0
-    for(axis in 1:K) {
-        for(draw in 1:dim(comparisons)[[1]]) {
-            cors <- sapply(1:K, function(k) cor(comparisons[draw,,k],oriented[1,,axis]))
-            which_match[1+draw,axis] <- which.max(cors)
-            reflected <- c(reflected,sign(cors[which_match]))
-            oriented[1+draw,,axis] <- sign(cors[which_match[1+draw,axis]]) * comparisons[draw,,which_match[1+draw,axis]]
+    which_match <- array(NA,dim(extracted)[c(2,3)])
+    reflected <- array(NA,dim(extracted)[c(2,3)])
+    for(draw in 1:dim(extracted)[[3]]) {
+        available <- rep(TRUE,K)
+        for(axis in 1:K) {
+            idx <- (1:K)[available]
+            cors <- sapply(idx, function(k) cor(extracted[,k,draw], reference[,axis]))
+            which_match[axis,draw] <- idx[which.max(cors)]
+            available[which_match[axis,draw]] <- FALSE
+            reflected[axis,draw] <- sign(cors[which.max(cors)])
+            oriented[,axis,draw] <- reflected[axis,draw] * extracted[,which_match[axis,draw],draw]
         }
     }
     return(list(oriented=oriented, which_match=which_match, reflected=reflected))
 } # swap axes such that they best match a reference (by default a random draw). If axes are degenerate during model fitting, this should orient them. May have issues if there are multiple very highly correlated axes?
-
 
 sumfunc <- median
 #sumfunc <- mean
@@ -55,14 +54,14 @@ W_norm_all <- extract(stan.fit, pars='W_norm', permuted=FALSE)
 W_norm_all <- array(W_norm_all, dim = c(dim(W_norm_all)[[1]], dim(W_norm_all)[[3]]/K, K))
 Z_all <- extract(stan.fit, pars='Z', permuted=FALSE)
 Z_all <- aperm(array(Z_all, dim = c(dim(Z_all)[[1]], K, dim(Z_all)[[3]]/K)), c(1,3,2))
-refdraw <- sample(dim(W_norm_all)[[1]],1)
-oriented <- orient_axes(abind:::abind(W_norm_all,Z_all,along=2), refdraw)
-WZ_all <- oriented$oriented
-which_match <- oriented$which_match
+WZ_all_raw <- aperm(abind:::abind(W_norm_all,Z_all,along=2), c(2,3,1))
+mutated <- Morpho:::procSym(WZ_all_raw, CSinit = FALSE, scale = FALSE, reflect = TRUE, orp = FALSE, bending = FALSE)
+oriented <- orient_axes(WZ_all_raw, mutated$mshape)
+WZ_all <- aperm(oriented$oriented, c(3,1,2))
 
 latent_scales <- extract(stan.fit, pars='latent_scales', permuted=FALSE)
-latent_scales <- sapply(1:nrow(which_match), function(draw) latent_scales[draw,,which_match[draw,]])
-latent_scales <- apply(latent_scales, 1, sumfunc)
+## need to use rotations from procrustes to make these match
+latent_scales <- apply(latent_scales, 3, sumfunc)
 axisOrder <- order(latent_scales, decreasing=TRUE)
 latent_scales <- latent_scales[axisOrder]
 
@@ -122,11 +121,6 @@ if('rho_Z' %in% importparams & KG > 0) {
 if('skew_Z' %in% importparams) {
     skew_Z <- extract(stan.fit, pars='skew_Z', permuted=FALSE)
     skew_Z <- apply(skew_Z, 3, sumfunc)[axisOrder]
-}
-
-if('order_prior_scales' %in% importparams) {
-    order_prior_scales <- extract(stan.fit, pars='order_prior_scales', permuted=FALSE)
-    order_prior_scales <- apply(order_prior_scales, 3, sumfunc)
 }
 
 pos1 <- apply(W_norm_all,c(2,3),monteCarloP,pn='p')[,axisOrder]
