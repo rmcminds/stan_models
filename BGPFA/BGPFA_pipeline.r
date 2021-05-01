@@ -1097,7 +1097,7 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              rho_Z     = matrix(0.0001, nrow = K_linear, ncol = KG),
              inv_log_less_contamination  = -inv_log_max_contam,
              contaminant_overdisp        = rep(1,D),
-             skew_Z                      = rep(0,K))
+             skew_Z                      = rnorm(K)*0.001)
 
 save.image(file.path(output_prefix, 'setup.RData'))
 
