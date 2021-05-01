@@ -1089,15 +1089,15 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              P_higher         = rep(0,H_higher),
              Y_higher_vector  = rep(0,sum(G_higher)),
              Z1_linear_raw    = Z1[1:K_linear,],
-             Z2_linear_raw    = Z2[1:K_linear,],
+             Z2_linear_raw    = abs(Z2[1:K_linear,]),
              Z1_gp_raw        = {if(K > K_linear) Z1[(K_linear+1):K,] else 1},
-             Z2_gp_raw        = {if(K > K_linear) pnorm(Z2[(K_linear+1):K,]) else 1},
+             Z2_gp_raw        = {if(K > K_linear) pnorm(abs(Z2[(K_linear+1):K,])) else 1},
              W_norm    = W_norm,
              P_missing = rep(-1,N_Pm),
              rho_Z     = matrix(0.0001, nrow = K_linear, ncol = KG),
              inv_log_less_contamination  = -inv_log_max_contam,
              contaminant_overdisp        = rep(1,D),
-             skew_Z                      = rnorm(K)*0.001)
+             skew_Z                      = abs(rnorm(K))*0.001)
 
 save.image(file.path(output_prefix, 'setup.RData'))
 
