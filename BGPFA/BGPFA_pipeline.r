@@ -157,7 +157,7 @@ in_data$mb18S <-in_data$mb18S[order(rownames(in_data$mb18S)),]
 euktree <- read.tree(file.path(preprocess_prefix, '20210102/TARA_PACIFIC_18SV9_4191_samples_v202004.OTU.filtered_CO-0-filtered_combined_filtered_aligned.tree'))
 euktreeY <- drop.tip(euktree, euktree$tip.label[!euktree$tip.label %in% colnames(in_data$mb18S)])
 euktreeY.root <- MidpointRooter:::midpoint.root2(euktreeY)
-
+## add in asvs that were in tree, here. multichotomy at root.
 in_data$mb18S <- in_data$mb18S[,euktreeY.root$tip.label]
 
 NTipsEuks <- length(euktreeY.root$tip.label)
