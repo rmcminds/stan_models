@@ -16,7 +16,7 @@ options(mc.cores = parallel::detectCores())
 logit <- function(p) log(p/(1-p))
 inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 
-nMicrobeKeep <- 100#500
+nMicrobeKeep <- 750
 K_linear <- 10
 K_gp <- 40
 K <- K_linear + K_gp
@@ -25,9 +25,7 @@ rate_gamma_fact = 10
 shape_gamma_fact = 2
 site_smoothness <- 2
 nu_residuals <- 35
-ortho_scale_prior <- 0.25
 shape_gnorm <- 7
-skew_Z_prior <- 10
 M_basis <- 25
 
 input_prefix <- file.path(Sys.getenv('HOME'), 'data/tara_unsupervised_analyses')
