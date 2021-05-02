@@ -17,9 +17,10 @@ orient_axes <- function(extracted, reference = NULL) {
     oriented <- array(NA, dim=dim(extracted))
     which_match <- array(NA,dim(extracted)[c(2,3)])
     reflected <- array(NA,dim(extracted)[c(2,3)])
+    order_axes <- order(sqrt(colSums(reference^2)))
     for(draw in 1:dim(extracted)[[3]]) {
         available <- rep(TRUE,K)
-        for(axis in 1:K) {
+        for(axis in order_axes) {
             idx <- (1:K)[available]
             cors <- sapply(idx, function(k) cor(extracted[,k,draw], reference[,axis]))
             which_match[axis,draw] <- idx[which.max(cors)]
@@ -29,7 +30,7 @@ orient_axes <- function(extracted, reference = NULL) {
         }
     }
     return(list(oriented=oriented, which_match=which_match, reflected=reflected))
-} # swap axes such that they best match a reference (by default a random draw). If axes are degenerate during model fitting, this should orient them. May have issues if there are multiple very highly correlated axes?
+} # swap axes such that they best match a reference (by default a random draw). If axes are degenerate during model fitting, this should orient them. Can this be made probabilistic rather than iterating max fit?
 
 sumfunc <- median
 #sumfunc <- mean
@@ -56,8 +57,11 @@ Z_all <- extract(stan.fit, pars='Z', permuted=FALSE)
 Z_all <- aperm(array(Z_all, dim = c(dim(Z_all)[[1]], K, dim(Z_all)[[3]]/K)), c(1,3,2))
 WZ_all_raw <- aperm(abind:::abind(W_norm_all,Z_all,along=2), c(2,3,1))
 mutated <- Morpho:::procSym(WZ_all_raw, CSinit = FALSE, scale = FALSE, reflect = TRUE, orp = FALSE, bending = FALSE, pcAlign = FALSE)
-mutated_projected <- shapes:::procOPA(WZ_all_raw[,,1], mutated$mshape, scale=FALSE)
+closest <- which.max(apply(mutated$rotated, 3, function(x) sqrt(sum((x - mutated$mshape)^2))))
+mutated_projected <- shapes:::procOPA(WZ_all_raw[,,closest], mutated$mshape, scale=FALSE)
 oriented <- orient_axes(WZ_all_raw, mutated_projected$Bhat)
+#oriented <- orient_axes(WZ_all_raw, mutated$mshape)
+#oriented <- orient_axes(WZ_all_raw, princomp(mutated$mshape)$scores)
 WZ_all <- aperm(oriented$oriented, c(3,1,2))
 axisOrder_all <- oriented$which_match
 
@@ -142,6 +146,11 @@ nullfunc <- function() {
     gc()
 
     drivers <- mytriplot(Z, W_norm, Z, 1,2, as.factor(filtData[allsamples,]$species), labs, 50, TRUE, NULL, NULL, FALSE, TRUE)
+
+    mshape_pcs <- princomp(mutated$mshape)
+    W_pc <- mshape_pcs$scores[1:nrow(W_norm),]
+    Z_pc <- mshape_pcs$scores[(nrow(W_norm)+1):nrow(mshape_pcs),]
+    drivers <- mytriplot(Z_pc, W_pc, Z_pc, 1,2, as.factor(filtData[allsamples,]$species), labs, 50, TRUE, NULL, NULL, FALSE, TRUE)
 
     drivers <- mytriplot(Z, W_norm, Z, 1,2, as.factor(filtData[allsamples,]$species), labs, 50, TRUE, NULL, NULL, FALSE, TRUE, anysig)
 
