@@ -16,7 +16,7 @@ options(mc.cores = parallel::detectCores())
 logit <- function(p) log(p/(1-p))
 inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 
-nMicrobeKeep <- 750
+nMicrobeKeep <- 100#750
 K_linear <- 10
 K_gp <- 40
 K <- K_linear + K_gp
@@ -124,6 +124,8 @@ if(length(myarchs) > 1) {
 } else {
     bacttreeY.root <- MidpointRooter:::midpoint.root2(bacttreeY)
 }
+bactsnotintree <- colnames(in_data$mb16S)[!colnames(in_data$mb16S) %in% bacttreeY.root$tip.label]
+bacttreeY.root <- add.tips(bacttreeY.root, bactsnotintree, rep(length(bacttreeY.root$tip.label)+1,length(bactsnotintree)), rep(1,length(bactsnotintree)))
 
 in_data$mb16S <- in_data$mb16S[,bacttreeY.root$tip.label]
 
@@ -155,7 +157,8 @@ in_data$mb18S <-in_data$mb18S[order(rownames(in_data$mb18S)),]
 euktree <- read.tree(file.path(preprocess_prefix, '20210102/TARA_PACIFIC_18SV9_4191_samples_v202004.OTU.filtered_CO-0-filtered_combined_filtered_aligned.tree'))
 euktreeY <- drop.tip(euktree, euktree$tip.label[!euktree$tip.label %in% colnames(in_data$mb18S)])
 euktreeY.root <- MidpointRooter:::midpoint.root2(euktreeY)
-## add in asvs that were in tree, here. multichotomy at root.
+euksnotintree <- colnames(in_data$mb18S)[!colnames(in_data$mb18S) %in% euktree$tip.label]
+euktreeY.root <- add.tips(euktreeY.root, euksnotintree, rep(length(euktreeY.root$tip.label)+1,length(euksnotintree)), rep(1,length(euksnotintree)))
 in_data$mb18S <- in_data$mb18S[,euktreeY.root$tip.label]
 
 NTipsEuks <- length(euktreeY.root$tip.label)
