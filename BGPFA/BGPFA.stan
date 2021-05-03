@@ -181,7 +181,6 @@ parameters {
     matrix[VOB_all+V_all+D,K] W_norm;              // PCA variable loadings
     vector<lower=0>[VOB_all+V_all+D] sds;          // variable scales
     real<lower=0> global_effect_scale;             // overall scale of variable loadings
-    real<lower=0> ortho_scale;                     // inverse strength of orthogonality shrinkage
     row_vector<lower=0>[K] latent_scales;          // overall scale of each axis
     vector<lower=0>[DRC+D] dataset_scales;         // overall scale of each dataset
     matrix<lower=0>[DRC+D,K] weight_scales;        // per-dataset-and-axis scales

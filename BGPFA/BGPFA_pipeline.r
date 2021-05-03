@@ -16,10 +16,10 @@ options(mc.cores = parallel::detectCores())
 logit <- function(p) log(p/(1-p))
 inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 
-nMicrobeKeep <- 100#500
-K_linear <- 35#10
+nMicrobeKeep <- 1000
+K_linear <- 10
 K_gp <- 15
-KG <- 0#3
+KG <- 3
 K <- K_linear + KG * K_gp
 global_scale_prior = 2.5
 rate_gamma_fact = 10
@@ -36,7 +36,7 @@ preprocess_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/intermediate/')
 include_path <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utility/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
-engine <- 'sampling' #'advi' #
+engine <- 'advi' #'sampling' #
 opencl <- FALSE
 output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
 
@@ -68,7 +68,7 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                        'grad_samples=1',
                                        'elbo_samples=1',
                                        'iter=30000',
-                                       'eta=0.1',
+                                       'eta=0.25',
                                        'adapt engaged=0',
                                        'tol_rel_obj=0.0001',
                                        'eval_elbo=1',
@@ -126,6 +126,8 @@ if(length(myarchs) > 1) {
 } else {
     bacttreeY.root <- MidpointRooter:::midpoint.root2(bacttreeY)
 }
+bactsnotintree <- colnames(in_data$mb16S)[!colnames(in_data$mb16S) %in% bacttreeY.root$tip.label]
+bacttreeY.root <- add.tips(bacttreeY.root, bactsnotintree, rep(length(bacttreeY.root$tip.label)+1,length(bactsnotintree)), rep(1,length(bactsnotintree)))
 
 in_data$mb16S <- in_data$mb16S[,bacttreeY.root$tip.label]
 
@@ -157,6 +159,8 @@ in_data$mb18S <-in_data$mb18S[order(rownames(in_data$mb18S)),]
 euktree <- read.tree(file.path(preprocess_prefix, '20210102/TARA_PACIFIC_18SV9_4191_samples_v202004.OTU.filtered_CO-0-filtered_combined_filtered_aligned.tree'))
 euktreeY <- drop.tip(euktree, euktree$tip.label[!euktree$tip.label %in% colnames(in_data$mb18S)])
 euktreeY.root <- MidpointRooter:::midpoint.root2(euktreeY)
+euksnotintree <- colnames(in_data$mb18S)[!colnames(in_data$mb18S) %in% euktree$tip.label]
+euktreeY.root <- add.tips(euktreeY.root, euksnotintree, rep(length(euktreeY.root$tip.label)+1,length(euksnotintree)), rep(1,length(euksnotintree)))
 
 in_data$mb18S <- in_data$mb18S[,euktreeY.root$tip.label]
 
@@ -1077,7 +1081,7 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              binary_count_dataset_intercepts = rep(0,D),
              multinomial_nuisance            = multinomial_nuisance_inits,
              global_effect_scale  = 1,
-             latent_scales        = rep(11,K),
+             latent_scales        = rep(1,K),
              sds            = rep(1, VOBplus+sum(M_all[1:D])+D),
              dataset_scales = rep(1, 2*D+R+C),
              nu_factors_raw = matrix(10, nrow=2*D+R+C, ncol=K),
