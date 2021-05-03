@@ -16,7 +16,7 @@ options(mc.cores = parallel::detectCores())
 logit <- function(p) log(p/(1-p))
 inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 
-nMicrobeKeep <- 100#750
+nMicrobeKeep <- 1000
 K_linear <- 10
 K_gp <- 40
 K <- K_linear + K_gp
