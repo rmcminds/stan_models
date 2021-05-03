@@ -16,10 +16,10 @@ options(mc.cores = parallel::detectCores())
 logit <- function(p) log(p/(1-p))
 inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 
-nMicrobeKeep <- 1000
-K_linear <- 10
+nMicrobeKeep <- 100#1000
+K_linear <- 35#10
 K_gp <- 15
-KG <- 3
+KG <- 0#3
 K <- K_linear + KG * K_gp
 global_scale_prior = 2.5
 rate_gamma_fact = 10
@@ -67,8 +67,8 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                        'method=variational algorithm=meanfield',
                                        'grad_samples=1',
                                        'elbo_samples=1',
-                                       'iter=30000',
-                                       'eta=0.25',
+                                       'iter=50000',
+                                       'eta=0.1',
                                        'adapt engaged=0',
                                        'tol_rel_obj=0.0001',
                                        'eval_elbo=1',
@@ -1061,7 +1061,8 @@ data <- list(N            = N,
              site_smoothness     = site_smoothness,
              nu_residuals        = nu_residuals,
              inv_log_max_contam  = inv_log_max_contam,
-             shape_gnorm         = shape_gnorm)
+             shape_gnorm         = shape_gnorm,
+             skew_Z_prior        = skew_Z_prior)
 
 #### create initiliazations
 abundance_observed_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) inits_mb16S[I_cs[1,x],]),
@@ -1101,7 +1102,7 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              rho_Z     = matrix(0.0001, nrow = K_linear, ncol = KG),
              inv_log_less_contamination  = -inv_log_max_contam,
              contaminant_overdisp        = rep(1,D),
-             skew_Z                      = abs(rnorm(K))*0.001)
+             skew_Z                      = skew_Z_prior)
 
 save.image(file.path(output_prefix, 'setup.RData'))
 

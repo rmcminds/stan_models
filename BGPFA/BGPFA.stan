@@ -53,6 +53,7 @@ data {
     real nu_residuals;                                  // residual robustness
     vector[D] inv_log_max_contam;                       // prior expectation of contamination rate
     real<lower=0> shape_gnorm;                          // strength of prior pulling contamination toward zero
+    real<lower=0> skew_Z_prior;
 }
 transformed data {
     int K = K_linear + KG * K_gp;                      // Total number of latent axes
@@ -325,7 +326,7 @@ model {
     target += std_normal_lupdf(to_vector(Z1_linear_raw));                                                    // first PCA axis scores are independent of one another
     target += std_normal_lupdf(to_vector(Z2_linear_raw));                                                    // PCA scores have idependent positive skew to help identify
     target += std_normal_lupdf(to_vector(Z1_gp_raw));                                                        // normal part of gp effects, prior to correlation with cholesky
-    target += std_normal_lupdf(skew_Z);                                                                      //
+    target += inv_gamma_lupdf(skew_Z | 5, 5 * skew_Z_prior);                                                                      //
     target += inv_gamma_lupdf(rho_sites | 5, 5 * rho_sites_prior);                                           // length scale for gaussian process on sites
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);                                  // length scale for gaussian process on PCA axis scores
     target += normal_lupdf(sds | 0, dsv);                                                                    // per-variable sigmas shrink toward dataset scales
