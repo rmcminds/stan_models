@@ -178,7 +178,7 @@ parameters {
     matrix<lower=0>[K_linear,N] Z2_linear_raw;     // PCA axis scores, skew part (soft identification against reflections, if data are not symmetrical)
     matrix[KG*K_gp,N] Z1_gp_raw;                   // PCA axis scores for gaussian process variables, normal part
     matrix<lower=0,upper=1>[KG*K_gp,N] Z2_gp_raw;  // PCA axis scores for gaussian process variables, skew part
-    vector<lower=0>[K] skew_Z;                              // degree of skew for each axis
+    vector<lower=0>[K] skew_Z;                     // degree of skew for each axis
     matrix[VOB_all+V_all+D,K] W_norm;              // PCA variable loadings
     vector<lower=0>[VOB_all+V_all+D] sds;          // variable scales
     real<lower=0> global_effect_scale;             // overall scale of variable loadings
