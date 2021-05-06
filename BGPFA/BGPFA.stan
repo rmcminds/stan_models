@@ -44,8 +44,6 @@ data {
     int<lower=0> N_Pm;                                  // number of P measured as -inf
     int<lower=0> idx_Pm[N_Pm];                          // indices for missing Ps
     real P_max[N_Pm];                                   // lowest measured value for the variable corresponding to a missing P
-    real rate_gamma_fact;                               // scale of inverse gamma prior on nu for W
-    real shape_gamma_fact;                              // shape of inverse gamma prior on nu for W
     vector[choose(M[size(M)],2)] dist_sites;            // distance between sites
     real rho_sites_prior;                               // prior expectation for length scale of gaussian process on sites
     matrix[N,N_var_groups] samp2group;                  // Matrix to calculate means of grouped samples
@@ -182,7 +180,7 @@ parameters {
     matrix[VOB_all+V_all+D,K] W_norm;              // PCA variable loadings
     vector<lower=0>[VOB_all+V_all+D] sds;          // variable scales
     real<lower=0> global_effect_scale;             // overall scale of variable loadings
-    row_vector<lower=0>[K] latent_scales;          // overall scale of each axis
+    positive_ordered[K] latent_scales_rev;         // overall scale of each axis
     vector<lower=0>[DRC+D] dataset_scales;         // overall scale of each dataset
     matrix<lower=0>[DRC+D,K] weight_scales;        // per-dataset-and-axis scales
     vector[VOB] intercepts;
@@ -195,7 +193,6 @@ parameters {
     vector[D] binary_count_dataset_intercepts;     // each count dataset could have biased prior intercepts
     row_vector[N_multinom] multinomial_nuisance;       // per-sample parameter to convert independent poisson distributions to a multinomial one
     vector<upper=0>[N_Pm] P_missing;               // latent estimates of continuous variables with partial information (truncated observations)
-    matrix<lower=0>[DRC+D,K] nu_factors_raw;       // per-dataset-and-axis sparsity of variable loadings
     vector<lower=0>[K] rho_sites;                  // length scale for site gaussian process
     vector<lower=0, upper=1>[K] site_prop;         // importance of site covariance compared to nugget effect
     matrix<lower=0>[K_linear,KG] rho_Z;            // length scale for latent axis gaussian process
@@ -203,6 +200,7 @@ parameters {
     vector<lower=0>[D] contaminant_overdisp;       // dispersion parameter for amount of contamination in true negative count observations
 }
 transformed parameters {
+    vector[K] latent_scales = reverse(latent_scales_rev);         // overall scale of each axis
     matrix[K,N] Z;
     matrix[K,N_var_groups] Z_higher;
     matrix[VOB,K] W;
@@ -211,7 +209,6 @@ transformed parameters {
     vector<upper=0>[D] log_less_contamination = inv(inv_log_less_contamination);
     vector[H] P_filled = P;
     corr_matrix[M[DRC]] corr_sites[K];
-    matrix<lower=2>[DRC+D,K] nu_factors = nu_factors_raw + 2;
     for(miss in 1:N_Pm) P_filled[idx_Pm[miss]] = P_missing[miss] + P_max[miss];
     Z[1:K_linear,] = mix_skew_normal(Z1_linear_raw, Z2_linear_raw, skew_Z[1:K_linear]); // first axes are independent skew-normal
     for(g in 1:KG) {
@@ -266,9 +263,10 @@ transformed parameters {
 }
 model {
     // data wrangling (should replace some with transformed data indices)
+    vector[K] length_Z1_linear = sqrt(rows_dot_self(Z1_linear_raw) / N);
+    vector[K] length_Z2_linear = sqrt(rows_dot_self(Z2_linear_raw) / N);
     matrix[K,N_all] Z_Z_higher = append_col(Z,Z_higher);
     vector[VOB_all+V_all+D] dsv;
-    matrix[VOB_all+V_all+D,K] num;
     matrix[VOB_all+V_all+D,K] wsn;
     vector[H] P_predicted;
     vector[H] var_P;
@@ -282,55 +280,58 @@ model {
     int i_Y_higher = 1;
     int i_multinom = 1;
     for(drc in 1:DRC) {
+        row_vector[K] length_W_norm
+            = sqrt(columns_dot_self(W_norm[(sum_M_all[drc] + 1):(sum_M_all[drc] + M_all[drc]),]))
+              ./ (sqrt(M_all[drc]) * weight_scales[drc,]);
+        target += gamma_lupdf(length_W_norm | 400, 400);
+        target += -sum((M_all[drc]-1) * log(length_W_norm));
         dsv[(sum_M_all[drc] + 1):(sum_M_all[drc] + M_all[drc])] = rep_vector(dataset_scales[drc], M_all[drc]);
-        for(k in 1:K) {
-            num[(sum_M_all[drc] + 1):(sum_M_all[drc] + M_all[drc]),k]
-                = rep_vector(nu_factors[drc,k],
-                             M_all[drc]);
-            wsn[(sum_M_all[drc] + 1):(sum_M_all[drc] + M_all[drc]),k]
-                = rep_vector(weight_scales[drc,k]
-                             * sqrt(nu_factors_raw[drc,k] / nu_factors[drc,k]),
-                             M_all[drc]);
-        }
         if(drc <= D) {
+            length_W_norm
+                = sqrt(columns_dot_self(W_norm[(VOB_all + sum_M_all[drc] + 1):(VOB_all + sum_M_all[drc] + M_all[drc]),])
+                       + square(W_norm[VOB_all+V_all+drc,]))
+                  ./ (sqrt(M_all[drc] + 1) * weight_scales[DRC+drc,]);
+            target += gamma_lupdf(length_W_norm | 400, 400);
+            target += -sum(M_all[drc] * log(length_W_norm));
             dsv[(VOB_all + sum_M_all[drc] + 1):(VOB_all + sum_M_all[drc] + M_all[drc])] = rep_vector(dataset_scales[DRC+drc], M_all[drc]);
             dsv[VOB_all + V_all + drc] = dataset_scales[DRC+drc];
-            for(k in 1:K) {
-                num[(VOB_all + sum_M_all[drc] + 1):(VOB_all + sum_M_all[drc] + M_all[drc]),k]
-                    = rep_vector(nu_factors[DRC+drc,k],
-                                 M_all[drc]);
-                num[VOB_all+V_all+drc,k]
-                    = nu_factors[DRC+drc,k];
-                wsn[(VOB_all + sum_M_all[drc] + 1):(VOB_all + sum_M_all[drc] + M_all[drc]),k]
-                    = rep_vector(weight_scales[DRC+drc,k]
-                                 * sqrt(nu_factors_raw[DRC+drc,k] / nu_factors[DRC+drc,k]),
-                                 M_all[drc]);
-                wsn[VOB_all+V_all+drc,k]
-                    = weight_scales[DRC+drc,k]
-                      * sqrt(nu_factors_raw[DRC+drc,k] / nu_factors[DRC+drc,k]);
-            }
         }
     }
     // end data wrangling
     // priors
-    target += inv_gamma_lupdf(to_vector(nu_factors_raw) | shape_gamma_fact, rate_gamma_fact);                // PCA variable loadings have dataset and axis specific sparsity
     target += std_normal_lupdf(dataset_scales);                                                              // entire datasets may have uniformly biased difference in scale compared to priors
     target += cauchy_lupdf(intercepts | prior_intercept_centers, 2.5 * prior_intercept_scales);              // overall abundance and center of variables may differ from priors
     target += cauchy_lupdf(binary_count_intercepts | binary_count_intercept_centers, 2.5);                   // overall prevalence may differ from priors
     target += cauchy_lupdf(binary_count_dataset_intercepts | 0, 2.5);                                        // allow entire count datasets to have biased difference in prevalence compared to priors
     target += normal_lupdf(global_effect_scale | 0, global_scale_prior);                                     // shrink global scale of effects toward zero
-    target += student_t_lupdf(latent_scales | 3, 0, global_effect_scale);                                    // final axis scale centered on global scale diminished by the distance between scales K/2 times
-    target += student_t_lupdf(to_vector(weight_scales) | 3, 0, to_vector(rep_matrix(latent_scales, DRC+D))); // sparse selection of datasets per axis
+    target += gamma_lupdf(latent_scales[1] | 2, 2 * inv(global_effect_scale * 2^(0.5*K)));                     // final axis scale centered on global scale diminished by the distance between scales K/2 times
+    target += gamma_lupdf(latent_scales[2:K_linear] | 2, 4 * inv(latent_scales[1:(K_linear-1)]));                                    // final axis scale centered on global scale diminished by the distance between scales K/2 times
+    if(KG > 0) {
+        int s = K_linear + 1;
+        int f = K_linear + K_gp;
+        target += gamma_lupdf(latent_scales[s] | 2, 4 * inv(log(sum(exp(latent_scales[1:K_linear])) - K_linear + 1)));                     // final axis scale centered on global scale diminished by the distance between scales K/2 times
+        target += gamma_lupdf(latent_scales[(s+1):f] | 2, 4 * inv(latent_scales[s:(f-1)]));                                    // final axis scale centered on global scale diminished by the distance between scales K/2 times
+    }
+    if(KG > 1) {
+        for(g in 2:KG) {
+            int s = K_linear + K_gp * (g-1) + 1;
+            int f = K_linear + K_gp * g;
+            target += gamma_lupdf(latent_scales[s] | 2, 4 * inv(log_sum_exp(latent_scales[(s-K_gp):(f-K_gp)])));                     // final axis scale centered on global scale diminished by the distance between scales K/2 times
+            target += gamma_lupdf(latent_scales[(s+1):f] | 2, 4 * inv(latent_scales[s:(f-1)]));                                    // final axis scale centered on global scale diminished by the distance between scales K/2 times
+        }
+    }
+    target += gamma_lupdf(to_vector(weight_scales) | 2, to_vector(rep_matrix(inv(2 * latent_scales), DRC+D))); // sparse selection of datasets per axis
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, shape_gnorm);      // shrink amount of contamination in 'true zeros' toward zero
     target += std_normal_lupdf(contaminant_overdisp);                                                        // shrink overdispersion of contaminant counts in 'true zeros' toward zero
-    target += std_normal_lupdf(to_vector(Z1_linear_raw));                                                    // first PCA axis scores are independent of one another
-    target += std_normal_lupdf(to_vector(Z2_linear_raw));                                                    // PCA scores have idependent positive skew to help identify
+    target += gamma_lupdf(length_Z1_linear | 400, 400.0);                                                    // first PCA axis scores are independent of one another
+    target += gamma_lupdf(length_Z2_linear | 400, 400.0);                                                    // PCA scores have idependent positive skew to help identify
+    target += -(N-1) * sum(log(length_Z1_linear) + log(length_Z2_linear)); // jacobians
     target += std_normal_lupdf(to_vector(Z1_gp_raw));                                                        // normal part of gp effects, prior to correlation with cholesky
+    target += std_normal_lupdf(to_vector(Z2_gp_raw));                                                        // skew part of gp effects, prior to correlation with cholesky
     target += inv_gamma_lupdf(skew_Z | 5, 5 * skew_Z_prior);                                                                      //
     target += inv_gamma_lupdf(rho_sites | 5, 5 * rho_sites_prior);                                           // length scale for gaussian process on sites
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);                                  // length scale for gaussian process on PCA axis scores
     target += normal_lupdf(sds | 0, dsv);                                                                    // per-variable sigmas shrink toward dataset scales
-    target += student_t_lupdf(to_vector(W_norm) | to_vector(num), 0, to_vector(wsn));                        // PCA loadings shrink to zero with axis-and-dataset-specific nu and variance
     target += student_t_lupdf(abundance_higher_vector | nu_residuals, 0, 1);
     target += student_t_lupdf(prevalence_higher_vector | nu_residuals, 0, 1);
     // end priors

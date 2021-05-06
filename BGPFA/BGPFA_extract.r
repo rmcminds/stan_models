@@ -73,8 +73,8 @@ prob_axes <- function(extracted, maxmult) {
     return(list(oriented=oriented, which_match=which_match, reflected=reflected, refcount=refcount, reference=reference))
 }# use correlation with reference to determine a probability of a match rather than deterministically giving it one. reference could be added to, such that there is always a probability that the axis doesn't exist at all during a draw
 
-#sumfunc <- median
-sumfunc <- mean
+sumfunc <- median
+#sumfunc <- mean
 #sumfunc <- function(x) x[length(x)]
 #sumfunc <- function(x) x[maxind]
 
@@ -97,14 +97,18 @@ W_norm_all <- array(W_norm_all, dim = c(dim(W_norm_all)[[1]], dim(W_norm_all)[[3
 Z_all <- extract(stan.fit, pars='Z', permuted=FALSE)
 Z_all <- aperm(array(Z_all, dim = c(dim(Z_all)[[1]], K, dim(Z_all)[[3]]/K)), c(1,3,2))
 WZ_all_raw <- aperm(abind:::abind(W_norm_all,Z_all,along=2), c(2,3,1))
-mutated <- Morpho:::procSym(WZ_all_raw, CSinit = FALSE, scale = FALSE, reflect = TRUE, orp = FALSE, bending = FALSE, pcAlign = FALSE)
-closest <- which.max(apply(mutated$rotated, 3, function(x) sqrt(sum((x - mutated$mshape)^2))))
-mutated_projected <- shapes:::procOPA(WZ_all_raw[,,closest], mutated$mshape, scale=FALSE)
-oriented <- orient_axes(WZ_all_raw, mutated_projected$Bhat)
+##
+WZ_all <- aperm(WZ_all_raw, c(3,1,2))
+axisOrder_all <- matrix(rep(1:K,K),ncol=K)
+#mutated <- Morpho:::procSym(WZ_all_raw, CSinit = FALSE, scale = FALSE, reflect = TRUE, orp = FALSE, bending = FALSE, pcAlign = FALSE)
+#closest <- which.max(apply(mutated$rotated, 3, function(x) sqrt(sum((x - mutated$mshape)^2))))
+#mutated_projected <- shapes:::procOPA(WZ_all_raw[,,closest], mutated$mshape, scale=FALSE)
+#oriented <- orient_axes(WZ_all_raw, mutated_projected$Bhat)
 #oriented <- orient_axes(WZ_all_raw, mutated$mshape)
 #oriented <- orient_axes(WZ_all_raw, princomp(mutated$mshape)$scores)
-WZ_all <- aperm(oriented$oriented, c(3,1,2))
-axisOrder_all <- oriented$which_match ## work on this block to consider the case including gaussian processes. linear axes should be oriented separately from gp axes, and then stuck back together
+#WZ_all <- aperm(oriented$oriented, c(3,1,2))
+#axisOrder_all <- oriented$which_match ## work on this block to consider the case including gaussian processes. linear axes should be oriented separately from gp axes, and then stuck back together
+##
 
 latent_scales <- extract(stan.fit, pars='latent_scales', permuted=FALSE)
 latent_scales <- sapply(1:dim(latent_scales)[[1]], function(x) latent_scales[x,,axisOrder_all[,x]])
@@ -117,23 +121,23 @@ W_norm <- WZ[1:dim(W_norm_all)[2],]
 Z <- WZ[(dim(W_norm_all)[2]+1):nrow(WZ),]
 rownames(Z) <- allsamples
 
-oriented_expanded <- prob_axes(WZ_all_raw, 2)
-WZ_all_expanded <- aperm(oriented_expanded$oriented, c(3,1,2))
-axisOrder_all_expanded <- oriented_expanded$which_match
-latent_scales_expanded <- extract(stan.fit, pars='latent_scales', permuted=FALSE)
-temp <- array(0, dim=c(dim(latent_scales_expanded)[[1]], max(axisOrder_all_expanded)))
-for(x in 1:dim(latent_scales_expanded)[[1]]) {
-    for(y in 1:dim(latent_scales_expanded)[[3]]) {
-        temp[x,axisOrder_all_expanded[y,x]] <- latent_scales_expanded[x,,y]
-    }
-}
-latent_scales_expanded <- apply(temp, 2, sumfunc, na.rm=TRUE)
-axisOrder_expanded <- order(latent_scales_expanded, decreasing=TRUE)
-latent_scales_expanded <- latent_scales_expanded[axisOrder_expanded]
-WZ_expanded <- apply(WZ_all_expanded,c(2,3),sumfunc,na.rm=TRUE)[,axisOrder_expanded]
-W_norm_expanded <- WZ_expanded[1:dim(W_norm_all)[2],]
-Z_expanded <- WZ_expanded[(dim(W_norm_all)[2]+1):nrow(WZ_expanded),]
-rownames(Z_expanded) <- allsamples
+#oriented_expanded <- prob_axes(WZ_all_raw, 2)
+#WZ_all_expanded <- aperm(oriented_expanded$oriented, c(3,1,2))
+#axisOrder_all_expanded <- oriented_expanded$which_match
+#latent_scales_expanded <- extract(stan.fit, pars='latent_scales', permuted=FALSE)
+#temp <- array(0, dim=c(dim(latent_scales_expanded)[[1]], max(axisOrder_all_expanded)))
+#for(x in 1:dim(latent_scales_expanded)[[1]]) {
+#    for(y in 1:dim(latent_scales_expanded)[[3]]) {
+#        temp[x,axisOrder_all_expanded[y,x]] <- latent_scales_expanded[x,,y]
+#    }
+#}
+#latent_scales_expanded <- apply(temp, 2, sumfunc, na.rm=TRUE)
+#axisOrder_expanded <- order(latent_scales_expanded, decreasing=TRUE)
+#latent_scales_expanded <- latent_scales_expanded[axisOrder_expanded]
+#WZ_expanded <- apply(WZ_all_expanded,c(2,3),sumfunc,na.rm=TRUE)[,axisOrder_expanded]
+#W_norm_expanded <- WZ_expanded[1:dim(W_norm_all)[2],]
+#Z_expanded <- WZ_expanded[(dim(W_norm_all)[2]+1):nrow(WZ_expanded),]
+#rownames(Z_expanded) <- allsamples
 
 weight_scales <- extract(stan.fit, pars='weight_scales', permuted=FALSE)
 ##need to reorder each draw according to axisOrder_all- this is currently inaccurate
@@ -209,7 +213,7 @@ nullfunc <- function() {
 
     mshape_pcs <- princomp(mutated$mshape)
     W_pc <- mshape_pcs$scores[1:nrow(W_norm),]
-    Z_pc <- mshape_pcs$scores[(nrow(W_norm)+1):nrow(mshape_pcs),]
+    Z_pc <- mshape_pcs$scores[(nrow(W_norm)+1):nrow(mshape_pcs$scores),]
     drivers <- mytriplot(Z_pc, W_pc, Z_pc, 1,2, as.factor(filtData[allsamples,]$species), labs, 50, TRUE, NULL, NULL, FALSE, TRUE)
 
     drivers <- mytriplot(Z, W_norm, Z, 1,2, as.factor(filtData[allsamples,]$species), labs, 50, TRUE, NULL, NULL, FALSE, TRUE, anysig)
