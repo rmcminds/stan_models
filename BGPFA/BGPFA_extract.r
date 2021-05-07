@@ -98,16 +98,16 @@ Z_all <- extract(stan.fit, pars='Z', permuted=FALSE)
 Z_all <- aperm(array(Z_all, dim = c(dim(Z_all)[[1]], K, dim(Z_all)[[3]]/K)), c(1,3,2))
 WZ_all_raw <- aperm(abind:::abind(W_norm_all,Z_all,along=2), c(2,3,1))
 ##
-WZ_all <- aperm(WZ_all_raw, c(3,1,2))
-axisOrder_all <- matrix(rep(1:K,K),ncol=K)
-#mutated <- Morpho:::procSym(WZ_all_raw, CSinit = FALSE, scale = FALSE, reflect = TRUE, orp = FALSE, bending = FALSE, pcAlign = FALSE)
-#closest <- which.max(apply(mutated$rotated, 3, function(x) sqrt(sum((x - mutated$mshape)^2))))
+#WZ_all <- aperm(WZ_all_raw, c(3,1,2))
+#axisOrder_all <- matrix(rep(1:K,K),ncol=K)
+mutated <- Morpho:::procSym(WZ_all_raw, CSinit = FALSE, scale = FALSE, reflect = TRUE, orp = FALSE, bending = FALSE, pcAlign = FALSE)
+closest <- which.max(apply(mutated$rotated, 3, function(x) sqrt(sum((x - mutated$mshape)^2))))
 #mutated_projected <- shapes:::procOPA(WZ_all_raw[,,closest], mutated$mshape, scale=FALSE)
 #oriented <- orient_axes(WZ_all_raw, mutated_projected$Bhat)
-#oriented <- orient_axes(WZ_all_raw, mutated$mshape)
+oriented <- orient_axes(WZ_all_raw, mutated$mshape)
 #oriented <- orient_axes(WZ_all_raw, princomp(mutated$mshape)$scores)
-#WZ_all <- aperm(oriented$oriented, c(3,1,2))
-#axisOrder_all <- oriented$which_match ## work on this block to consider the case including gaussian processes. linear axes should be oriented separately from gp axes, and then stuck back together
+WZ_all <- aperm(oriented$oriented, c(3,1,2))
+axisOrder_all <- oriented$which_match ## work on this block to consider the case including gaussian processes. linear axes should be oriented separately from gp axes, and then stuck back together
 ##
 
 latent_scales <- extract(stan.fit, pars='latent_scales', permuted=FALSE)
@@ -213,7 +213,7 @@ nullfunc <- function() {
 
     mshape_pcs <- princomp(mutated$mshape)
     W_pc <- mshape_pcs$scores[1:nrow(W_norm),]
-    Z_pc <- mshape_pcs$scores[(nrow(W_norm)+1):nrow(mshape_pcs$scores),]
+    Z_pc <- mshape_pcs$scores[(dim(W_norm_all)[2]+1):nrow(WZ),]
     drivers <- mytriplot(Z_pc, W_pc, Z_pc, 1,2, as.factor(filtData[allsamples,]$species), labs, 50, TRUE, NULL, NULL, FALSE, TRUE)
 
     drivers <- mytriplot(Z, W_norm, Z, 1,2, as.factor(filtData[allsamples,]$species), labs, 50, TRUE, NULL, NULL, FALSE, TRUE, anysig)
