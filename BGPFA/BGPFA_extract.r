@@ -81,27 +81,27 @@ sumfunc <- median
 labs <- c(varlabs, paste0(varlabs[1:sum(M_all[1:D])],'.binary'), paste0('binary_count_dataset_int_',dataset_names[1:D]))
 dataset_names_expanded <- c(dataset_names, paste0(dataset_names[1:D],'.binary'))
 
-dataset_scales <- extract(stan.fit, pars='dataset_scales', permuted=FALSE)
+dataset_scales <- stan.fit$post_warmup_draws[,,grep('dataset_scales\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
 dataset_scales <- apply(dataset_scales,3,sumfunc)
 names(dataset_scales) <- dataset_names_expanded
 
-var_scales <- extract(stan.fit, pars='var_scales', permuted=FALSE)
+var_scales <- stan.fit$post_warmup_draws[,,grep('var_scales\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
 var_scales <- apply(var_scales,3,sumfunc)
 names(var_scales) <- labs
 
-global_effect_scale <- extract(stan.fit, pars='global_effect_scale', permuted=FALSE)
+global_effect_scale <- stan.fit$post_warmup_draws[,,grep('global_effect_scale',dimnames(stan.fit$post_warmup_draws)[[3]])]
 global_effect_scale <- apply(global_effect_scale, 3, sumfunc)
 
-W_norm_all <- extract(stan.fit, pars='W_norm', permuted=FALSE)
+W_norm_all <- stan.fit$post_warmup_draws[,,grep('W_norm\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
 W_norm_all <- array(W_norm_all, dim = c(dim(W_norm_all)[[1]], dim(W_norm_all)[[3]]/K, K))
-Z_all <- extract(stan.fit, pars='Z', permuted=FALSE)
-Z_all <- aperm(array(Z_all, dim = c(dim(Z_all)[[1]], K, dim(Z_all)[[3]]/K)), c(1,3,2))
+Z_all <- stan.fit$post_warmup_draws[,,grep('Z\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
+Z_all <- aperm(array(Z_all, dim = c(dim(Z_all)[[1]], K, N)), c(1,3,2))
 WZ_all_raw <- aperm(abind:::abind(W_norm_all,Z_all,along=2), c(2,3,1))
 ##
 #WZ_all <- aperm(WZ_all_raw, c(3,1,2))
 #axisOrder_all <- matrix(rep(1:K,K),ncol=K)
 mutated <- Morpho:::procSym(WZ_all_raw, CSinit = FALSE, scale = FALSE, reflect = TRUE, orp = FALSE, bending = FALSE, pcAlign = FALSE)
-closest <- which.max(apply(mutated$rotated, 3, function(x) sqrt(sum((x - mutated$mshape)^2))))
+#closest <- which.max(apply(mutated$rotated, 3, function(x) sqrt(sum((x - mutated$mshape)^2))))
 #mutated_projected <- shapes:::procOPA(WZ_all_raw[,,closest], mutated$mshape, scale=FALSE)
 #oriented <- orient_axes(WZ_all_raw, mutated_projected$Bhat)
 oriented <- orient_axes(WZ_all_raw, mutated$mshape)
@@ -110,7 +110,7 @@ WZ_all <- aperm(oriented$oriented, c(3,1,2))
 axisOrder_all <- oriented$which_match ## work on this block to consider the case including gaussian processes. linear axes should be oriented separately from gp axes, and then stuck back together
 ##
 
-latent_scales <- extract(stan.fit, pars='latent_scales', permuted=FALSE)
+latent_scales <- stan.fit$post_warmup_draws[,,grep('latent_scales\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
 latent_scales <- sapply(1:dim(latent_scales)[[1]], function(x) latent_scales[x,,axisOrder_all[,x]])
 latent_scales <- apply(latent_scales, 1, sumfunc)
 axisOrder <- order(latent_scales, decreasing=TRUE)
@@ -139,7 +139,7 @@ rownames(Z) <- allsamples
 #Z_expanded <- WZ_expanded[(dim(W_norm_all)[2]+1):nrow(WZ_expanded),]
 #rownames(Z_expanded) <- allsamples
 
-weight_scales <- extract(stan.fit, pars='weight_scales', permuted=FALSE)
+weight_scales <- stan.fit$post_warmup_draws[,,grep('weight_scales\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
 ##need to reorder each draw according to axisOrder_all- this is currently inaccurate
 weight_scales <- apply(weight_scales,3,sumfunc)
 weight_scales <- array(weight_scales,dim=c(length(weight_scales)/K,K))
@@ -147,50 +147,44 @@ weight_scales <- array(weight_scales[,axisOrder], dim=c(length(weight_scales)/K,
 rownames(weight_scales) <- dataset_names_expanded
 
 if('sds' %in% importparams) {
-    sds <- extract(stan.fit, pars='sds', permuted=FALSE)
+    sds <- stan.fit$post_warmup_draws[,,grep('sds\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
     sds <- apply(sds,3,sumfunc)
 }
 
-nu_factors <- extract(stan.fit, pars='nu_factors', permuted=FALSE)
-##need to reorder each draw according to axisOrder_all- this is currently inaccurate
-nu_factors <- matrix(apply(nu_factors, 3, sumfunc), ncol=K)
-nu_factors <- nu_factors[,axisOrder]
-rownames(nu_factors) <- dataset_names_expanded
-
 if('log_less_contamination' %in% importparams) {
-    log_less_contamination <- extract(stan.fit, pars='log_less_contamination', permuted=FALSE)
+    log_less_contamination <- stan.fit$post_warmup_draws[,,grep('log_less_contamination\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
     log_less_contamination <- apply(log_less_contamination, 3, sumfunc)
 }
 
 if('contaminant_overdisp' %in% importparams) {
-    contaminant_overdisp <- extract(stan.fit, pars='contaminant_overdisp', permuted=FALSE)
+    contaminant_overdisp <- stan.fit$post_warmup_draws[,,grep('contaminant_overdisp\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
     contaminant_overdisp <- apply(contaminant_overdisp, 3, sumfunc)
 }
 
-binary_count_dataset_intercepts <- extract(stan.fit, pars='binary_count_dataset_intercepts', permuted=FALSE)
+binary_count_dataset_intercepts <- stan.fit$post_warmup_draws[,,grep('binary_count_dataset_intercepts\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
 binary_count_dataset_intercepts <- apply(binary_count_dataset_intercepts, 3, sumfunc)
 names(binary_count_dataset_intercepts) <- dataset_names[1:D]
 
 DRC <- D+R+C
 
-rho_sites <- extract(stan.fit, pars='rho_sites', permuted=FALSE)
+rho_sites <- stan.fit$post_warmup_draws[,,grep('rho_sites',dimnames(stan.fit$post_warmup_draws)[[3]])]
 rho_sites <- apply(rho_sites, 3, sumfunc)
 
 if('corr_sites' %in% importparams) {
-    corr_sites <- extract(stan.fit, pars='corr_sites', permuted=FALSE)
+    corr_sites <- stan.fit$post_warmup_draws[,,grep('corr_sites\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
     corr_sites <- apply(corr_sites, 3, sumfunc)
     dim(corr_sites) <- c(K,N_sites,N_sites)
     corr_sites <- corr_sites[axisOrder,,]
 }
 
 if('rho_Z' %in% importparams & KG > 0) {
-    rho_Z <- extract(stan.fit, pars='rho_Z', permuted=FALSE)
+    rho_Z <- stan.fit$post_warmup_draws[,,grep('rho_Z\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
     ##need to reorder each draw according to axisOrder_all- this is currently inaccurate
     rho_Z <- array(apply(rho_Z, 3, sumfunc),dim=c(K_linear,KG))[axisOrder[axisOrder <= K_linear],]
 }
 
 if('skew_Z' %in% importparams) {
-    skew_Z <- extract(stan.fit, pars='skew_Z', permuted=FALSE)
+    skew_Z <- stan.fit$post_warmup_draws[,,grep('skew_Z\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
     ##need to reorder each draw according to axisOrder_all- this is currently inaccurate
     skew_Z <- apply(skew_Z, 3, sumfunc)[axisOrder]
 }

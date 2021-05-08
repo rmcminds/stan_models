@@ -10,16 +10,15 @@ library(MASS)
 library(geosphere)
 library(DESeq2)
 utilities_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utility/')
-source(file.path(utilities_dir, 'read_stan_csv_subset.r'))
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 logit <- function(p) log(p/(1-p))
 inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 
-nMicrobeKeep <- 1000
+nMicrobeKeep <- 100#1000
 K_linear <- 10
 K_gp <- 15
-KG <- 3
+KG <- 0#3
 K <- K_linear + KG * K_gp
 global_scale_prior = 2.5
 rate_gamma_fact = 10
@@ -36,7 +35,7 @@ preprocess_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/intermediate/')
 include_path <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utility/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
-engine <- 'advi' #'sampling' #
+engine <- 'sampling' #'advi' #
 opencl <- FALSE
 output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
 
@@ -46,18 +45,18 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                           paste0('data file=', file.path(output_prefix, 'data.json')),
                                           paste0('init=', file.path(output_prefix, 'inits.json')),
                                           'output',
-                                          paste0('file=', file.path(output_prefix, 'samples_sampling.txt')),
+                                          paste0('file=', file.path(output_prefix, 'samples_sampling.csv')),
                                           paste0('refresh=', 1),
                                           'method=sample algorithm=hmc',
-                                          'stepsize=0.00001',
+                                          'stepsize=0.000001',
                                           'engine=nuts',
                                           'max_depth=10',
-                                          'adapt t0=1000',
-                                          'delta=0.5',
-                                          'kappa=0.5',
+                                          'adapt t0=100',
+                                          'delta=0.8',
+                                          'kappa=0.75',
                                           'init_buffer=5',
-                                          'window=1',
-                                          'term_buffer=100',
+                                          'window=4',
+                                          'term_buffer=50',
                                           'num_warmup=200',
                                           'num_samples=200',
                                           ('opencl platform=0 device=0')[opencl],
@@ -66,7 +65,7 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                        paste0('data file=', file.path(output_prefix, 'data.json')),
                                        paste0('init=', file.path(output_prefix, 'inits.json')),
                                        'output',
-                                       paste0('file=', file.path(output_prefix, 'samples_advi.txt')),
+                                       paste0('file=', file.path(output_prefix, 'samples_advi.csv')),
                                        paste0('refresh=', 100),
                                        'method=variational algorithm=meanfield',
                                        'grad_samples=1',
@@ -1072,11 +1071,12 @@ abundance_observed_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) i
                                             sapply(1:N, function(x) if(I[3,x]) inits_rna[I_cs[3,x],]),
                                             sapply(1:N, function(x) if(I[4,x]) inits_its2[I_cs[4,x],])))
 
-Z1 <- matrix(rnorm((K_linear+KG*K_gp)*N), nrow=K_linear+KG*K_gp) * 0.001
-Z2 <- matrix(abs(rnorm((K_linear+KG*K_gp)*N)), nrow=K_linear+KG*K_gp) * 0.001
+Z1 <- matrix(rnorm((K_linear+KG*K_gp)*N), nrow=K_linear+KG*K_gp)
+Z2 <- matrix(abs(rnorm((K_linear+KG*K_gp)*N)), nrow=K_linear+KG*K_gp)
 
-W_norm <- matrix(rnorm((VOBplus+sum(M_all[1:D])+D) * K) * 0.001, ncol=K)
-W_norm <- svd(W_norm)$u %*% t(svd(W_norm)$v) %*% diag(sqrt(colSums(W_norm^2)))
+global_effect_scale_init <- 10 / 2^(0.5*K)
+latent_scales_rev_init <- 2^((1:K)) / 2^K * 10
+W_norm <- matrix(rnorm((VOBplus+sum(M_all[1:D])+D) * K), ncol=K) %*% diag(rev(latent_scales_rev_init))
 
 init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              intercepts                      = intercepts_inits,
@@ -1084,10 +1084,10 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              binary_count_dataset_intercepts = rep(0,D),
              multinomial_nuisance            = multinomial_nuisance_inits,
              global_effect_scale  = 1,
-             latent_scales_rev    = 2^((1:K))/2^(0.5*K),
+             latent_scales_rev    = latent_scales_rev_init,
              sds            = rep(1, VOBplus+sum(M_all[1:D])+D),
              dataset_scales = rep(1, 2*D+R+C),
-             weight_scales  = matrix(1, nrow=2*D+R+C, ncol=K),
+             weight_scales  = t(matrix(rep(rev(latent_scales_rev_init),2*D+R+C),ncol=2*D+R+C)),
              rho_sites = as.array(rep(mean(dist_sites[lower.tri(dist_sites)]), K)),
              site_prop = as.array(rep(0.5, K)),
              abundance_higher_vector  = rep(0,sum(F_higher)),
@@ -1100,7 +1100,7 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              Z2_gp_raw        = {if(K > K_linear) pnorm(abs(Z2[(K_linear+1):K,])) else 1},
              W_norm    = W_norm,
              P_missing = rep(-1,N_Pm),
-             rho_Z     = matrix(0.0001, nrow = K_linear, ncol = KG),
+             rho_Z     = matrix(0.1, nrow = K_linear, ncol = KG),
              inv_log_less_contamination  = -inv_log_max_contam,
              contaminant_overdisp        = rep(1,D),
              skew_Z                      = rep(skew_Z_prior,K))
@@ -1118,7 +1118,7 @@ print(sampling_commands[[engine]])
 print(date())
 system(sampling_commands[[engine]])
 
-importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','dataset_scales','var_scales','weight_scales','rho_sites', 'site_prop', 'corr_sites', 'binary_count_dataset_intercepts', 'log_less_contamination', 'contaminant_overdisp') #, 'rho_Z','skew_Z')
+importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','dataset_scales','var_scales','weight_scales','rho_sites', 'site_prop', 'corr_sites', 'binary_count_dataset_intercepts', 'log_less_contamination', 'contaminant_overdisp', 'rho_Z'[if(KG > 0) TRUE else NULL],'skew_Z')
 
 stan.fit <- read_cmdstan_csv(file.path(output_prefix, paste0('samples_',engine,'.csv')),
                                  variables = importparams)

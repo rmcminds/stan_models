@@ -320,15 +320,15 @@ model {
             target += gamma_lupdf(latent_scales[(s+1):f] | 2, 4 * inv(latent_scales[s:(f-1)]));                                    // final axis scale centered on global scale diminished by the distance between scales K/2 times
         }
     }
-    target += gamma_lupdf(to_vector(weight_scales) | 2, to_vector(rep_matrix(inv(2 * latent_scales), DRC+D))); // sparse selection of datasets per axis
+    target += gamma_lupdf(to_vector(weight_scales) | 2, to_vector(rep_matrix(2 * inv(latent_scales), DRC+D))); // sparse selection of datasets per axis
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, shape_gnorm);      // shrink amount of contamination in 'true zeros' toward zero
     target += std_normal_lupdf(contaminant_overdisp);                                                        // shrink overdispersion of contaminant counts in 'true zeros' toward zero
-    target += gamma_lupdf(length_Z1_linear | 400, 400.0);                                                    // first PCA axis scores are independent of one another
-    target += gamma_lupdf(length_Z2_linear | 400, 400.0);                                                    // PCA scores have idependent positive skew to help identify
-    target += -(N-1) * sum(log(length_Z1_linear) + log(length_Z2_linear)); // jacobians
+    target += gamma_lupdf(length_Z1_linear | 400, 400);                                                      // first PCA axis scores are independent of one another
+    target += gamma_lupdf(length_Z2_linear | 400, 400);                                                      // PCA scores have idependent positive skew to help identify
+    target += -(N-1) * sum(log(length_Z1_linear) + log(length_Z2_linear));                                   // jacobians
     target += std_normal_lupdf(to_vector(Z1_gp_raw));                                                        // normal part of gp effects, prior to correlation with cholesky
     target += std_normal_lupdf(to_vector(Z2_gp_raw));                                                        // skew part of gp effects, prior to correlation with cholesky
-    target += inv_gamma_lupdf(skew_Z | 5, 5 * skew_Z_prior);                                                                      //
+    target += inv_gamma_lupdf(skew_Z | 5, 5 * skew_Z_prior);                                                 //
     target += inv_gamma_lupdf(rho_sites | 5, 5 * rho_sites_prior);                                           // length scale for gaussian process on sites
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);                                  // length scale for gaussian process on PCA axis scores
     target += normal_lupdf(sds | 0, dsv);                                                                    // per-variable sigmas shrink toward dataset scales
