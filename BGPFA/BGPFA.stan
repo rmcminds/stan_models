@@ -82,6 +82,7 @@ transformed data {
     real rho_Z_scale = 6.0 / K_gp;                           // More 'dependent' latent variables per group means, in order to encourage orthogonality, length scale must be smaller
     matrix[site_smoothness-1, 2 * site_smoothness] chooseRJ; // precomputed part of Matern covariance
     matrix[site_smoothness, 2 * site_smoothness] ffKJ;       // precomputed part of Matern covariance
+    int idx_scales[KG+1];
     // create indices for all datasets
     sum_M[1] = 0;
     sum_M_higher[1] = 0;
@@ -170,6 +171,10 @@ transformed data {
         }
     }
     //
+    //
+    idx_scales[1] = 1;
+    for(g in 1:KG) idx_scales[g+1] = K_linear + K_gp * (g-1) + 1;
+    //
 }
 parameters {
     matrix[K_linear,N] Z1_linear_raw;              // PCA axis scores, normal part
@@ -180,7 +185,7 @@ parameters {
     matrix[VOB_all+V_all+D,K] W_norm;              // PCA variable loadings
     vector<lower=0>[VOB_all+V_all+D] sds;          // variable scales
     real<lower=0> global_effect_scale;             // overall scale of variable loadings
-    positive_ordered[K] latent_scales_rev;         // overall scale of each axis
+    vector[K] latent_scales_raw;                   // overall scale of each axis
     vector<lower=0>[DRC+D] dataset_scales;         // overall scale of each dataset
     matrix<lower=0>[DRC+D,K] weight_scales;        // per-dataset-and-axis scales
     vector[VOB] intercepts;
@@ -200,7 +205,7 @@ parameters {
     vector<lower=0>[D] contaminant_overdisp;       // dispersion parameter for amount of contamination in true negative count observations
 }
 transformed parameters {
-    vector[K] latent_scales = reverse(latent_scales_rev);         // overall scale of each axis
+    vector[K] latent_scales = latent_scales_raw;         // overall scale of each axis
     matrix[K,N] Z;
     matrix[K,N_var_groups] Z_higher;
     matrix[VOB,K] W;
@@ -209,6 +214,8 @@ transformed parameters {
     vector<upper=0>[D] log_less_contamination = inv(inv_log_less_contamination);
     vector[H] P_filled = P;
     corr_matrix[M[DRC]] corr_sites[K];
+    latent_scales[idx_scales] = positive_ordered_transform(latent_scales[idx_scales]);
+    latent_scales[1:K_linear] = positive_max_ordered_transform(latent_scales[1:K_linear]);
     for(miss in 1:N_Pm) P_filled[idx_Pm[miss]] = P_missing[miss] + P_max[miss];
     Z[1:K_linear,] = mix_skew_normal(Z1_linear_raw, Z2_linear_raw, skew_Z[1:K_linear]); // first axes are independent skew-normal
     for(g in 1:KG) {
@@ -219,6 +226,7 @@ transformed parameters {
             = mix_skew_normal(Z1_gp_raw[s:f,] * L,
                               transform_tMVN_lp(Z2_gp_raw[s:f,], L),
                               skew_Z[(K_linear + s):(K_linear + f)]);
+        latent_scales[(K_linear + s):(K_linear + f)] = positive_max_ordered_transform(latent_scales[(K_linear + s):(K_linear + f)]);
     } // other axes are skew normal and dependent on the first axes through gaussian processes
     Z_higher = Z * samp2group;
     for(k in 1:K) {
@@ -304,22 +312,7 @@ model {
     target += cauchy_lupdf(binary_count_intercepts | binary_count_intercept_centers, 2.5);                   // overall prevalence may differ from priors
     target += cauchy_lupdf(binary_count_dataset_intercepts | 0, 2.5);                                        // allow entire count datasets to have biased difference in prevalence compared to priors
     target += normal_lupdf(global_effect_scale | 0, global_scale_prior);                                     // shrink global scale of effects toward zero
-    target += gamma_lupdf(latent_scales[1] | 2, 2 * inv(global_effect_scale * 2^(0.5*K)));                     // final axis scale centered on global scale diminished by the distance between scales K/2 times
-    target += gamma_lupdf(latent_scales[2:K_linear] | 2, 4 * inv(latent_scales[1:(K_linear-1)]));                                    // final axis scale centered on global scale diminished by the distance between scales K/2 times
-    if(KG > 0) {
-        int s = K_linear + 1;
-        int f = K_linear + K_gp;
-        target += gamma_lupdf(latent_scales[s] | 2, 4 * inv(log(sum(exp(latent_scales[1:K_linear])) - K_linear + 1)));                     // final axis scale centered on global scale diminished by the distance between scales K/2 times
-        target += gamma_lupdf(latent_scales[(s+1):f] | 2, 4 * inv(latent_scales[s:(f-1)]));                                    // final axis scale centered on global scale diminished by the distance between scales K/2 times
-    }
-    if(KG > 1) {
-        for(g in 2:KG) {
-            int s = K_linear + K_gp * (g-1) + 1;
-            int f = K_linear + K_gp * g;
-            target += gamma_lupdf(latent_scales[s] | 2, 4 * inv(log_sum_exp(latent_scales[(s-K_gp):(f-K_gp)])));                     // final axis scale centered on global scale diminished by the distance between scales K/2 times
-            target += gamma_lupdf(latent_scales[(s+1):f] | 2, 4 * inv(latent_scales[s:(f-1)]));                                    // final axis scale centered on global scale diminished by the distance between scales K/2 times
-        }
-    }
+    target += std_normal_lupdf(latent_scales_raw);                                                           // first axis will have lognormal, other axes logistic normal between zero and the previous axis
     target += gamma_lupdf(to_vector(weight_scales) | 2, to_vector(rep_matrix(2 * inv(latent_scales), DRC+D))); // sparse selection of datasets per axis
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, shape_gnorm);      // shrink amount of contamination in 'true zeros' toward zero
     target += std_normal_lupdf(contaminant_overdisp);                                                        // shrink overdispersion of contaminant counts in 'true zeros' toward zero

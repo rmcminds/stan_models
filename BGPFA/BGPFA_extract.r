@@ -1,77 +1,13 @@
 library(rstan)
 library(phangorn)
 library(RColorBrewer)
-source(file.path(model_dir, 'my_triplot.r'))
+source(file.path(model_dir, 'functions.r'))
 
-monteCarloP <- function(x, pn='p') {
-    if(pn == 'n') {
-        res <- (1 + sum(x >= 0, na.rm=TRUE)) / (1 + length(x))
-    } else if(pn == 'p') {
-        res <- (1 + sum(x <= 0, na.rm=TRUE)) / (1 + length(x))
-    }
-} # https://arxiv.org/pdf/1603.05766.pdf
-
-orient_axes <- function(extracted, reference = NULL) {
-    K <- dim(extracted)[[2]]
-    if(is.null(reference)) reference <- extracted[,,sample(dim(extracted)[[3]],1)]
-    oriented <- array(NA, dim=dim(extracted))
-    which_match <- array(NA,dim(extracted)[c(2,3)])
-    reflected <- array(NA,dim(extracted)[c(2,3)])
-    order_axes <- order(sqrt(colSums(reference^2)))
-    for(draw in 1:dim(extracted)[[3]]) {
-        available <- rep(TRUE,K)
-        for(axis in order_axes) {
-            idx <- (1:K)[available]
-            cors <- sapply(idx, function(k) cor(extracted[,k,draw], reference[,axis]))
-            which_match[axis,draw] <- idx[which.max(abs(cors))]
-            available[which_match[axis,draw]] <- FALSE
-            reflected[axis,draw] <- sign(cors[which.max(abs(cors))])
-            oriented[,axis,draw] <- reflected[axis,draw] * extracted[,which_match[axis,draw],draw]
-        }
-    }
-    return(list(oriented=oriented, which_match=which_match, reflected=reflected))
-} # swap axes such that they best match a reference (by default a random draw). If axes are degenerate during model fitting, this should orient them. Can this be made probabilistic rather than iterating max fit?
-
-prob_axes <- function(extracted, maxmult) {
-    K <- dim(extracted)[[2]]
-    reference <- array(NA, dim=c(dim(extracted)[[1]],0))
-    which_match <- array(NA,dim(extracted)[c(2,3)])
-    reflected <- array(NA,dim(extracted)[c(2,3)])
-    oriented <- array(NA, dim=c(dim(extracted)[1],0,dim(extracted)[3]))
-    refcount <- NULL
-    for(draw in sample(1:dim(extracted)[[3]])) {
-        K_ref <- dim(reference)[[2]]
-        order_axes <- order(sqrt(colSums(extracted[,,draw]^2)))
-        available <- rep(TRUE,K_ref)
-        for(axis in order_axes) {
-            sub <- extracted[,axis,draw]
-            idx <- (1:K_ref)[available]
-            cors <- cor(sub, reference[,idx])
-            if(K_ref < (maxmult * K)) {
-                cors <- unlist(c(cors,0.5))
-            }
-            wm <- which.max(abs(cors))
-            if(wm == (length(idx) + 1)) {
-                K_ref <- K_ref + 1
-                reference <- cbind(reference,sub)
-                refcount <- c(refcount,1)
-                which_match[axis,draw] <- K_ref
-                available <- c(available, FALSE)
-                reflected[axis,draw] <- sign(cors[wm])
-                oriented <- abind:::abind(oriented, array(0, dim=c(dim(oriented)[1],1,dim(oriented)[3])), along=2)
-                oriented[,K_ref,draw] <- reflected[axis,draw] * sub
-            } else {
-                reference[,idx[wm]] <- (refcount[idx[wm]] * reference[,idx[wm]] + sign(cors[wm]) * sub) / (refcount[idx[wm]]+1)
-                refcount[idx[wm]] <- refcount[idx[wm]] + 1
-                which_match[axis,draw] <- idx[wm]
-                available[which_match[axis,draw]] <- FALSE
-                reflected[axis,draw] <- sign(cors[wm])
-                oriented[,idx[wm],draw] <- reflected[axis,draw] * sub
-            }
-        }
-    }
-    return(list(oriented=oriented, which_match=which_match, reflected=reflected, refcount=refcount, reference=reference))
-}# use correlation with reference to determine a probability of a match rather than deterministically giving it one. reference could be added to, such that there is always a probability that the axis doesn't exist at all during a draw
+if(length(stan.fit) == 2) {
+    stan.fit.draws <- stan.fit[[2]]
+} else {
+    stan.fit.draws <- stan.fit$post_warmup_draws
+}
 
 sumfunc <- median
 #sumfunc <- mean
@@ -81,38 +17,30 @@ sumfunc <- median
 labs <- c(varlabs, paste0(varlabs[1:sum(M_all[1:D])],'.binary'), paste0('binary_count_dataset_int_',dataset_names[1:D]))
 dataset_names_expanded <- c(dataset_names, paste0(dataset_names[1:D],'.binary'))
 
-dataset_scales <- stan.fit$post_warmup_draws[,,grep('dataset_scales\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
+dataset_scales <- stan.fit.draws[,,grep('dataset_scales\\[.*',dimnames(stan.fit.draws)[[3]])]
 dataset_scales <- apply(dataset_scales,3,sumfunc)
 names(dataset_scales) <- dataset_names_expanded
 
-var_scales <- stan.fit$post_warmup_draws[,,grep('var_scales\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
+var_scales <- stan.fit.draws[,,grep('var_scales\\[.*',dimnames(stan.fit.draws)[[3]])]
 var_scales <- apply(var_scales,3,sumfunc)
 names(var_scales) <- labs
 
-global_effect_scale <- stan.fit$post_warmup_draws[,,grep('global_effect_scale',dimnames(stan.fit$post_warmup_draws)[[3]])]
+global_effect_scale <- stan.fit.draws[,,grep('global_effect_scale',dimnames(stan.fit.draws)[[3]])]
 global_effect_scale <- apply(global_effect_scale, 3, sumfunc)
 
-W_norm_all <- stan.fit$post_warmup_draws[,,grep('W_norm\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
+W_norm_all <- stan.fit.draws[,,grep('W_norm\\[.*',dimnames(stan.fit.draws)[[3]])]
 W_norm_all <- array(W_norm_all, dim = c(dim(W_norm_all)[[1]], dim(W_norm_all)[[3]]/K, K))
-Z_all <- stan.fit$post_warmup_draws[,,grep('Z\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
+Z_all <- stan.fit.draws[,,grep('Z\\[.*',dimnames(stan.fit.draws)[[3]])]
 Z_all <- aperm(array(Z_all, dim = c(dim(Z_all)[[1]], K, N)), c(1,3,2))
 WZ_all_raw <- aperm(abind:::abind(W_norm_all,Z_all,along=2), c(2,3,1))
 ##
-#WZ_all <- aperm(WZ_all_raw, c(3,1,2))
-#axisOrder_all <- matrix(rep(1:K,K),ncol=K)
-mutated <- Morpho:::procSym(WZ_all_raw, CSinit = FALSE, scale = FALSE, reflect = TRUE, orp = FALSE, bending = FALSE, pcAlign = FALSE)
-#closest <- which.max(apply(mutated$rotated, 3, function(x) sqrt(sum((x - mutated$mshape)^2))))
-#mutated_projected <- shapes:::procOPA(WZ_all_raw[,,closest], mutated$mshape, scale=FALSE)
-#oriented <- orient_axes(WZ_all_raw, mutated_projected$Bhat)
-oriented <- orient_axes(WZ_all_raw, mutated$mshape)
-#oriented <- orient_axes(WZ_all_raw, princomp(mutated$mshape)$scores)
-WZ_all <- aperm(oriented$oriented, c(3,1,2))
-axisOrder_all <- oriented$which_match ## work on this block to consider the case including gaussian processes. linear axes should be oriented separately from gp axes, and then stuck back together
-##
 
-latent_scales <- stan.fit$post_warmup_draws[,,grep('latent_scales\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
-latent_scales <- sapply(1:dim(latent_scales)[[1]], function(x) latent_scales[x,,axisOrder_all[,x]])
-latent_scales <- apply(latent_scales, 1, sumfunc)
+#mutated <- Morpho:::procSym(WZ_all_raw, CSinit = FALSE, scale = FALSE, reflect = TRUE, orp = FALSE, bending = FALSE, pcAlign = FALSE)
+#WZ_all <- aperm(mutated$rotated, c(3,1,2))
+WZ_all <- aperm(WZ_all_raw, c(3,1,2))
+
+latent_scales <- stan.fit.draws[,,grep('latent_scales\\[.*',dimnames(stan.fit.draws)[[3]])]
+latent_scales <- apply(latent_scales, 3, sumfunc)
 axisOrder <- order(latent_scales, decreasing=TRUE)
 latent_scales <- latent_scales[axisOrder]
 
@@ -139,7 +67,7 @@ rownames(Z) <- allsamples
 #Z_expanded <- WZ_expanded[(dim(W_norm_all)[2]+1):nrow(WZ_expanded),]
 #rownames(Z_expanded) <- allsamples
 
-weight_scales <- stan.fit$post_warmup_draws[,,grep('weight_scales\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
+weight_scales <- stan.fit.draws[,,grep('weight_scales\\[.*',dimnames(stan.fit.draws)[[3]])]
 ##need to reorder each draw according to axisOrder_all- this is currently inaccurate
 weight_scales <- apply(weight_scales,3,sumfunc)
 weight_scales <- array(weight_scales,dim=c(length(weight_scales)/K,K))
@@ -147,44 +75,44 @@ weight_scales <- array(weight_scales[,axisOrder], dim=c(length(weight_scales)/K,
 rownames(weight_scales) <- dataset_names_expanded
 
 if('sds' %in% importparams) {
-    sds <- stan.fit$post_warmup_draws[,,grep('sds\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
+    sds <- stan.fit.draws[,,grep('sds\\[.*',dimnames(stan.fit.draws)[[3]])]
     sds <- apply(sds,3,sumfunc)
 }
 
 if('log_less_contamination' %in% importparams) {
-    log_less_contamination <- stan.fit$post_warmup_draws[,,grep('log_less_contamination\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
+    log_less_contamination <- stan.fit.draws[,,grep('log_less_contamination\\[.*',dimnames(stan.fit.draws)[[3]])]
     log_less_contamination <- apply(log_less_contamination, 3, sumfunc)
 }
 
 if('contaminant_overdisp' %in% importparams) {
-    contaminant_overdisp <- stan.fit$post_warmup_draws[,,grep('contaminant_overdisp\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
+    contaminant_overdisp <- stan.fit.draws[,,grep('contaminant_overdisp\\[.*',dimnames(stan.fit.draws)[[3]])]
     contaminant_overdisp <- apply(contaminant_overdisp, 3, sumfunc)
 }
 
-binary_count_dataset_intercepts <- stan.fit$post_warmup_draws[,,grep('binary_count_dataset_intercepts\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
+binary_count_dataset_intercepts <- stan.fit.draws[,,grep('binary_count_dataset_intercepts\\[.*',dimnames(stan.fit.draws)[[3]])]
 binary_count_dataset_intercepts <- apply(binary_count_dataset_intercepts, 3, sumfunc)
 names(binary_count_dataset_intercepts) <- dataset_names[1:D]
 
 DRC <- D+R+C
 
-rho_sites <- stan.fit$post_warmup_draws[,,grep('rho_sites',dimnames(stan.fit$post_warmup_draws)[[3]])]
+rho_sites <- stan.fit.draws[,,grep('rho_sites',dimnames(stan.fit.draws)[[3]])]
 rho_sites <- apply(rho_sites, 3, sumfunc)
 
 if('corr_sites' %in% importparams) {
-    corr_sites <- stan.fit$post_warmup_draws[,,grep('corr_sites\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
+    corr_sites <- stan.fit.draws[,,grep('corr_sites\\[.*',dimnames(stan.fit.draws)[[3]])]
     corr_sites <- apply(corr_sites, 3, sumfunc)
     dim(corr_sites) <- c(K,N_sites,N_sites)
     corr_sites <- corr_sites[axisOrder,,]
 }
 
 if('rho_Z' %in% importparams & KG > 0) {
-    rho_Z <- stan.fit$post_warmup_draws[,,grep('rho_Z\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
+    rho_Z <- stan.fit.draws[,,grep('rho_Z\\[.*',dimnames(stan.fit.draws)[[3]])]
     ##need to reorder each draw according to axisOrder_all- this is currently inaccurate
     rho_Z <- array(apply(rho_Z, 3, sumfunc),dim=c(K_linear,KG))[axisOrder[axisOrder <= K_linear],]
 }
 
 if('skew_Z' %in% importparams) {
-    skew_Z <- stan.fit$post_warmup_draws[,,grep('skew_Z\\[.*',dimnames(stan.fit$post_warmup_draws)[[3]])]
+    skew_Z <- stan.fit.draws[,,grep('skew_Z\\[.*',dimnames(stan.fit.draws)[[3]])]
     ##need to reorder each draw according to axisOrder_all- this is currently inaccurate
     skew_Z <- apply(skew_Z, 3, sumfunc)[axisOrder]
 }
@@ -201,16 +129,15 @@ nullfunc <- function() {
 
     gc()
 
-    drivers <- mytriplot(Z, W_norm, Z, 1,2, as.factor(filtData[allsamples,]$species), labs, 50, TRUE, NULL, NULL, FALSE, TRUE)
+    drivers <- mytriplot(Z, W_norm, Z, 1,2, as.factor(filtData[allsamples,]$species), labs, 50, TRUE, NULL, NULL, FALSE, TRUE, anysig[1:nrow(W_norm),])
 
     drivers <- mytriplot(Z_expanded, W_norm_expanded, Z_expanded, 1,2, as.factor(filtData[allsamples,]$species), labs, 50, TRUE, NULL, NULL, FALSE, TRUE)
 
-    mshape_pcs <- princomp(mutated$mshape)
+    mshape_pcs <- princomp(WZ)
     W_pc <- mshape_pcs$scores[1:nrow(W_norm),]
     Z_pc <- mshape_pcs$scores[(dim(W_norm_all)[2]+1):nrow(WZ),]
     drivers <- mytriplot(Z_pc, W_pc, Z_pc, 1,2, as.factor(filtData[allsamples,]$species), labs, 50, TRUE, NULL, NULL, FALSE, TRUE)
 
-    drivers <- mytriplot(Z, W_norm, Z, 1,2, as.factor(filtData[allsamples,]$species), labs, 50, TRUE, NULL, NULL, FALSE, TRUE, anysig)
 
     i <- 1
     hist((var_scales / prior_scales / dataset_scales[i])[(sum(M_all[1:(i-1)])+1):sum(M_all[1:i])])

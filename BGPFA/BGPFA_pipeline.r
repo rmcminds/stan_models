@@ -15,17 +15,16 @@ options(mc.cores = parallel::detectCores())
 logit <- function(p) log(p/(1-p))
 inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 
-nMicrobeKeep <- 100#1000
+nMicrobeKeep <- 500
 K_linear <- 10
 K_gp <- 15
-KG <- 0#3
+KG <- 3
 K <- K_linear + KG * K_gp
 global_scale_prior = 2.5
 rate_gamma_fact = 10
 shape_gamma_fact = 2
 site_smoothness <- 2
 nu_residuals <- 35
-ortho_scale_prior <- 0.25
 shape_gnorm <- 7
 skew_Z_prior <- 10
 
@@ -35,7 +34,7 @@ preprocess_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/intermediate/')
 include_path <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utility/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
-engine <- 'sampling' #'advi' #
+engine <- 'advi' #'sampling' #
 opencl <- FALSE
 output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
 
@@ -70,7 +69,7 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                        'method=variational algorithm=meanfield',
                                        'grad_samples=1',
                                        'elbo_samples=1',
-                                       'iter=50000',
+                                       'iter=30000',
                                        'eta=0.1',
                                        'adapt engaged=0',
                                        'tol_rel_obj=0.0001',
@@ -1074,9 +1073,20 @@ abundance_observed_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) i
 Z1 <- matrix(rnorm((K_linear+KG*K_gp)*N), nrow=K_linear+KG*K_gp)
 Z2 <- matrix(abs(rnorm((K_linear+KG*K_gp)*N)), nrow=K_linear+KG*K_gp)
 
-global_effect_scale_init <- 10 / 2^(0.5*K)
-latent_scales_rev_init <- 2^((1:K)) / 2^K * 10
-W_norm <- matrix(rnorm((VOBplus+sum(M_all[1:D])+D) * K), ncol=K) %*% diag(rev(latent_scales_rev_init))
+global_effect_scale_init <- 10 / 2^(0.5*K_linear)
+latent_scales_init <- rev(2^((1:K_linear)) / 2^K_linear * 10)
+latent_scales_raw_init <- c(log(latent_scales_init[1]), rep(0, K_linear))
+if(KG > 0) {
+    latent_scales_init <- c(latent_scales_init, rev(2^((1:K_gp)) / 2^K_gp * 0.5 * latent_scales_init[[1]]))
+    latent_scales_raw_init <- c(latent_scales_raw_init, rep(0, K_gp))
+}
+if(KG > 1) {
+    for(g in 2:KG) {
+        latent_scales_init <- c(latent_scales_init, rev(2^((1:K_gp)) / 2^K_gp * 0.5 * latent_scales_init[[K_linear + (g-2) * K_gp + 1]]))
+        latent_scales_raw_init <- c(latent_scales_raw_init, rep(0, K_gp))
+    }
+}
+W_norm <- matrix(rnorm((VOBplus+sum(M_all[1:D])+D) * K), ncol=K) %*% diag(rev(latent_scales_init))
 
 init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              intercepts                      = intercepts_inits,
@@ -1084,10 +1094,11 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              binary_count_dataset_intercepts = rep(0,D),
              multinomial_nuisance            = multinomial_nuisance_inits,
              global_effect_scale  = 1,
-             latent_scales_rev    = latent_scales_rev_init,
+             latent_scales_raw    = latent_scales_raw_init,
              sds            = rep(1, VOBplus+sum(M_all[1:D])+D),
              dataset_scales = rep(1, 2*D+R+C),
-             weight_scales  = t(matrix(rep(rev(latent_scales_rev_init),2*D+R+C),ncol=2*D+R+C)),
+             latent_scales_raw = rep(0,K),
+             weight_scales  = t(matrix(rep(latent_scales_init,2*D+R+C),ncol=2*D+R+C)),
              rho_sites = as.array(rep(mean(dist_sites[lower.tri(dist_sites)]), K)),
              site_prop = as.array(rep(0.5, K)),
              abundance_higher_vector  = rep(0,sum(F_higher)),
@@ -1121,7 +1132,8 @@ system(sampling_commands[[engine]])
 importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','dataset_scales','var_scales','weight_scales','rho_sites', 'site_prop', 'corr_sites', 'binary_count_dataset_intercepts', 'log_less_contamination', 'contaminant_overdisp', 'rho_Z'[if(KG > 0) TRUE else NULL],'skew_Z')
 
 stan.fit <- read_cmdstan_csv(file.path(output_prefix, paste0('samples_',engine,'.csv')),
-                                 variables = importparams)
+                             variables = importparams,
+                             format = 'draws_array')
 
 save.image(file.path(output_prefix, paste0('res_',engine,'.RData')))
 

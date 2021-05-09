@@ -174,5 +174,20 @@ functions {
         }
         return(weighted_mean);
     } // https://scicomp.stackexchange.com/questions/30631/how-to-find-the-nearest-a-near-positive-definite-from-a-given-matrix
+    vector positive_ordered_transform(vector y) {
+        vector[size(y)] x = y;
+        x[1] = exp(y[1]);
+        for(k in 2:size(y)) {
+            x[k] = x[k-1] * inv_logit(y[k]);
+        }
+        return(x);
+    }
+    vector positive_max_ordered_transform(vector y) {
+        vector[size(y)] x = y;
+        for(k in 2:size(y)) {
+            x[k] = x[k-1] * inv_logit(y[k]);
+        }
+        return(x);
+    }
 }
 
