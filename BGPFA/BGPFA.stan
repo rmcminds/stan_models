@@ -185,13 +185,13 @@ parameters {
     matrix<lower=0>[DRC+D,K] weight_scales;        // per-dataset-and-axis scales
     vector[VOB] intercepts;
     vector[V] binary_count_intercepts;
-    vector[F] abundance_observed_vector;               // count dataset latent log abundance
+    vector[F] abundance_observed_vector;           // count dataset latent log abundance
     vector[F_higher] abundance_higher_vector;      // count dataset residual higher effects on log abundance
     vector[F_higher] prevalence_higher_vector;     // count dataset residual higher effects on prevalence
     vector[H_higher] P_higher;                     // continuous dataset residual higher effects
     vector[G_higher] Y_higher_vector;              // categorical dataset residual higher effects
     vector[D] binary_count_dataset_intercepts;     // each count dataset could have biased prior intercepts
-    row_vector[N_multinom] multinomial_nuisance;       // per-sample parameter to convert independent poisson distributions to a multinomial one
+    row_vector[N_multinom] multinomial_nuisance;   // per-sample parameter to convert independent poisson distributions to a multinomial one
     vector<upper=0>[N_Pm] P_missing;               // latent estimates of continuous variables with partial information (truncated observations)
     vector<lower=0>[K] rho_sites;                  // length scale for site gaussian process
     vector<lower=0, upper=1>[K] site_prop;         // importance of site covariance compared to nugget effect
