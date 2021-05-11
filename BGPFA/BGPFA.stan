@@ -51,7 +51,6 @@ data {
     real nu_residuals;                                  // residual robustness
     vector[D] inv_log_max_contam;                       // prior expectation of contamination rate
     real<lower=0> shape_gnorm;                          // strength of prior pulling contamination toward zero
-    real<lower=0> skew_Z_prior;
 }
 transformed data {
     int K = K_linear + KG * K_gp;                      // Total number of latent axes
@@ -177,11 +176,10 @@ transformed data {
     //
 }
 parameters {
-    matrix[K_linear,N] Z1_linear_raw;              // PCA axis scores, normal part
-    matrix<lower=0>[K_linear,N] Z2_linear_raw;     // PCA axis scores, skew part (soft identification against reflections, if data are not symmetrical)
-    matrix[KG*K_gp,N] Z1_gp_raw;                   // PCA axis scores for gaussian process variables, normal part
-    matrix<lower=0,upper=1>[KG*K_gp,N] Z2_gp_raw;  // PCA axis scores for gaussian process variables, skew part
-    vector<lower=0>[K] skew_Z;                     // degree of skew for each axis
+    matrix[K_linear,N] Z_linear_raw;              // PCA axis scores raw
+    matrix[KG*K_gp,N] Z_gp_raw;                   // PCA axis scores for gaussian process raw
+    vector<lower=0>[K] alpha_Z;               // controls degree of skew for each axis
+    vector<lower=0,upper=1>[K] beta_Z_prop;                     // controls concentration for each axis
     matrix[VOB_all+V_all+D,K] W_norm;              // PCA variable loadings
     vector<lower=0>[VOB_all+V_all+D] sds;          // variable scales
     real<lower=0> global_effect_scale;             // overall scale of variable loadings
@@ -217,17 +215,20 @@ transformed parameters {
     latent_scales[idx_scales] = positive_ordered_transform(latent_scales[idx_scales]);
     latent_scales[1:K_linear] = positive_max_ordered_transform(latent_scales[1:K_linear]);
     for(miss in 1:N_Pm) P_filled[idx_Pm[miss]] = P_missing[miss] + P_max[miss];
-    Z[1:K_linear,] = mix_skew_normal(Z1_linear_raw, Z2_linear_raw, skew_Z[1:K_linear]); // first axes are independent skew-normal
+    Z[1:K_linear,]
+        = transform_MVN_kumaraswamy(Z_linear_raw,
+                                    alpha_Z[1:K_linear],
+                                    alpha_Z[1:K_linear] .* beta_Z_prop[1:K_linear]); // first axes are independent
     for(g in 1:KG) {
         matrix[N,N] L = L_cov_exp_quad_ARD(Z[1:K_linear,], rho_Z[,g], 1e-9)';
         int s = K_gp * (g-1) + 1;
         int f = K_gp * g;
         Z[(K_linear + s):(K_linear + f),]
-            = mix_skew_normal(Z1_gp_raw[s:f,] * L,
-                              transform_tMVN_lp(Z2_gp_raw[s:f,], L),
-                              skew_Z[(K_linear + s):(K_linear + f)]);
+            = transform_MVN_kumaraswamy(Z_gp_raw[s:f,] * L,
+                                        alpha_Z[(K_linear + s):(K_linear + f)],
+                                        alpha_Z[(K_linear + s):(K_linear + f)] .* beta_Z_prop[(K_linear + s):(K_linear + f)]);
         latent_scales[(K_linear + s):(K_linear + f)] = positive_max_ordered_transform(latent_scales[(K_linear + s):(K_linear + f)]);
-    } // other axes are skew normal and dependent on the first axes through gaussian processes
+    } // other axes are dependent on the first axes through gaussian processes
     Z_higher = Z * samp2group;
     for(k in 1:K) {
         corr_sites[k]
@@ -271,8 +272,6 @@ transformed parameters {
 }
 model {
     // data wrangling (should replace some with transformed data indices)
-    vector[K] length_Z1_linear = sqrt(rows_dot_self(Z1_linear_raw) / N);
-    vector[K] length_Z2_linear = sqrt(rows_dot_self(Z2_linear_raw) / N);
     matrix[K,N_all] Z_Z_higher = append_col(Z,Z_higher);
     vector[VOB_all+V_all+D] dsv;
     matrix[VOB_all+V_all+D,K] wsn;
@@ -316,12 +315,10 @@ model {
     target += gamma_lupdf(to_vector(weight_scales) | 2, to_vector(rep_matrix(2 * inv(latent_scales), DRC+D))); // sparse selection of datasets per axis
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, shape_gnorm);      // shrink amount of contamination in 'true zeros' toward zero
     target += std_normal_lupdf(contaminant_overdisp);                                                        // shrink overdispersion of contaminant counts in 'true zeros' toward zero
-    target += gamma_lupdf(length_Z1_linear | 400, 400);                                                      // first PCA axis scores are independent of one another
-    target += gamma_lupdf(length_Z2_linear | 400, 400);                                                      // PCA scores have idependent positive skew to help identify
-    target += -(N-1) * sum(log(length_Z1_linear) + log(length_Z2_linear));                                   // jacobians
-    target += std_normal_lupdf(to_vector(Z1_gp_raw));                                                        // normal part of gp effects, prior to correlation with cholesky
-    target += std_normal_lupdf(to_vector(Z2_gp_raw));                                                        // skew part of gp effects, prior to correlation with cholesky
-    target += inv_gamma_lupdf(skew_Z | 5, 5 * skew_Z_prior);                                                 //
+    target += cauchy_lupdf(alpha_Z | 0, 1);                                                                  // Z should be predisposed to bimodal distributions
+    target += beta_lupdf(beta_Z_prop | 1, 2);                                                                // Z should be as skewed (to the left) as possible
+    target += std_normal_lupdf(to_vector(Z_linear_raw));                                                     //
+    target += std_normal_lupdf(to_vector(Z_gp_raw));                                                         // gp effects, prior to correlation with cholesky
     target += inv_gamma_lupdf(rho_sites | 5, 5 * rho_sites_prior);                                           // length scale for gaussian process on sites
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);                                  // length scale for gaussian process on PCA axis scores
     target += normal_lupdf(sds | 0, dsv);                                                                    // per-variable sigmas shrink toward dataset scales

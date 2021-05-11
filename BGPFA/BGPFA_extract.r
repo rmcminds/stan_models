@@ -32,46 +32,19 @@ W_norm_all <- stan.fit.draws[,,grep('W_norm\\[.*',dimnames(stan.fit.draws)[[3]])
 W_norm_all <- array(W_norm_all, dim = c(dim(W_norm_all)[[1]], dim(W_norm_all)[[3]]/K, K))
 Z_all <- stan.fit.draws[,,grep('Z\\[.*',dimnames(stan.fit.draws)[[3]])]
 Z_all <- aperm(array(Z_all, dim = c(dim(Z_all)[[1]], K, N)), c(1,3,2))
-WZ_all_raw <- aperm(abind:::abind(W_norm_all,Z_all,along=2), c(2,3,1))
-##
-
-#mutated <- Morpho:::procSym(WZ_all_raw, CSinit = FALSE, scale = FALSE, reflect = TRUE, orp = FALSE, bending = FALSE, pcAlign = FALSE)
-#WZ_all <- aperm(mutated$rotated, c(3,1,2))
-WZ_all <- aperm(WZ_all_raw, c(3,1,2))
-
-latent_scales <- stan.fit.draws[,,grep('latent_scales\\[.*',dimnames(stan.fit.draws)[[3]])]
-latent_scales <- apply(latent_scales, 3, sumfunc)
-axisOrder <- order(latent_scales, decreasing=TRUE)
-latent_scales <- latent_scales[axisOrder]
-
-WZ <- apply(WZ_all,c(2,3),sumfunc,na.rm=TRUE)[,axisOrder]
+WZ_all <- abind:::abind(W_norm_all,Z_all,along=2)
+WZ <- apply(WZ_all,c(2,3),sumfunc,na.rm=TRUE)
 W_norm <- WZ[1:dim(W_norm_all)[2],]
 Z <- WZ[(dim(W_norm_all)[2]+1):nrow(WZ),]
 rownames(Z) <- allsamples
 
-#oriented_expanded <- prob_axes(WZ_all_raw, 2)
-#WZ_all_expanded <- aperm(oriented_expanded$oriented, c(3,1,2))
-#axisOrder_all_expanded <- oriented_expanded$which_match
-#latent_scales_expanded <- extract(stan.fit, pars='latent_scales', permuted=FALSE)
-#temp <- array(0, dim=c(dim(latent_scales_expanded)[[1]], max(axisOrder_all_expanded)))
-#for(x in 1:dim(latent_scales_expanded)[[1]]) {
-#    for(y in 1:dim(latent_scales_expanded)[[3]]) {
-#        temp[x,axisOrder_all_expanded[y,x]] <- latent_scales_expanded[x,,y]
-#    }
-#}
-#latent_scales_expanded <- apply(temp, 2, sumfunc, na.rm=TRUE)
-#axisOrder_expanded <- order(latent_scales_expanded, decreasing=TRUE)
-#latent_scales_expanded <- latent_scales_expanded[axisOrder_expanded]
-#WZ_expanded <- apply(WZ_all_expanded,c(2,3),sumfunc,na.rm=TRUE)[,axisOrder_expanded]
-#W_norm_expanded <- WZ_expanded[1:dim(W_norm_all)[2],]
-#Z_expanded <- WZ_expanded[(dim(W_norm_all)[2]+1):nrow(WZ_expanded),]
-#rownames(Z_expanded) <- allsamples
+latent_scales <- stan.fit.draws[,,grep('latent_scales\\[.*',dimnames(stan.fit.draws)[[3]])]
+latent_scales <- apply(latent_scales, 3, sumfunc)
 
 weight_scales <- stan.fit.draws[,,grep('weight_scales\\[.*',dimnames(stan.fit.draws)[[3]])]
-##need to reorder each draw according to axisOrder_all- this is currently inaccurate
 weight_scales <- apply(weight_scales,3,sumfunc)
 weight_scales <- array(weight_scales,dim=c(length(weight_scales)/K,K))
-weight_scales <- array(weight_scales[,axisOrder], dim=c(length(weight_scales)/K,K))
+weight_scales <- array(weight_scales, dim=c(length(weight_scales)/K,K))
 rownames(weight_scales) <- dataset_names_expanded
 
 if('sds' %in% importparams) {
@@ -102,24 +75,31 @@ if('corr_sites' %in% importparams) {
     corr_sites <- stan.fit.draws[,,grep('corr_sites\\[.*',dimnames(stan.fit.draws)[[3]])]
     corr_sites <- apply(corr_sites, 3, sumfunc)
     dim(corr_sites) <- c(K,N_sites,N_sites)
-    corr_sites <- corr_sites[axisOrder,,]
 }
 
 if('rho_Z' %in% importparams & KG > 0) {
     rho_Z <- stan.fit.draws[,,grep('rho_Z\\[.*',dimnames(stan.fit.draws)[[3]])]
-    ##need to reorder each draw according to axisOrder_all- this is currently inaccurate
-    rho_Z <- array(apply(rho_Z, 3, sumfunc),dim=c(K_linear,KG))[axisOrder[axisOrder <= K_linear],]
+    rho_Z <- array(apply(rho_Z, 3, sumfunc),dim=c(K_linear,KG))
 }
 
 if('skew_Z' %in% importparams) {
     skew_Z <- stan.fit.draws[,,grep('skew_Z\\[.*',dimnames(stan.fit.draws)[[3]])]
-    ##need to reorder each draw according to axisOrder_all- this is currently inaccurate
-    skew_Z <- apply(skew_Z, 3, sumfunc)[axisOrder]
+    skew_Z <- apply(skew_Z, 3, sumfunc)
 }
 
-pos1 <- apply(WZ_all,c(2,3),monteCarloP,pn='p')[,axisOrder]
+if('alpha_Z_diff' %in% importparams) {
+    alpha_Z_diff <- stan.fit.draws[,,grep('alpha_Z_diff\\[.*',dimnames(stan.fit.draws)[[3]])]
+    alpha_Z_diff <- apply(alpha_Z_diff, 3, sumfunc)
+}
+
+if('beta_Z' %in% importparams) {
+    beta_Z <- stan.fit.draws[,,grep('beta_Z\\[.*',dimnames(stan.fit.draws)[[3]])]
+    beta_Z <- apply(beta_Z, 3, sumfunc)
+}
+
+pos1 <- apply(WZ_all,c(2,3),monteCarloP,pn='p')
 possig <- pos1 < 0.05
-neg1 <- apply(WZ_all,c(2,3),monteCarloP,pn='n')[,axisOrder]
+neg1 <- apply(WZ_all,c(2,3),monteCarloP,pn='n')
 negsig <- neg1 < 0.05
 anysig <- possig | negsig
 rownames(pos1) <- rownames(neg1) <- c(labs,allsamples)
@@ -131,19 +111,15 @@ nullfunc <- function() {
 
     drivers <- mytriplot(Z, W_norm, Z, 1,2, as.factor(filtData[allsamples,]$species), labs, 50, TRUE, NULL, NULL, FALSE, TRUE, anysig[1:nrow(W_norm),])
 
-    drivers <- mytriplot(Z_expanded, W_norm_expanded, Z_expanded, 1,2, as.factor(filtData[allsamples,]$species), labs, 50, TRUE, NULL, NULL, FALSE, TRUE)
-
     mshape_pcs <- princomp(WZ)
     W_pc <- mshape_pcs$scores[1:nrow(W_norm),]
     Z_pc <- mshape_pcs$scores[(dim(W_norm_all)[2]+1):nrow(WZ),]
     drivers <- mytriplot(Z_pc, W_pc, Z_pc, 1,2, as.factor(filtData[allsamples,]$species), labs, 50, TRUE, NULL, NULL, FALSE, TRUE)
 
-
-    i <- 1
-    hist((var_scales / prior_scales / dataset_scales[i])[(sum(M_all[1:(i-1)])+1):sum(M_all[1:i])])
-
     c(labs,allsamples)[negsig[,1]]
     c(labs,allsamples)[possig[,1]]
     list(positive=c(labs,allsamples)[possig[,1]],negative=c(labs,allsamples)[negsig[,1]])
+
+    i <- 1; hist((var_scales / prior_scales / dataset_scales[i])[(sum(M_all[1:(i-1)])+1):sum(M_all[1:i])])
 
 }

@@ -15,10 +15,10 @@ options(mc.cores = parallel::detectCores())
 logit <- function(p) log(p/(1-p))
 inv_logit <- function(x) { 1 / (1 + exp(-x)) }
 
-nMicrobeKeep <- 500
-K_linear <- 10
+nMicrobeKeep <- 100
+K_linear <- 35#10
 K_gp <- 15
-KG <- 3
+KG <- 0#3
 K <- K_linear + KG * K_gp
 global_scale_prior = 2.5
 rate_gamma_fact = 10
@@ -26,7 +26,6 @@ shape_gamma_fact = 2
 site_smoothness <- 2
 nu_residuals <- 35
 shape_gnorm <- 7
-skew_Z_prior <- 10
 
 input_prefix <- file.path(Sys.getenv('HOME'), 'data/tara_unsupervised_analyses')
 if(exists('myargs')) {if(length(myargs)==1) {input_prefix <- myargs[[1]]}} else if(length(commandArgs(trailingOnly=TRUE)) > 0) {input_prefix <- commandArgs(trailingOnly=TRUE)[[1]]}
@@ -36,7 +35,7 @@ model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
 engine <- 'advi' #'sampling' #
 opencl <- FALSE
-output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
+output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_kuraswamy_', nMicrobeKeep)
 
 dir.create(output_prefix, recursive = TRUE)
 
@@ -70,7 +69,7 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                        'grad_samples=1',
                                        'elbo_samples=1',
                                        'iter=30000',
-                                       'eta=0.1',
+                                       'eta=0.2',
                                        'adapt engaged=0',
                                        'tol_rel_obj=0.0001',
                                        'eval_elbo=1',
@@ -1061,8 +1060,7 @@ data <- list(N            = N,
              site_smoothness     = site_smoothness,
              nu_residuals        = nu_residuals,
              inv_log_max_contam  = inv_log_max_contam,
-             shape_gnorm         = shape_gnorm,
-             skew_Z_prior        = skew_Z_prior)
+             shape_gnorm         = shape_gnorm)
 
 #### create initiliazations
 abundance_observed_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) inits_mb16S[I_cs[1,x],]),
@@ -1070,8 +1068,7 @@ abundance_observed_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) i
                                             sapply(1:N, function(x) if(I[3,x]) inits_rna[I_cs[3,x],]),
                                             sapply(1:N, function(x) if(I[4,x]) inits_its2[I_cs[4,x],])))
 
-Z1 <- matrix(rnorm((K_linear+KG*K_gp)*N), nrow=K_linear+KG*K_gp)
-Z2 <- matrix(abs(rnorm((K_linear+KG*K_gp)*N)), nrow=K_linear+KG*K_gp)
+Z_init <- matrix(rnorm((K_linear+KG*K_gp)*N), nrow=K_linear+KG*K_gp)
 
 global_effect_scale_init <- 10 / 2^(0.5*K_linear)
 latent_scales_init <- rev(2^((1:K_linear)) / 2^K_linear * 10)
@@ -1086,7 +1083,7 @@ if(KG > 1) {
         latent_scales_raw_init <- c(latent_scales_raw_init, rep(0, K_gp))
     }
 }
-W_norm <- matrix(rnorm((VOBplus+sum(M_all[1:D])+D) * K), ncol=K) %*% diag(rev(latent_scales_init))
+W_norm <- matrix(rnorm((VOBplus+sum(M_all[1:D])+D) * K), ncol=K) %*% diag(latent_scales_init)
 
 init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              intercepts                      = intercepts_inits,
@@ -1105,16 +1102,15 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits,
              prevalence_higher_vector = rep(0,sum(F_higher)),
              P_higher         = rep(0,H_higher),
              Y_higher_vector  = rep(0,sum(G_higher)),
-             Z1_linear_raw    = Z1[1:K_linear,],
-             Z2_linear_raw    = abs(Z2[1:K_linear,]),
-             Z1_gp_raw        = {if(K > K_linear) Z1[(K_linear+1):K,] else 1},
-             Z2_gp_raw        = {if(K > K_linear) pnorm(abs(Z2[(K_linear+1):K,])) else 1},
+             Z_linear_raw    = Z_init[1:K_linear,],
+             Z_gp_raw        = {if(K > K_linear) Z_init[(K_linear+1):K,] else 1},
              W_norm    = W_norm,
              P_missing = rep(-1,N_Pm),
              rho_Z     = matrix(0.1, nrow = K_linear, ncol = KG),
              inv_log_less_contamination  = -inv_log_max_contam,
              contaminant_overdisp        = rep(1,D),
-             skew_Z                      = rep(skew_Z_prior,K))
+             alpha_Z                     = rep(1,K),
+             beta_Z_prop                 = rep(0.5,K))
 
 save.image(file.path(output_prefix, 'setup.RData'))
 
@@ -1129,7 +1125,7 @@ print(sampling_commands[[engine]])
 print(date())
 system(sampling_commands[[engine]])
 
-importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','dataset_scales','var_scales','weight_scales','rho_sites', 'site_prop', 'corr_sites', 'binary_count_dataset_intercepts', 'log_less_contamination', 'contaminant_overdisp', 'rho_Z'[if(KG > 0) TRUE else NULL],'skew_Z')
+importparams <- c('W_norm','Z','sds','latent_scales','global_effect_scale','dataset_scales','var_scales','weight_scales','rho_sites', 'site_prop', 'corr_sites', 'binary_count_dataset_intercepts', 'log_less_contamination', 'contaminant_overdisp', 'rho_Z'[if(KG > 0) TRUE else NULL],'alpha_Z','beta_Z_prop')
 
 stan.fit <- read_cmdstan_csv(file.path(output_prefix, paste0('samples_',engine,'.csv')),
                              variables = importparams,
