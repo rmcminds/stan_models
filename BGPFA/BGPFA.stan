@@ -315,8 +315,8 @@ model {
     target += gamma_lupdf(to_vector(weight_scales) | 2, to_vector(rep_matrix(2 * inv(latent_scales), DRC+D))); // sparse selection of datasets per axis
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, shape_gnorm);      // shrink amount of contamination in 'true zeros' toward zero
     target += std_normal_lupdf(contaminant_overdisp);                                                        // shrink overdispersion of contaminant counts in 'true zeros' toward zero
-    target += cauchy_lupdf(alpha_Z | 0, 1);                                                                  // Z should be predisposed to bimodal distributions
-    target += beta_lupdf(beta_Z_prop | 1, 2);                                                                // Z should be as skewed (to the left) as possible
+    target += lognormal_lupdf(alpha_Z | 0, 0.05);                                                               //
+    target += beta_lupdf(beta_Z_prop | 5, 5);                                                                // Z should be as skewed (to the left) as possible
     target += std_normal_lupdf(to_vector(Z_linear_raw));                                                     //
     target += std_normal_lupdf(to_vector(Z_gp_raw));                                                         // gp effects, prior to correlation with cholesky
     target += inv_gamma_lupdf(rho_sites | 5, 5 * rho_sites_prior);                                           // length scale for gaussian process on sites

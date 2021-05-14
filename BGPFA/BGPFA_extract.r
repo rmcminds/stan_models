@@ -28,7 +28,7 @@ names(var_scales) <- labs
 global_effect_scale <- stan.fit.draws[,,grep('global_effect_scale',dimnames(stan.fit.draws)[[3]])]
 global_effect_scale <- apply(global_effect_scale, 3, sumfunc)
 
-W_norm_all <- stan.fit.draws[,,grep('W_norm\\[.*',dimnames(stan.fit.draws)[[3]])]
+W_norm_all <- stan.fit.draws[,,grep('W_norm\\[.*',dimnames(stan.fit.draws)[[3]]),drop = FALSE]
 W_norm_all <- array(W_norm_all, dim = c(dim(W_norm_all)[[1]], dim(W_norm_all)[[3]]/K, K))
 Z_all <- stan.fit.draws[,,grep('Z\\[.*',dimnames(stan.fit.draws)[[3]])]
 Z_all <- aperm(array(Z_all, dim = c(dim(Z_all)[[1]], K, N)), c(1,3,2))
@@ -87,14 +87,14 @@ if('skew_Z' %in% importparams) {
     skew_Z <- apply(skew_Z, 3, sumfunc)
 }
 
-if('alpha_Z_diff' %in% importparams) {
-    alpha_Z_diff <- stan.fit.draws[,,grep('alpha_Z_diff\\[.*',dimnames(stan.fit.draws)[[3]])]
-    alpha_Z_diff <- apply(alpha_Z_diff, 3, sumfunc)
+if('alpha_Z' %in% importparams) {
+    alpha_Z <- stan.fit.draws[,,grep('alpha_Z\\[.*',dimnames(stan.fit.draws)[[3]]), drop=FALSE]
+    alpha_Z <- apply(alpha_Z, 3, sumfunc)
 }
 
-if('beta_Z' %in% importparams) {
-    beta_Z <- stan.fit.draws[,,grep('beta_Z\\[.*',dimnames(stan.fit.draws)[[3]])]
-    beta_Z <- apply(beta_Z, 3, sumfunc)
+if('beta_Z_prop' %in% importparams) {
+    beta_Z_prop <- stan.fit.draws[,,grep('beta_Z_prop\\[.*',dimnames(stan.fit.draws)[[3]]), drop=FALSE]
+    beta_Z_prop <- apply(beta_Z_prop, 3, sumfunc)
 }
 
 pos1 <- apply(WZ_all,c(2,3),monteCarloP,pn='p')
