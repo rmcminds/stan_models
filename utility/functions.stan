@@ -107,5 +107,12 @@ functions {
         }
         return(x);
     }
+    vector log_positive_ordered_transform(vector y) {
+        vector[size(y)] x = y;
+        for(k in 2:size(y)) {
+            x[k] = x[k-1] + log_inv_logit(y[k]);
+        }
+        return(x);
+    }
 }
 
