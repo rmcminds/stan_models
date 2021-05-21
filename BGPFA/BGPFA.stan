@@ -53,8 +53,8 @@ data {
     vector[D] inv_log_max_contam;                       // prior expectation of contamination rate
     real<lower=0> shape_gnorm;                          // strength of prior pulling contamination toward zero
     real mass_sds;
-    real mass_Z_linear;
-    real mass_Z_gp;
+    vector[K_linear] mass_Z_linear;
+    vector[KG * K_gp] mass_Z_gp;
 }
 transformed data {
     int K = K_linear + KG * K_gp;                      // Total number of latent axes
