@@ -382,10 +382,10 @@ model {
         for(n in 1:sum_ID[d]) {
             for(m in 1:M[d]) {
                 target += log_sum_exp(log1m_inv_logit(prevalence[m,n])
-                                      + student_t_log_lpdf(abundance_observed[m,n] |
+                                      + student_t_lpdf(abundance_observed[m,n] |
                                                            nu_residuals,
                                                            abundance_contam[m,n],
-                                                           contaminant_overdisp_raw[d] + var_scales_log[sum_M_all[d] + m]), //estimated abundance if true negative
+                                                           exp(contaminant_overdisp_raw[d] + var_scales_log[sum_M_all[d] + m])), //estimated abundance if true negative
                                       log_inv_logit(prevalence[m,n])
                                       + student_t_log_lpdf(abundance_observed[m,n] |
                                                            nu_residuals,

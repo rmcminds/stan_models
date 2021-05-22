@@ -1078,7 +1078,7 @@ data <- list(N            = N,
              nu_residuals        = nu_residuals,
              inv_log_max_contam  = inv_log_max_contam,
              shape_gnorm         = shape_gnorm,
-             mass_slow      = mass_slow,
+             mass_slow     = mass_slow,
              mass_Z_linear = mass_Z_linear,
              mass_Z_gp     = mass_Z_gp)
 
@@ -1135,7 +1135,7 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits /
              multinomial_nuisance            = multinomial_nuisance_inits,
              latent_scales_raw = latent_scales_raw_init,
              weight_scales_log = t(matrix(rep(log(latent_scales_init) / mass_slow, 2*D+R+C), ncol=2*D+R+C)),
-             sds_raw           = rep(1 / mass_slow, VOBplus+sum(M_all[1:D])+D),
+             sds_raw           = rep(100000 / mass_slow, VOBplus+sum(M_all[1:D])+D),
              dataset_scales    = rep(1, 2*D+R+C),
              rho_sites         = as.array(rep(mean(dist_sites[lower.tri(dist_sites)]), K)),
              site_prop         = as.array(rep(0.5, K)),
