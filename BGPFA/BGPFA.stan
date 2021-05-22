@@ -202,7 +202,7 @@ parameters {
     vector<lower=0, upper=1>[K] site_prop;         // importance of site covariance compared to nugget effect
     matrix<lower=0>[K_linear,KG] rho_Z;            // length scale for latent axis gaussian process
     vector<upper=0>[D] inv_log_less_contamination; // smaller = less average contamination
-    vector<lower=0>[D] contaminant_overdisp_raw;       // dispersion parameter for amount of contamination in true negative count observations
+    vector[D] contaminant_overdisp_raw;       // dispersion parameter for amount of contamination in true negative count observations
 }
 transformed parameters {
     vector<lower=0>[VOB_all+V_all+D] sds = mass_slow * sds_raw;          // scales tend to blow up so this is a hack to adjust the starting mass matrix but should have no effect on model
@@ -388,9 +388,9 @@ model {
                                                            contaminant_overdisp_raw[d] + var_scales_log[sum_M_all[d] + m]), //estimated abundance if true negative
                                       log_inv_logit(prevalence[m,n])
                                       + student_t_log_lpdf(abundance_observed[m,n] |
-                                                       nu_residuals,
-                                                       log_sum_exp(abundance_contam[m,n], abundance_predicted[m,n]),
-                                                       var_scales_log[sum_M_all[d] + m])); //estimated abundance if true positive
+                                                           nu_residuals,
+                                                           log_sum_exp(abundance_contam[m,n], abundance_predicted[m,n]),
+                                                           var_scales_log[sum_M_all[d] + m])); //estimated abundance if true positive
             }
         }
     }
