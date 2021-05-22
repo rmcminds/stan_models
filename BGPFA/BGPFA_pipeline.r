@@ -35,8 +35,8 @@ model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
 engine <- 'advi' #'sampling' #
 mass_sds <- 1 / 10000 # multiplied by select raw parameters so that they initially are explored slower during sampling
-mass_Z_linear <- 0.5^(1:K_linear) * 2
-if(KG > 0) { mass_Z_gp <- as.vector(sapply(1:KG, function(x) 0.5^(1:K_gp) * 0.5^x)) } else { mass_Z_gp <- 1 }
+mass_Z_linear <- 0.5^(1:K_linear) / 0.5^(K_linear/2) / 100
+if(KG > 0) { mass_Z_gp <- as.vector(sapply(1:KG, function(x) 0.5^(1:K_gp) * 0.5^x * 100)) } else { mass_Z_gp <- vector() }
 opencl <- FALSE
 output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_new_inits_', nMicrobeKeep)
 
@@ -1113,7 +1113,7 @@ prevalence_higher_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) in
                                            sapply(1:N, function(x) if(I[3,x]) inits_prevalence_solved_norm$rna[I_cs[3,x],-(1:M[[3]])]),
                                            sapply(1:N, function(x) if(I[4,x]) inits_prevalence_solved_norm$its2[I_cs[4,x],-(1:M[[4]])])))
 
-Z_init <- matrix(rnorm((K_linear+KG*K_gp)*N), nrow=K_linear+KG*K_gp) * 0.001
+Z_init <- matrix(rnorm((K_linear+KG*K_gp)*N), nrow=K_linear+KG*K_gp) * 1e-5
 
 latent_scales_init <- 0.1 * global_scale_prior * rev(2^((1:K_linear)) / 2^K_linear)
 latent_scales_raw_init <- c(log(latent_scales_init[1]), rep(0, K_linear))
@@ -1134,7 +1134,7 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits /
              binary_count_dataset_intercepts = rep(0,D),
              multinomial_nuisance            = multinomial_nuisance_inits,
              latent_scales_raw = latent_scales_raw_init,
-             weight_scales_log = t(matrix(rep(log(latent_scales_init), 2*D+R+C), ncol=2*D+R+C)),
+             weight_scales_log = t(matrix(rep(log(latent_scales_init) / 1e-5, 2*D+R+C), ncol=2*D+R+C)),
              sds_raw           = rep(1 / mass_sds, VOBplus+sum(M_all[1:D])+D),
              dataset_scales    = rep(1, 2*D+R+C),
              rho_sites         = as.array(rep(mean(dist_sites[lower.tri(dist_sites)]), K)),
@@ -1146,7 +1146,7 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits /
              Z_linear_raw    = Z_init[1:K_linear,],
              Z_gp_raw        = {if(K > K_linear) Z_init[(K_linear+1):K,] else 1},
              W_norm    = matrix(0, nrow=VOBplus+sum(M_all[1:D])+D, ncol=K),
-             rho_Z     = matrix(0.0001, nrow = K_linear, ncol = KG),
+             rho_Z     = matrix(1e-6, nrow = K_linear, ncol = KG),
              inv_log_less_contamination  = -inv_log_max_contam,
              contaminant_overdisp        = rep(1 / mass_sds,D),
              alpha_Z                     = rep(10,K),

@@ -120,6 +120,8 @@ nullfunc <- function() {
     c(labs,allsamples)[possig[,1]]
     list(positive=c(labs,allsamples)[possig[,1]],negative=c(labs,allsamples)[negsig[,1]])
 
+    euktax[Descendants(euktreeY.root,137,'tips')[[1]],]
+
     i <- 1; hist((var_scales / prior_scales / dataset_scales[i])[(sum(M_all[1:(i-1)])+1):sum(M_all[1:i])])
 
 }
