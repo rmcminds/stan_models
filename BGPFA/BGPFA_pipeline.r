@@ -34,7 +34,7 @@ include_path <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utility/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
 engine <- 'advi' #'sampling' #
-mass_sds <- 1 / 10000 # multiplied by select raw parameters so that they initially are explored slower during sampling
+mass_slow <- 1 / 10000 # multiplied by select raw parameters so that they initially are explored slower during sampling
 mass_Z_linear <- 0.5^(1:K_linear) / 0.5^(K_linear/2) / 100
 if(KG > 0) { mass_Z_gp <- as.vector(sapply(1:KG, function(x) 0.5^(1:K_gp) * 0.5^x * 100)) } else { mass_Z_gp <- vector() }
 opencl <- FALSE
@@ -1057,7 +1057,7 @@ data <- list(N            = N,
              C_vars = C_vars,
              Mc = Mc,
              G_higher = sum(G_higher),
-             scales_observed                = unlist(scales_observed) * mass_sds,
+             scales_observed                = unlist(scales_observed) * mass_slow,
              prior_scales                   = prior_scales,
              prior_intercept_scales         = prior_intercept_scales,
              prior_intercept_centers        = prior_intercept_centers,
@@ -1078,7 +1078,7 @@ data <- list(N            = N,
              nu_residuals        = nu_residuals,
              inv_log_max_contam  = inv_log_max_contam,
              shape_gnorm         = shape_gnorm,
-             mass_sds      = mass_sds,
+             mass_slow      = mass_slow,
              mass_Z_linear = mass_Z_linear,
              mass_Z_gp     = mass_Z_gp)
 
@@ -1128,14 +1128,14 @@ if(KG > 1) {
     }
 }
 
-init <- list(abundance_observed_vector       = abundance_observed_vector_inits / mass_sds,
+init <- list(abundance_observed_vector       = abundance_observed_vector_inits / mass_slow,
              intercepts                      = intercepts_inits,
              binary_count_intercepts         = binary_count_intercepts_inits,
              binary_count_dataset_intercepts = rep(0,D),
              multinomial_nuisance            = multinomial_nuisance_inits,
              latent_scales_raw = latent_scales_raw_init,
-             weight_scales_log = t(matrix(rep(log(latent_scales_init) / 1e-5, 2*D+R+C), ncol=2*D+R+C)),
-             sds_raw           = rep(1 / mass_sds, VOBplus+sum(M_all[1:D])+D),
+             weight_scales_log = t(matrix(rep(log(latent_scales_init) / mass_slow, 2*D+R+C), ncol=2*D+R+C)),
+             sds_raw           = rep(1 / mass_slow, VOBplus+sum(M_all[1:D])+D),
              dataset_scales    = rep(1, 2*D+R+C),
              rho_sites         = as.array(rep(mean(dist_sites[lower.tri(dist_sites)]), K)),
              site_prop         = as.array(rep(0.5, K)),
@@ -1148,7 +1148,7 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits /
              W_norm    = matrix(0, nrow=VOBplus+sum(M_all[1:D])+D, ncol=K),
              rho_Z     = matrix(1e-6, nrow = K_linear, ncol = KG),
              inv_log_less_contamination  = -inv_log_max_contam,
-             contaminant_overdisp        = rep(1 / mass_sds,D),
+             contaminant_overdisp        = rep(1 / mass_slow,D),
              alpha_Z                     = rep(10,K),
              beta_Z_prop                 = rep(0.01,K))
 

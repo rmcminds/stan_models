@@ -52,7 +52,7 @@ data {
     real nu_residuals;                                  // residual robustness
     vector[D] inv_log_max_contam;                       // prior expectation of contamination rate
     real<lower=0> shape_gnorm;                          // strength of prior pulling contamination toward zero
-    real mass_sds;
+    real mass_slow;
     vector[K_linear] mass_Z_linear;
     vector[KG * K_gp] mass_Z_gp;
 }
@@ -205,13 +205,13 @@ parameters {
     vector<lower=0>[D] contaminant_overdisp_raw;       // dispersion parameter for amount of contamination in true negative count observations
 }
 transformed parameters {
-    vector<lower=0>[VOB_all+V_all+D] sds = mass_sds * sds_raw;          // scales tend to blow up so this is a hack to adjust the starting mass matrix but should have no effect on model
-    vector<lower=0>[D] contaminant_overdisp = mass_sds * contaminant_overdisp_raw;
+    vector<lower=0>[VOB_all+V_all+D] sds = mass_slow * sds_raw;          // scales tend to blow up so this is a hack to adjust the starting mass matrix but should have no effect on model
+    vector<lower=0>[D] contaminant_overdisp = mass_slow * contaminant_overdisp_raw;
     matrix[K_linear,N] Z_linear_raw_scaled = diag_pre_multiply(mass_Z_linear, Z_linear_raw);              // PCA axis scores raw
     matrix[KG*K_gp,N] Z_gp_raw_scaled = diag_pre_multiply(mass_Z_gp, Z_gp_raw);                   // PCA axis scores for gaussian process raw
     vector[K] latent_scales_log = latent_scales_raw;         // overall scale of each axis
     vector[K] latent_scales;         // overall scale of each axis
-    matrix<lower=0>[DRC+D,K] weight_scales = exp(weight_scales_log * 1e-5);        // per-dataset-and-axis scales
+    matrix<lower=0>[DRC+D,K] weight_scales = exp(weight_scales_log * mass_slow);        // per-dataset-and-axis scales
     matrix[K,N] Z;
     matrix[K,N_var_groups] Z_higher;
     matrix[VOB,K] W;
@@ -319,7 +319,7 @@ model {
     target += student_t_lupdf(binary_count_dataset_intercepts | 5, 0, 2.5);                                  // allow entire count datasets to have biased difference in prevalence compared to priors
     target += cauchy_lupdf(latent_scales[1] | 0, global_scale_prior) + latent_scales_raw[1];                 // first axis has scale of global scale prior, shrunk toward zero, with jacobian correction for putting prior on transformed first scale
     target += normal_lupdf(latent_scales_raw[2:] | 0, 0.1);                                                  // other axes have scale with logistic normal between zero and the previous axis
-    target += normal_lupdf(to_vector(weight_scales_log * 1e-5) | to_vector(rep_matrix(latent_scales_log, DRC+D)), 0.1); // sparse selection of datasets per axis
+    target += normal_lupdf(to_vector(weight_scales_log * mass_slow) | to_vector(rep_matrix(latent_scales_log, DRC+D)), 0.1); // sparse selection of datasets per axis
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, shape_gnorm);      // shrink amount of contamination in 'true zeros' toward zero
     target += lognormal_lupdf(contaminant_overdisp | 0, 0.1);                                                // shrink overdispersion of contaminant counts in 'true zeros' toward zero
     target += lognormal_lupdf(alpha_Z | 0, 0.1);                                                             //
