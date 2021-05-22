@@ -287,7 +287,7 @@ model {
     vector[F_higher] sds_log_abundance_higher;
     vector[F_higher] sds_log_prevalence_higher;
     vector[H] P_predicted;
-    vector[H] var_P;
+    vector[H] var_P_log;
     vector[H_higher] var_P_higher;
     matrix[sum(M[(DR+1):DRC]), N_all] Y_higher_matrix = rep_matrix(0,sum(M[(DR+1):DRC]), N_all);
     int i_X = 1;
@@ -411,7 +411,7 @@ model {
                     = intercepts[(sum_M[D+r] + 1):sum_M[D+r+1]][idx_IR[r,n,1:sum_IR[r,n]]]
                       + W[(sum_M[D+r] + 1):sum_M[D+r+1],][idx_IR[r,n,1:sum_IR[r,n]],]
                         * Z_Z_higher[,n];
-                var_P[i_P:(i_P + sum_IR[r,n] - 1)] = segment(var_scales, sum_M[D+r] + 1, M[D+r])[idx_IR[r,n,1:sum_IR[r,n]]];
+                var_P_log[i_P:(i_P + sum_IR[r,n] - 1)] = segment(var_scales_log, sum_M[D+r] + 1, M[D+r])[idx_IR[r,n,1:sum_IR[r,n]]];
                 if(sum_IR_higher[r,n] > 0) {
                         P_predicted[i_P:(i_P + sum_IR[r,n] - 1)]
                             += MM[idx_IR[r,n,1:sum_IR[r,n]], idx_IR_higher[r,n,1:sum_IR_higher[r,n]]]
@@ -428,14 +428,14 @@ model {
                               nu_residuals,
                               0,
                               var_P_higher);
-    target += student_t_lupdf(P[idx_Pnm] |
-                              nu_residuals,
-                              P_predicted[idx_Pnm],
-                              var_P[idx_Pnm]);
+    target += student_t_log_v_lpdf(P[idx_Pnm] |
+                                   nu_residuals,
+                                   P_predicted[idx_Pnm],
+                                   var_P_log[idx_Pnm]);
     target += student_t_lcdf(P[idx_Pm] |
                              nu_residuals,
                              P_predicted[idx_Pm],
-                             var_P[idx_Pm]);
+                             exp(var_P_log)[idx_Pm]);
     // end continuous likelihood
     // categorical/binary likelihood allowing uncertain (real-valued) data
     for(c in 1:C) {
