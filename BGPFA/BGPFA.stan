@@ -217,7 +217,7 @@ transformed parameters {
     matrix[VOB,K] W;
     matrix[V,K] W_binary_counts;
     vector<lower=0>[VOB_all+V_all+D] var_scales = sds .* prior_scales;
-    vector<lower=0>[VOB_all+V_all+D] var_scales_log = log(mass_slow) + log(sds_raw) + log(prior_scales);
+    vector[VOB_all+V_all+D] var_scales_log = log(mass_slow) + log(sds_raw) + log(prior_scales);
     corr_matrix[M[DRC]] corr_sites[K];
     vector[D] log_less_contamination = inv(inv_log_less_contamination);
     latent_scales_log[idx_scales] = log_positive_ordered_transform(latent_scales_log[idx_scales]);
