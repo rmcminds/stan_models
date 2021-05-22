@@ -394,8 +394,8 @@ model {
             }
         }
     }
-    target += student_t_log_lpdf(abundance_higher_vector | nu_residuals, 0, sds_log_abundance_higher);
-    target += student_t_log_lpdf(prevalence_higher_vector | nu_residuals, 0, sds_log_prevalence_higher);
+    target += student_t_log_v_lpdf(abundance_higher_vector | nu_residuals, 0, sds_log_abundance_higher);
+    target += student_t_log_v_lpdf(prevalence_higher_vector | nu_residuals, 0, sds_log_prevalence_higher);
     // end count likelihood
     // continuous likelihood
     for(r in 1:R) {

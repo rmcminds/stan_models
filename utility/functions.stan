@@ -114,7 +114,13 @@ functions {
         }
         return(x);
     }
-    real student_t_log_lpdf(vector y, real nu, vector mu, vector sigma_log) {
+    real student_t_log_lpdf(real y, real nu, real mu, real sigma_log) {
+        return log_falling_factorial(0.5 * (nu - 1), 0.5)
+               - 0.5 * log(pi() * nu)
+               - sigma_log
+               - 0.5 * (nu + 1) * log1p_exp(2 * (log(fabs(y - mu)) - sigma_log) - log(nu));
+    }
+    real student_t_log_v_lpdf(vector y, real nu, vector mu, vector sigma_log) {
         return sum(log_falling_factorial(0.5 * (nu - 1), 0.5)
                    - 0.5 * log(pi() * nu)
                    - sigma_log
