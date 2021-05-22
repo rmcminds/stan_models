@@ -1148,7 +1148,7 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits /
              W_norm    = matrix(0, nrow=VOBplus+sum(M_all[1:D])+D, ncol=K),
              rho_Z     = matrix(1e-6, nrow = K_linear, ncol = KG),
              inv_log_less_contamination  = -inv_log_max_contam,
-             contaminant_overdisp_raw    = rep(0,D),
+             contaminant_overdisp_raw    = rep(10,D),
              alpha_Z                     = rep(10,K),
              beta_Z_prop                 = rep(0.01,K))
 
