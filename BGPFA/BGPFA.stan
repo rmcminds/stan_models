@@ -392,12 +392,12 @@ model {
                       + student_t_lpdf(abundance_observed[m,n] |
                                        nu_residuals,
                                        log_sum_exp(abundance_contam[m,n], abundance_predicted[m,n]),
-                                       var_scales[sum_M_all[d] + m]));
+                                       var_scales[sum_M_all[d] + m]);
                 if(is_inf(if_negative)) {
                     target += if_positive;
                 } else {
                     target += log_sum_exp(if_negative, //estimated abundance if true negative
-                                          if_positive; //estimated abundance if true positive
+                                          if_positive); //estimated abundance if true positive
                 }
             }
         }
