@@ -364,14 +364,14 @@ model {
                   * to_matrix(segment(abundance_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]),
                              M_higher[d], sum_ID[d]);
             abundance_predicted += higher_summed;
-            sds_abundance_higher[i_X_higher:(i_X_higher + sum_ID[d] * M_higher[d] - 1)]
+            sds_log_abundance_higher[i_X_higher:(i_X_higher + sum_ID[d] * M_higher[d] - 1)]
                 = to_vector(rep_matrix(log(mass_slow) + log(segment(sds_raw, sum_M_all[d] + M[d] + 1, M_higher[d])), sum_ID[d]));
             abundance_contam += higher_summed;
             prevalence
                 += diag_post_multiply(MM, segment(prior_scales, VOB_all + sum_M_all[d] + M[d] + 1, M_higher[d]))
                    * to_matrix(segment(prevalence_higher_vector, i_X_higher, M_higher[d] * sum_ID[d]),
                                M_higher[d], sum_ID[d]);
-            sds_prevalence_higher[i_X_higher:(i_X_higher + sum_ID[d] * M_higher[d] - 1)]
+            sds_log_prevalence_higher[i_X_higher:(i_X_higher + sum_ID[d] * M_higher[d] - 1)]
                 = to_vector(rep_matrix(log(mass_slow) + log(segment(sds_raw, VOB_all + sum_M_all[d] + M[d] + 1, M_higher[d])), sum_ID[d]));
             i_X_higher += M_higher[d] * sum_ID[d];
         }
