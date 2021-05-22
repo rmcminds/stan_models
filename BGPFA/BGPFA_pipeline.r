@@ -24,7 +24,7 @@ global_scale_prior = 2.5
 rate_gamma_fact = 10
 shape_gamma_fact = 2
 site_smoothness <- 2
-nu_residuals <- 15
+nu_residuals <- 5
 shape_gnorm <- 7
 
 input_prefix <- file.path(Sys.getenv('HOME'), 'data/tara_unsupervised_analyses')
@@ -34,7 +34,7 @@ include_path <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utility/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
 engine <- 'advi' #'sampling' #
-mass_slow <- 1 / 10000 # multiplied by select raw parameters so that they initially are explored slower during sampling
+mass_slow <- 1 / 100 # multiplied by select raw parameters so that they initially are explored slower during sampling
 mass_Z_linear <- 0.5^(1:K_linear) / 0.5^(K_linear/2) / 100
 if(KG > 0) { mass_Z_gp <- as.vector(sapply(1:KG, function(x) 0.5^(1:K_gp) * 0.5^x * 100)) } else { mass_Z_gp <- vector() }
 opencl <- FALSE
@@ -49,7 +49,7 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                           paste0('file=', file.path(output_prefix, 'samples_sampling.csv')),
                                           paste0('refresh=', 1),
                                           'method=sample algorithm=hmc',
-                                          'stepsize=0.1',
+                                          'stepsize=1',
                                           'engine=nuts',
                                           'max_depth=10',
                                           'adapt t0=100',
@@ -72,7 +72,7 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                        'grad_samples=1',
                                        'elbo_samples=1',
                                        'iter=20000',
-                                       'eta=0.3',
+                                       'eta=0.1',
                                        'adapt engaged=0',
                                        'tol_rel_obj=0.0001',
                                        'eval_elbo=1',
@@ -1115,7 +1115,7 @@ prevalence_higher_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) in
 
 Z_init <- matrix(rnorm((K_linear+KG*K_gp)*N), nrow=K_linear+KG*K_gp) * 1e-5
 
-latent_scales_init <- 0.1 * global_scale_prior * rev(2^((1:K_linear)) / 2^K_linear)
+latent_scales_init <- global_scale_prior * rev(2^((1:K_linear)) / 2^K_linear)
 latent_scales_raw_init <- c(log(latent_scales_init[1]), rep(0, K_linear))
 if(KG > 0) {
     latent_scales_init <- c(latent_scales_init, rev(2^((1:K_gp)) / 2^K_gp * 0.5 * latent_scales_init[[1]]))
@@ -1148,7 +1148,7 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits /
              W_norm    = matrix(0, nrow=VOBplus+sum(M_all[1:D])+D, ncol=K),
              rho_Z     = matrix(1e-6, nrow = K_linear, ncol = KG),
              inv_log_less_contamination  = -inv_log_max_contam,
-             contaminant_overdisp        = rep(1 / mass_slow,D),
+             contaminant_overdisp_raw    = rep(0,D),
              alpha_Z                     = rep(10,K),
              beta_Z_prop                 = rep(0.01,K))
 

@@ -114,5 +114,8 @@ functions {
         }
         return(x);
     }
+    real student_t_log_sigma(real y, real nu, real mu, real sigma_log) {
+        return lgamma(0.5 * (nu + 1)) - lgamma(0.5 * nu) - 0.5 * log(pi() * nu) - sigma_log - 0.5 * (nu+1) * log1p_exp(2 * (log(y - mu) - sigma_log) - log(nu));
+    }
 }
 

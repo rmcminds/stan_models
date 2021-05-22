@@ -206,7 +206,7 @@ parameters {
 }
 transformed parameters {
     vector<lower=0>[VOB_all+V_all+D] sds = mass_slow * sds_raw;          // scales tend to blow up so this is a hack to adjust the starting mass matrix but should have no effect on model
-    vector<lower=0>[D] contaminant_overdisp = mass_slow * contaminant_overdisp_raw;
+    vector<lower=0>[D] contaminant_overdisp = exp(contaminant_overdisp_raw);
     matrix[K_linear,N] Z_linear_raw_scaled = diag_pre_multiply(mass_Z_linear, Z_linear_raw);              // PCA axis scores raw
     matrix[KG*K_gp,N] Z_gp_raw_scaled = diag_pre_multiply(mass_Z_gp, Z_gp_raw);                   // PCA axis scores for gaussian process raw
     vector[K] latent_scales_log = latent_scales_raw;         // overall scale of each axis
@@ -217,6 +217,7 @@ transformed parameters {
     matrix[VOB,K] W;
     matrix[V,K] W_binary_counts;
     vector<lower=0>[VOB_all+V_all+D] var_scales = sds .* prior_scales;
+    vector<lower=0>[VOB_all+V_all+D] var_scales_log = log(mass_slow) + log(sds_raw) + log(prior_scales);
     corr_matrix[M[DRC]] corr_sites[K];
     vector[D] log_less_contamination = inv(inv_log_less_contamination);
     latent_scales_log[idx_scales] = log_positive_ordered_transform(latent_scales_log[idx_scales]);
@@ -321,7 +322,7 @@ model {
     target += normal_lupdf(latent_scales_raw[2:] | 0, 0.1);                                                  // other axes have scale with logistic normal between zero and the previous axis
     target += normal_lupdf(to_vector(weight_scales_log * mass_slow) | to_vector(rep_matrix(latent_scales_log, DRC+D)), 0.1); // sparse selection of datasets per axis
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, shape_gnorm);      // shrink amount of contamination in 'true zeros' toward zero
-    target += lognormal_lupdf(contaminant_overdisp | 0, 0.1);                                                // shrink overdispersion of contaminant counts in 'true zeros' toward zero
+    target += normal_lupdf(contaminant_overdisp_raw | 0, 0.1);                                                // shrink overdispersion of contaminant counts in 'true zeros' toward zero
     target += lognormal_lupdf(alpha_Z | 0, 0.1);                                                             //
     target += beta_lupdf(beta_Z_prop | 50, 50);                                                              // Z should significantly skewed
     target += student_t_lupdf(to_vector(W_norm) | nu_residuals, 0, to_vector(wsn));
@@ -381,10 +382,10 @@ model {
         for(n in 1:sum_ID[d]) {
             for(m in 1:M[d]) {
                 target += log_sum_exp(log1m_inv_logit(prevalence[m,n])
-                                      + student_t_lpdf(abundance_observed[m,n] |
-                                                       nu_residuals,
-                                                       abundance_contam[m,n],
-                                                       contaminant_overdisp[d] * var_scales[sum_M_all[d] + m]), //estimated abundance if true negative
+                                      + student_t_log_sigma(abundance_observed[m,n] |
+                                                            nu_residuals,
+                                                            abundance_contam[m,n],
+                                                            contaminant_overdisp_raw[d] + var_scales_log[sum_M_all[d] + m]), //estimated abundance if true negative
                                       log_inv_logit(prevalence[m,n])
                                       + student_t_lpdf(abundance_observed[m,n] |
                                                        nu_residuals,
