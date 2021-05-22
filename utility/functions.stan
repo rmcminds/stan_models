@@ -121,10 +121,11 @@ functions {
                - 0.5 * (nu + 1) * log1p_exp(2 * (log(fabs(y - mu)) - sigma_log) - log(nu));
     }
     real student_t_log_v_lpdf(vector y, real nu, vector mu, vector sigma_log) {
-        return sum(log_falling_factorial(0.5 * (nu - 1), 0.5)
-                   - 0.5 * log(pi() * nu)
-                   - sigma_log
-                   - 0.5 * (nu + 1) * log1p_exp(2 * (log(fabs(y - mu)) - sigma_log) - log(nu)));
+        return size(y)
+               * (log_falling_factorial(0.5 * (nu - 1), 0.5)
+                  - 0.5 * log(pi() * nu))
+               - sum(sigma_log
+                     + 0.5 * (nu + 1) * log1p_exp(2 * (log(fabs(y - mu)) - sigma_log) - log(nu)));
     }
 }
 
