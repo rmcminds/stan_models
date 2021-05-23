@@ -207,8 +207,9 @@ parameters {
 transformed parameters {
     vector[DRC+D] dataset_scales_log = dataset_scales_raw * mass_slow;             // overall scale of each dataset
     vector[DRC+D] dataset_scales = exp(dataset_scales_log);             // overall scale of each dataset
-    vector<lower=0>[K] alpha_Z = exp(alpha_Z_raw * mass_slow);                   // controls degree of skew for each axis
-    vector<lower=0,upper=1>[K] beta_Z_prop = inv_logit(beta_Z_prop_raw * mass_slow);       // controls concentration for each axis
+    vector[K] alpha_Z_log = alpha_Z_raw * (mass_slow * 0.01);                   // controls degree of skew for each axis
+    vector<lower=0>[K] alpha_Z = exp(alpha_Z_log);                   // controls degree of skew for each axis
+    vector<lower=0,upper=1>[K] beta_Z_prop = inv_logit(beta_Z_prop_raw * (mass_slow * 0.01));       // controls concentration for each axis
     vector[VOB_all+V_all+D] sds_log = sds_raw * (mass_slow * 0.01);          // scales tend to blow up so this is a hack to adjust the starting mass matrix but should have no effect on model
     vector<lower=0>[VOB_all+V_all+D] sds = exp(sds_log);          // scales tend to blow up so this is a hack to adjust the starting mass matrix but should have no effect on model
     vector[D] contaminant_overdisp_log = contaminant_overdisp_raw * mass_slow;
@@ -331,8 +332,8 @@ model {
     target += normal_lupdf(to_vector(weight_scales_log) | to_vector(rep_matrix(latent_scales_log, DRC+D)), 0.1); // sparse selection of datasets per axis
     target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, shape_gnorm);      // shrink amount of contamination in 'true zeros' toward zero
     target += normal_lupdf(contaminant_overdisp_log | 0, 0.1);                                                // shrink overdispersion of contaminant counts in 'true zeros' toward zero
-    target += normal_lupdf(alpha_Z_raw * mass_slow | 0, 0.1);                                                             //
-    target += normal_lupdf(beta_Z_prop_raw * mass_slow | 0, 0.1);                                                              // Z should significantly skewed
+    target += normal_lupdf(alpha_Z_log | 0, 0.1);                                                             //
+    target += normal_lupdf(beta_Z_prop_raw * (mass_slow * 0.01) | 0, 0.1);                                                              // Z should significantly skewed
     target += student_t_lupdf(to_vector(W_norm) | nu_residuals, 0, to_vector(wsn));
     target += std_normal_lupdf(to_vector(Z_linear_raw_scaled));                                              //
     target += std_normal_lupdf(to_vector(Z_gp_raw_scaled));                                                  // gp effects, prior to correlation with cholesky
