@@ -180,14 +180,14 @@ transformed data {
     //
 }
 parameters {
-    matrix[K_linear,N] Z_linear_raw;              // PCA axis scores raw
-    matrix[KG*K_gp,N] Z_gp_raw;                   // PCA axis scores for gaussian process raw
-    vector[K] alpha_Z_raw;                   // controls degree of skew for each axis
-    vector[K] beta_Z_prop_raw;       // controls concentration for each axis
+    matrix[K_linear,N] Z_linear_raw;               // PCA axis scores raw
+    matrix[KG*K_gp,N] Z_gp_raw;                    // PCA axis scores for gaussian process raw
+    vector[K] alpha_Z_raw;                         // controls concentration for each axis
+    vector[K] beta_Z_prop_raw;                     // controls degree of skew for each axis
     matrix[VOB_all+V_all+D,K] W_norm;              // PCA variable loadings
     vector[VOB_all+V_all+D] sds_raw;               // variable scales
     vector[K] latent_scales_raw;                   // overall scale of each axis
-    vector<lower=0>[DRC+D] dataset_scales;         // overall scale of each dataset
+    vector[DRC+D] dataset_scales_raw;              // overall scale of each dataset
     matrix[DRC+D,K] weight_scales_raw;             // per-dataset-and-axis scales
     vector[VOB] intercepts;
     vector[V] binary_count_intercepts;
@@ -205,6 +205,8 @@ parameters {
     vector[D] contaminant_overdisp_raw;            // dispersion parameter for amount of contamination in true negative count observations
 }
 transformed parameters {
+    vector[DRC+D] dataset_scales_log = dataset_scales_raw * mass_slow;             // overall scale of each dataset
+    vector[DRC+D] dataset_scales = exp(dataset_scales_log);             // overall scale of each dataset
     vector<lower=0>[K] alpha_Z = exp(alpha_Z_raw * mass_slow);                   // controls degree of skew for each axis
     vector<lower=0,upper=1>[K] beta_Z_prop = inv_logit(beta_Z_prop_raw * mass_slow);       // controls concentration for each axis
     vector[VOB_all+V_all+D] sds_log = sds_raw * (mass_slow * 0.01);          // scales tend to blow up so this is a hack to adjust the starting mass matrix but should have no effect on model
@@ -306,20 +308,21 @@ model {
         for(k in 1:K) {
             wsn[(sum_M_all[drc] + 1):(sum_M_all[drc] + M_all[drc]), k] = rep_vector(weight_scales[drc,k], M_all[drc]);
         }
-        dsv[(sum_M_all[drc] + 1):(sum_M_all[drc] + M_all[drc])] = rep_vector(dataset_scales[drc], M_all[drc]);
+        dsv[(sum_M_all[drc] + 1):(sum_M_all[drc] + M_all[drc])] = rep_vector(dataset_scales_log[drc], M_all[drc]);
         if(drc <= D) {
             for(k in 1:K) {
                 wsn[(VOB_all + sum_M_all[drc] + 1):(VOB_all + sum_M_all[drc] + M_all[drc]), k] = rep_vector(weight_scales[DRC+drc,k], M_all[drc]);
                 wsn[VOB_all + V_all + drc, k] = weight_scales[DRC+drc,k];
             }
-            dsv[(VOB_all + sum_M_all[drc] + 1):(VOB_all + sum_M_all[drc] + M_all[drc])] = rep_vector(dataset_scales[DRC+drc], M_all[drc]);
-            dsv[VOB_all + V_all + drc] = dataset_scales[DRC+drc];
+            dsv[(VOB_all + sum_M_all[drc] + 1):(VOB_all + sum_M_all[drc] + M_all[drc])] = rep_vector(dataset_scales_log[DRC+drc], M_all[drc]);
+            dsv[VOB_all + V_all + drc] = dataset_scales_log[DRC+drc];
         }
     }
     // end data wrangling
     // priors
     target += std_normal_lupdf(dataset_scales);                                                              // entire datasets may have uniformly biased difference in scale compared to priors
-    target += normal_lupdf(sds_log | log(dsv), 1);                                                                    // per-variable sigmas shrink toward dataset scales
+    target += dataset_scales_log;                                                                            //jacobian
+    target += normal_lupdf(sds_log | dsv, 1);                                                                // per-variable sigmas shrink toward dataset scales
     target += student_t_lupdf(intercepts | 5, prior_intercept_centers, 2.5 * prior_intercept_scales);        // overall abundance and center of variables may differ from priors
     target += student_t_lupdf(binary_count_intercepts | 5, binary_count_intercept_centers, 2.5);             // overall prevalence may differ from priors
     target += student_t_lupdf(binary_count_dataset_intercepts | 5, 0, 2.5);                                  // allow entire count datasets to have biased difference in prevalence compared to priors
