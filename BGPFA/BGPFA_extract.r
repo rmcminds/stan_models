@@ -1,6 +1,7 @@
 library(rstan)
 library(phangorn)
 library(RColorBrewer)
+model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 source(file.path(model_dir, 'functions.r'))
 
 if(length(stan.fit) == 2) {

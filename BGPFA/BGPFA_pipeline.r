@@ -33,12 +33,12 @@ preprocess_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/intermediate/')
 include_path <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utility/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 model_name <- 'BGPFA'
-engine <- 'advi' #'sampling' #
+engine <- c('sampling','advi')[2]
 mass_slow <- 1 / 100 # multiplied by select raw parameters so that they initially are explored slower during sampling
-mass_Z_linear <- 0.5^(1:K_linear) / 0.5^(K_linear/2) / 100
-if(KG > 0) { mass_Z_gp <- as.vector(sapply(1:KG, function(x) 0.5^(1:K_gp) * 0.5^x * 100)) } else { mass_Z_gp <- vector() }
+mass_Z_linear <- 0.5^(1:K_linear) * 2
+if(KG > 0) { mass_Z_gp <- as.vector(sapply(1:KG, function(x) 0.5^(1:K_gp) * 0.5^x * 2)) } else { mass_Z_gp <- vector() }
 opencl <- FALSE
-output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_new_inits_', nMicrobeKeep)
+output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_slow_', nMicrobeKeep)
 
 dir.create(output_prefix, recursive = TRUE)
 
@@ -49,14 +49,14 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                           paste0('file=', file.path(output_prefix, 'samples_sampling.csv')),
                                           paste0('refresh=', 1),
                                           'method=sample algorithm=hmc',
-                                          'stepsize=1',
+                                          'stepsize=10',
                                           'engine=nuts',
                                           'max_depth=10',
-                                          'adapt t0=100',
+                                          'adapt t0=10',
                                           'delta=0.8',
                                           'kappa=0.75',
-                                          'init_buffer=5',
-                                          'window=4',
+                                          'init_buffer=0',
+                                          'window=2',
                                           'term_buffer=50',
                                           'num_warmup=200',
                                           'num_samples=200',
@@ -69,13 +69,13 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                        paste0('file=', file.path(output_prefix, 'samples_advi.csv')),
                                        paste0('refresh=', 100),
                                        'method=variational algorithm=meanfield',
-                                       'grad_samples=1',
-                                       'elbo_samples=1',
+                                       'grad_samples=2',
+                                       'elbo_samples=2',
                                        'iter=20000',
-                                       'eta=0.1',
+                                       'eta=1',
                                        'adapt engaged=0',
                                        'tol_rel_obj=0.0001',
-                                       'eval_elbo=1',
+                                       'eval_elbo=2',
                                        'output_samples=200',
                                        ('opencl platform=0 device=0')[opencl],
                                        sep=' '))
@@ -1134,8 +1134,8 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits /
              binary_count_dataset_intercepts = rep(0,D),
              multinomial_nuisance            = multinomial_nuisance_inits,
              latent_scales_raw = latent_scales_raw_init,
-             weight_scales_log = t(matrix(rep(log(latent_scales_init) / mass_slow, 2*D+R+C), ncol=2*D+R+C)),
-             sds_raw           = rep(1 / mass_slow, VOBplus+sum(M_all[1:D])+D),
+             weight_scales_raw = t(matrix(rep(log(latent_scales_init) / (mass_slow / 10), 2*D+R+C), ncol=2*D+R+C)),
+             sds_raw           = rep(0, VOBplus+sum(M_all[1:D])+D),
              dataset_scales    = rep(1, 2*D+R+C),
              rho_sites         = as.array(rep(mean(dist_sites[lower.tri(dist_sites)]), K)),
              site_prop         = as.array(rep(0.5, K)),
@@ -1148,9 +1148,9 @@ init <- list(abundance_observed_vector       = abundance_observed_vector_inits /
              W_norm    = matrix(0, nrow=VOBplus+sum(M_all[1:D])+D, ncol=K),
              rho_Z     = matrix(1e-6, nrow = K_linear, ncol = KG),
              inv_log_less_contamination  = -inv_log_max_contam,
-             contaminant_overdisp_raw    = rep(1,D),
-             alpha_Z                     = rep(10,K),
-             beta_Z_prop                 = rep(0.01,K))
+             contaminant_overdisp_raw    = rep(0,D),
+             alpha_Z_raw                 = rep(0,K),
+             beta_Z_prop_raw             = rep(-2,K))
 
 save.image(file.path(output_prefix, 'setup.RData'))
 
