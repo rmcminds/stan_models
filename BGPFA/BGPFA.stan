@@ -37,14 +37,12 @@ data {
     real<lower=0> global_scale_prior;
     vector[sum(M[1:D])] scales_observed;
     vector<lower=0>[sum(M_all) + sum(M_all[1:D]) + D] prior_scales;
-    vector<lower=0>[sum(M)] prior_intercept_scales;
-    vector[sum(M)] prior_intercept_centers;
-    vector[sum(M[1:D])] binary_count_intercept_centers;
+    vector[sum(M) + sum(M[1:D]) + D] prior_intercept_centers;
     int<lower=0> size_mm;                               // size of model matrix for higher level variables
     vector[size_mm] mm;                                 // model matrix for higher level variables
     int<lower=0> N_Pm;                                  // number of P measured as -inf
     int<lower=0> idx_Pm[N_Pm];                          // indices for missing Ps
-    int<lower=0> idx_Pnm[H-N_Pm];                          // indices for missing Ps
+    int<lower=0> idx_Pnm[H-N_Pm];                       // indices for nonmissing Ps
     vector[choose(M[size(M)],2)] dist_sites;            // distance between sites
     real rho_sites_prior;                               // prior expectation for length scale of gaussian process on sites
     matrix[N,N_var_groups] samp2group;                  // Matrix to calculate means of grouped samples
@@ -53,8 +51,6 @@ data {
     vector[D] inv_log_max_contam;                       // prior expectation of contamination rate
     real<lower=0> shape_gnorm;                          // strength of prior pulling contamination toward zero
     real mass_slow;
-    vector[K_linear] mass_Z_linear;
-    vector[KG * K_gp] mass_Z_gp;
 }
 transformed data {
     int K = K_linear + KG * K_gp;                      // Total number of latent axes
@@ -82,7 +78,7 @@ transformed data {
     int sum_IC_higher[C,N_all];                              // Number of categorical higher effects in each sample, per dataset
     int idx_IC_higher[C,N_all,max(M_higher[(DR+1):(DRC)])];  // Indices mapping each sample to each categorical dataset
     real rho_Z_shape = 1.0 / K_linear;                       // More 'independent' latent variables means more need for sparsity in feature selection
-    real rho_Z_scale = 6.0 / K_gp;                           // More 'dependent' latent variables per group means, in order to encourage orthogonality, length scale must be smaller
+    real rho_Z_scale = 2.0 * K_linear / K_gp;                // More 'dependent' latent variables per group means, in order to encourage orthogonality, length scale must be smaller. Also compensate for shape
     matrix[site_smoothness-1, 2 * site_smoothness] chooseRJ; // precomputed part of Matern covariance
     matrix[site_smoothness, 2 * site_smoothness] ffKJ;       // precomputed part of Matern covariance
     int idx_scales[KG+1];
@@ -184,19 +180,17 @@ parameters {
     matrix[KG*K_gp,N] Z_gp_raw;                    // PCA axis scores for gaussian process raw
     vector[K] alpha_Z_raw;                         // controls concentration for each axis
     vector[K] beta_Z_prop_raw;                     // controls degree of skew for each axis
-    matrix[VOB_all+V_all+D,K] W_norm;              // PCA variable loadings
+    matrix[VOB_all+V_all+D,K] W_raw;               // PCA variable loadings
     vector[VOB_all+V_all+D] sds_raw;               // variable scales
-    vector[K] latent_scales_raw;                   // overall scale of each axis
+    vector[K] latent_scales_raw;                   // overall scale of each axis. consider constraining to be positive? no change in priors needed except first entry
     vector[DRC+D] dataset_scales_raw;              // overall scale of each dataset
     matrix[DRC+D,K] weight_scales_raw;             // per-dataset-and-axis scales
-    vector[VOB] intercepts;
-    vector[V] binary_count_intercepts;
+    vector[VOB+V+D] intercepts;
     vector[F] abundance_observed_vector;           // count dataset latent log abundance
     vector[F_higher] abundance_higher_vector;      // count dataset residual higher effects on log abundance
     vector[F_higher] prevalence_higher_vector;     // count dataset residual higher effects on prevalence
     vector[H_higher] P_higher;                     // continuous dataset residual higher effects
     vector[G_higher] Y_higher_vector;              // categorical dataset residual higher effects
-    vector[D] binary_count_dataset_intercepts;     // each count dataset could have biased prior intercepts
     row_vector[N_multinom] multinomial_nuisance;   // per-sample parameter to convert independent poisson distributions to a multinomial one
     vector<lower=0>[K] rho_sites;                  // length scale for site gaussian process
     vector<lower=0, upper=1>[K] site_prop;         // importance of site covariance compared to nugget effect
@@ -205,21 +199,20 @@ parameters {
     vector[D] contaminant_overdisp_raw;            // dispersion parameter for amount of contamination in true negative count observations
 }
 transformed parameters {
-    vector[DRC+D] dataset_scales_log = dataset_scales_raw * mass_slow;             // overall scale of each dataset
-    vector[DRC+D] dataset_scales = exp(dataset_scales_log);             // overall scale of each dataset
-    vector[K] alpha_Z_log = alpha_Z_raw * (mass_slow * 0.01);                   // controls degree of skew for each axis
-    vector<lower=0>[K] alpha_Z = exp(alpha_Z_log);                   // controls degree of skew for each axis
-    vector<lower=0,upper=1>[K] beta_Z_prop = inv_logit(beta_Z_prop_raw * (mass_slow * 0.01));       // controls concentration for each axis
-    vector[VOB_all+V_all+D] sds_log = sds_raw * (mass_slow * 0.01);          // scales tend to blow up so this is a hack to adjust the starting mass matrix but should have no effect on model
-    vector<lower=0>[VOB_all+V_all+D] sds = exp(sds_log);          // scales tend to blow up so this is a hack to adjust the starting mass matrix but should have no effect on model
+    vector[DRC+D] dataset_scales_log = dataset_scales_raw * mass_slow;               // overall scale of each dataset is adapted slowly so starting mode with no latent variables is not explored much
+    vector[DRC+D] dataset_scales = exp(dataset_scales_log);                          // overall scale of each dataset
+    vector[K] alpha_Z_log = alpha_Z_raw * mass_slow;                                 // concentration is slowly adapted because singularities in extremes cause overflow at beginning
+    vector<lower=0>[K] alpha_Z = exp(alpha_Z_log);                                   // concentration
+    vector<lower=0,upper=1>[K] beta_Z_prop = inv_logit(beta_Z_prop_raw * mass_slow); // skew is slowly adapted to help keep things from getting stuck in mode of less likely reflection
+    vector[VOB_all+V_all+D] sds_log = sds_raw * mass_slow;                           // scales tend to blow up so this is a hack to adjust the starting mass matrix but should have no effect on model
+    vector<lower=0>[VOB_all+V_all+D] sds = exp(sds_log);                             // scales tend to blow up so this is a hack to adjust the starting mass matrix but should have no effect on model
     vector[D] contaminant_overdisp_log = contaminant_overdisp_raw * mass_slow;
     vector<lower=0>[D] contaminant_overdisp = exp(contaminant_overdisp_log);
-    matrix[K_linear,N] Z_linear_raw_scaled = diag_pre_multiply(mass_Z_linear, Z_linear_raw);              // PCA axis scores raw
-    matrix[KG*K_gp,N] Z_gp_raw_scaled = diag_pre_multiply(mass_Z_gp, Z_gp_raw);                   // PCA axis scores for gaussian process raw
-    vector[K] latent_scales_log = latent_scales_raw;         // overall scale of each axis
-    vector[K] latent_scales;         // overall scale of each axis
-    matrix[DRC+D,K] weight_scales_log = weight_scales_raw * (mass_slow * 0.01);        // per-dataset-and-axis scales
-    matrix<lower=0>[DRC+D,K] weight_scales = exp(weight_scales_log);        // per-dataset-and-axis scales
+    matrix[VOB_all+V_all+D,K] W_norm;                                  // PCA variable loadings
+    vector[K] latent_scales_log = latent_scales_raw;                   // initialize with raw values
+    vector[K] latent_scales;                                           // overall scale of each axis
+    matrix[DRC+D,K] weight_scales_log = weight_scales_raw * mass_slow; // per-dataset-and-axis scales
+    matrix<lower=0>[DRC+D,K] weight_scales = exp(weight_scales_log);   // per-dataset-and-axis scales
     matrix[K,N] Z;
     matrix[K,N_var_groups] Z_higher;
     matrix[VOB,K] W;
@@ -231,7 +224,7 @@ transformed parameters {
     latent_scales_log[idx_scales] = log_positive_ordered_transform(latent_scales_log[idx_scales]);
     latent_scales_log[1:K_linear] = log_positive_ordered_transform(latent_scales_log[1:K_linear]);
     Z[1:K_linear,]
-        = transform_MVN_kumaraswamy(Z_linear_raw_scaled,
+        = transform_MVN_kumaraswamy(Z_linear_raw,
                                     alpha_Z[1:K_linear],
                                     alpha_Z[1:K_linear] .* beta_Z_prop[1:K_linear]); // first axes are independent
     for(g in 1:KG) {
@@ -239,12 +232,13 @@ transformed parameters {
         int s = K_gp * (g-1) + 1;
         int f = K_gp * g;
         Z[(K_linear + s):(K_linear + f),]
-            = transform_MVN_kumaraswamy(Z_gp_raw_scaled[s:f,] * L,
+            = transform_MVN_kumaraswamy(Z_gp_raw[s:f,] * L,
                                         alpha_Z[(K_linear + s):(K_linear + f)],
                                         alpha_Z[(K_linear + s):(K_linear + f)] .* beta_Z_prop[(K_linear + s):(K_linear + f)]);
         latent_scales_log[(K_linear + s):(K_linear + f)] = log_positive_ordered_transform(latent_scales_log[(K_linear + s):(K_linear + f)]);
     } // other axes are dependent on the first axes through gaussian processes
     latent_scales = exp(latent_scales_log);
+    W_norm = diag_post_multiply(W_raw, latent_scales);
     Z_higher = Z * samp2group;
     for(k in 1:K) {
         corr_sites[k]
@@ -290,6 +284,7 @@ transformed parameters {
 model {
     // data wrangling (should replace some with transformed data indices)
     matrix[K,N_all] Z_Z_higher = append_col(Z,Z_higher);
+    vector[VOB+V+D] intercept_scales;
     vector[VOB_all+V_all+D] dsv;
     matrix[VOB_all+V_all+D,K] wsn;
     vector[F_higher] sds_log_abundance_higher;
@@ -306,11 +301,26 @@ model {
     int i_Y_higher = 1;
     int i_multinom = 1;
     for(drc in 1:DRC) {
+        intercept_scales[(sum_M[drc] + 1):(sum_M[drc] + M[drc])] = segment(var_scales, sum_M_all[drc] + 1, M[drc]);
+        if(M_all[drc] > M[drc]) {
+            intercept_scales[(sum_M[drc] + 1):(sum_M[drc] + M[drc])] =
+                sqrt(square(intercept_scales[(sum_M[drc] + 1):(sum_M[drc] + M[drc])])
+                     + to_matrix(segment(mm, sum_MxM_all[drc] + 1, MxM_all[drc]), M[drc], M_higher[drc])
+                       * square(segment(var_scales, sum_M_all[drc] + M[drc] + 1, M_higher[drc])));
+        }
         for(k in 1:K) {
             wsn[(sum_M_all[drc] + 1):(sum_M_all[drc] + M_all[drc]), k] = rep_vector(weight_scales[drc,k], M_all[drc]);
         }
         dsv[(sum_M_all[drc] + 1):(sum_M_all[drc] + M_all[drc])] = rep_vector(dataset_scales_log[drc], M_all[drc]);
         if(drc <= D) {
+            intercept_scales[(VOB + sum_M[drc] + 1):(VOB + sum_M[drc] + M[drc])] = segment(var_scales, VOB_all + sum_M_all[drc] + 1, M[drc]);
+            intercept_scales[VOB + V + drc] = var_scales[VOB_all + V_all + drc];
+            if(M_all[drc] > M[drc]) {
+                intercept_scales[(VOB + sum_M[drc] + 1):(VOB + sum_M[drc] + M[drc])] =
+                    sqrt(square(intercept_scales[(VOB + sum_M[drc] + 1):(VOB + sum_M[drc] + M[drc])])
+                         + to_matrix(segment(mm, sum_MxM_all[drc] + 1, MxM_all[drc]), M[drc], M_higher[drc])
+                           * square(segment(var_scales, VOB_all + sum_M_all[drc] + M[drc] + 1, M_higher[drc])));
+            }
             for(k in 1:K) {
                 wsn[(VOB_all + sum_M_all[drc] + 1):(VOB_all + sum_M_all[drc] + M_all[drc]), k] = rep_vector(weight_scales[DRC+drc,k], M_all[drc]);
                 wsn[VOB_all + V_all + drc, k] = weight_scales[DRC+drc,k];
@@ -321,22 +331,19 @@ model {
     }
     // end data wrangling
     // priors
-    target += std_normal_lupdf(dataset_scales);                                                              // entire datasets may have uniformly biased difference in scale compared to priors
-    target += dataset_scales_log;                                                                            //jacobian
+    target += std_normal_lupdf(dataset_scales) + sum(dataset_scales_log);                                    // entire datasets may have uniformly biased difference in scale compared to priors
     target += normal_lupdf(sds_log | dsv, 1);                                                                // per-variable sigmas shrink toward dataset scales
-    target += student_t_lupdf(intercepts | 5, prior_intercept_centers, 2.5 * prior_intercept_scales);        // overall abundance and center of variables may differ from priors
-    target += student_t_lupdf(binary_count_intercepts | 5, binary_count_intercept_centers, 2.5);             // overall prevalence may differ from priors
-    target += student_t_lupdf(binary_count_dataset_intercepts | 5, 0, 2.5);                                  // allow entire count datasets to have biased difference in prevalence compared to priors
-    target += cauchy_lupdf(latent_scales[1] | 0, global_scale_prior) + latent_scales_raw[1];                 // first axis has scale of global scale prior, shrunk toward zero, with jacobian correction for putting prior on transformed first scale
-    target += normal_lupdf(latent_scales_raw[2:] | 0, 0.1);                                                  // other axes have scale with logistic normal between zero and the previous axis
-    target += normal_lupdf(to_vector(weight_scales_log) | to_vector(rep_matrix(latent_scales_log, DRC+D)), 0.1); // sparse selection of datasets per axis
-    target += generalized_normal_lpdf(inv_log_less_contamination | 0, inv_log_max_contam, shape_gnorm);      // shrink amount of contamination in 'true zeros' toward zero
-    target += normal_lupdf(contaminant_overdisp_log | 0, 0.1);                                                // shrink overdispersion of contaminant counts in 'true zeros' toward zero
-    target += normal_lupdf(alpha_Z_log | 0, 0.1);                                                             //
-    target += normal_lupdf(beta_Z_prop_raw * (mass_slow * 0.01) | 0, 0.1);                                                              // Z should significantly skewed
-    target += student_t_lupdf(to_vector(W_norm) | nu_residuals, 0, to_vector(wsn));
-    target += std_normal_lupdf(to_vector(Z_linear_raw_scaled));                                              //
-    target += std_normal_lupdf(to_vector(Z_gp_raw_scaled));                                                  // gp effects, prior to correlation with cholesky
+    target += normal_lupdf(intercepts | prior_intercept_centers, 25 * intercept_scales);                     //
+    target += inv_gamma_lupdf(latent_scales[1] | 1, global_scale_prior) + latent_scales_log[1];              // first axis has minimum scale of global scale prior, shrunk toward that value, with jacobian correction for putting prior on transformed first scale
+    target += std_normal_lupdf(latent_scales_raw[2:]);                                                       // other axes have scale with logistic normal between zero and the previous axis
+    target += generalized_std_normal_lpdf(to_vector(weight_scales) | shape_gnorm) + sum(weight_scales_log);  // sparse selection of datasets per axis
+    target += generalized_std_normal_lpdf(inv_log_less_contamination ./ inv_log_max_contam | shape_gnorm);   // shrink amount of contamination in 'true zeros' toward zero
+    target += normal_lupdf(contaminant_overdisp_log | 0, 0.1);                                               // shrink overdispersion of contaminant counts in 'true zeros' toward zero
+    target += generalized_std_normal_lpdf(alpha_Z_log | shape_gnorm);                                        // extreme values of concentration tend to blow up sampling, but want very flat prior within reasonable range
+    target += generalized_std_normal_lpdf(beta_Z_prop_raw * mass_slow + 1 | shape_gnorm);                    // Z should significantly skewed to prevent reflections and orient categorical-like variables. Kuramaswamy skews to left by default so this emphasizes same direction
+    target += student_t_lupdf(to_vector(W_raw) | 5, 0, to_vector(wsn));                                      // sparsity should help prevent arbitrary rotation and makes axes more interpretable
+    target += std_normal_lupdf(to_vector(Z_linear_raw));                                                     // normal density required for raw parameter in order to transform to kuramaswamy
+    target += std_normal_lupdf(to_vector(Z_gp_raw));                                                         // gp effects, prior to correlation with cholesky and transformation to kuramaswamy
     target += inv_gamma_lupdf(rho_sites | 5, 5 * rho_sites_prior);                                           // length scale for gaussian process on sites
     target += inv_gamma_lupdf(to_vector(rho_Z) | rho_Z_shape, rho_Z_scale);                                  // length scale for gaussian process on PCA axis scores
     // end priors
@@ -348,15 +355,15 @@ model {
               + W[(sum_M[d] + 1):(sum_M[d] + M[d]),]
                 * Z_Z_higher[,idx_ID[d,1:sum_ID[d]]];
         matrix[M[d],sum_ID[d]] prevalence
-            = rep_matrix(binary_count_dataset_intercepts[d]
-                         + segment(binary_count_intercepts, sum_M[d] + 1, M[d]),
+            = rep_matrix(intercepts[VOB+V+d]
+                         + segment(intercepts, VOB + sum_M[d] + 1, M[d]),
                          sum_ID[d])
               + W_binary_counts[(sum_M[d] + 1):(sum_M[d] + M[d]),]
                 * Z_Z_higher[,idx_ID[d,1:sum_ID[d]]];
         matrix[M[d],sum_ID[d]] abundance_contam
             = rep_matrix(segment(intercepts, sum_M[d] + 1, M[d])
-                         + log_inv_logit(binary_count_dataset_intercepts[d]
-                                      + segment(binary_count_intercepts, sum_M[d] + 1, M[d]))
+                         + log_inv_logit(intercepts[VOB+V+d]
+                                      + segment(intercepts, VOB + sum_M[d] + 1, M[d]))
                          + log_less_contamination[d],
               sum_ID[d]);
         matrix[M[d],sum_ID[d]] abundance_observed

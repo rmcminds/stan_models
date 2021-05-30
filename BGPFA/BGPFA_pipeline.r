@@ -32,13 +32,12 @@ if(exists('myargs')) {if(length(myargs)==1) {input_prefix <- myargs[[1]]}} else 
 preprocess_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/intermediate/')
 include_path <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utility/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
+source(file.path(model_dir, 'functions.r'))
 model_name <- 'BGPFA'
 engine <- c('sampling','advi')[2]
 mass_slow <- 1 / 100 # multiplied by select raw parameters so that they initially are explored slower during sampling
-mass_Z_linear <- 0.5^(1:K_linear) * 2
-if(KG > 0) { mass_Z_gp <- as.vector(sapply(1:KG, function(x) 0.5^(1:K_gp) * 0.5^x * 2)) } else { mass_Z_gp <- vector() }
 opencl <- FALSE
-output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_slow_', nMicrobeKeep)
+output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
 
 dir.create(output_prefix, recursive = TRUE)
 
@@ -49,7 +48,7 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                           paste0('file=', file.path(output_prefix, 'samples_sampling.csv')),
                                           paste0('refresh=', 1),
                                           'method=sample algorithm=hmc',
-                                          'stepsize=100',
+                                          'stepsize=1',
                                           'engine=nuts',
                                           'max_depth=10',
                                           'adapt t0=10',
@@ -119,6 +118,7 @@ rownames(in_data$mb16S) <- sample_data[match(rownames(in_data$mb16S), sample_dat
 in_data$mb16S <-in_data$mb16S[order(rownames(in_data$mb16S)),]
 
 bacttree <- read.tree(file.path(preprocess_prefix, '20201231/TARA_PACIFIC_16S_asv_CO-0-filtered_combined_filtered_aligned.tree'))
+bacttree$tip.label <- sub('^_R_','',bacttree$tip.label)
 bacttreeY <- drop.tip(bacttree, bacttree$tip.label[!bacttree$tip.label %in% colnames(in_data$mb16S)])
 
 #colnames(tax) <- c('Root','Domain','Phylum','Class','Order','Family','Genus')
@@ -164,6 +164,7 @@ rownames(in_data$mb18S) <- sample_data[match(rownames(in_data$mb18S), sample_dat
 in_data$mb18S <-in_data$mb18S[order(rownames(in_data$mb18S)),]
 
 euktree <- read.tree(file.path(preprocess_prefix, '20210102/TARA_PACIFIC_18SV9_4191_samples_v202004.OTU.filtered_CO-0-filtered_combined_filtered_aligned.tree'))
+euktree$tip.label <- sub('^_R_','',euktree$tip.label)
 euktreeY <- drop.tip(euktree, euktree$tip.label[!euktree$tip.label %in% colnames(in_data$mb18S)])
 euktreeY.root <- MidpointRooter:::midpoint.root2(euktreeY)
 euksnotintree <- colnames(in_data$mb18S)[!colnames(in_data$mb18S) %in% euktree$tip.label]
@@ -882,6 +883,15 @@ mm_h$sites <- sapply(names_mm_h$sites, function(x) grepl(x,colnames(in_data$site
 prior_scales_sites <- apply(matrix(as.numeric(in_data$sites > 0),ncol=ncol(in_data$sites)) %*% t(MASS:::ginv(cbind(1,diag(ncol(in_data$sites)),mm_h$sites))[-1,]),2,sd,na.rm=TRUE)
 prior_scales_sites[prior_scales_sites==0] <- min(c(prior_scales_sites[prior_scales_sites>0],1)) / 2
 
+intercept_fun <- function(x) {
+    if(sum(x,na.rm=TRUE) != sum(!is.na(x)))
+        mean(x,na.rm=TRUE)
+    else
+        sum(x,na.rm=TRUE)/(sum(!is.na(x))+1)
+}
+binary_count_intercepts_inits_log_list <- sapply(names(in_data)[1:D], function(d) log(apply(in_data[[d]] > 0, 2, intercept_fun)))
+binary_count_intercepts_inits <- logit(exp(unlist(binary_count_intercepts_inits_log_list)))
+
 ii_fun <- function(x,M,mm) {
     if(M[[x]] == 1) {
         logit(mean(mm[,sum(M[0:x])], na.rm=TRUE))
@@ -907,16 +917,12 @@ intercepts_inits <- c(inits_intercepts$mb16S,
                       unlist(sapply(1:length(M_ephoto), ii_fun, M_ephoto, in_data$ephoto)),
                       unlist(sapply(1:length(M_spec), ii_fun, M_spec, in_data$species)),
                       unlist(sapply(1:length(M_svd), ii_fun, M_svd, in_data$svd)),
-                      {temp <- log(apply(in_data$sites,2,mean,na.rm=TRUE)); temp - mean(temp)})
+                      {temp <- log(apply(in_data$sites,2,mean,na.rm=TRUE)); temp - mean(temp)},
+                      binary_count_intercepts_inits,
+                      rep(0,4))
 
-intercept_fun <- function(x) {
-    if(sum(x,na.rm=TRUE) != sum(!is.na(x)))
-        mean(x,na.rm=TRUE)
-    else
-        sum(x,na.rm=TRUE)/(sum(!is.na(x))+1)
-}
-binary_count_intercepts_inits_log_list <- sapply(names(in_data)[1:D], function(d) log(apply(in_data[[d]] > 0, 2, intercept_fun)))
-binary_count_intercepts_inits <- logit(exp(unlist(binary_count_intercepts_inits_log_list)))
+prior_binary_count_intercept_scales <- sapply(names(in_data)[1:D], function(d) {out <- apply(in_data[[d]] > 0, 2, sd); out[out==0] <- min(c(out[out>0],1)) / 2; return(out)})
+prior_binary_count_dataset_intercept_scales <- sapply(names(prior_binary_count_intercept_scales), function(d) exp(mean(log(prior_binary_count_intercept_scales[[d]]))))
 
 multinomial_nuisance_inits <- c(inits_nuisance$mb16S,
                                 inits_nuisance$mb18S,
@@ -941,19 +947,19 @@ prior_scales_abundance <- sapply(names(inits_abundance_solved), function(d) appl
 prior_scales_prevalence <- sapply(names(inits_abundance_solved), function(d) {out <- apply(inits_prevalence_solved[[d]], 2, sd); out[out==0] <- min(c(out[out>0],1)) / 2; return(out)})
 
 prior_scales <- unlist(c(prior_scales_abundance,
-                          apply(sapply(1:ncol(biomarkersInv), function(x) matrix(inits_biomarkers[,biomarkersInv[,x]!=0],nrow=nrow(inits_biomarkers)) %*% biomarkersInv[biomarkersInv[,x]!=0,x]),2,sd,na.rm=TRUE),
-                          apply(in_data$t2 %*% t(MASS:::ginv(cbind(diag(ncol(in_data$t2)),mm_h$t2))),2,sd),
-                          apply(in_data$t3 %*% t(MASS:::ginv(cbind(diag(ncol(in_data$t3)),mm_h$t3))),2,sd),
-                          apply(sapply(1:ncol(fabT1aggMatInv), function(x) matrix(in_data$fab_T1_agg[,fabT1aggMatInv[,x]!=0],nrow=nrow(in_data$fab_T1_agg)) %*% fabT1aggMatInv[fabT1aggMatInv[,x]!=0,x]),2,sd,na.rm=TRUE),
-                          apply(in_data$fab_T2_agg,2,sd,na.rm=TRUE),
-                          apply(in_data$snps,2,sd,na.rm=TRUE),
-                          prior_scales_hphoto,
-                          prior_scales_ephoto,
-                          apply(in_data$species,2,sd,na.rm=TRUE),
-                          prior_scales_svd,
-                          prior_scales_sites,
+                         apply(sapply(1:ncol(biomarkersInv), function(x) matrix(inits_biomarkers[,biomarkersInv[,x]!=0],nrow=nrow(inits_biomarkers)) %*% biomarkersInv[biomarkersInv[,x]!=0,x]),2,sd,na.rm=TRUE),
+                         apply(in_data$t2 %*% t(MASS:::ginv(cbind(diag(ncol(in_data$t2)),mm_h$t2))),2,sd),
+                         apply(in_data$t3 %*% t(MASS:::ginv(cbind(diag(ncol(in_data$t3)),mm_h$t3))),2,sd),
+                         apply(sapply(1:ncol(fabT1aggMatInv), function(x) matrix(in_data$fab_T1_agg[,fabT1aggMatInv[,x]!=0],nrow=nrow(in_data$fab_T1_agg)) %*% fabT1aggMatInv[fabT1aggMatInv[,x]!=0,x]),2,sd,na.rm=TRUE),
+                         apply(in_data$fab_T2_agg,2,sd,na.rm=TRUE),
+                         apply(in_data$snps,2,sd,na.rm=TRUE),
+                         prior_scales_hphoto,
+                         prior_scales_ephoto,
+                         apply(in_data$species,2,sd,na.rm=TRUE),
+                         prior_scales_svd,
+                         prior_scales_sites,
                          prior_scales_prevalence,
-                         sapply(names(prior_scales_prevalence), function(d) exp(mean(log(prior_scales_prevalence[[d]]))))))
+                         prior_binary_count_dataset_intercept_scales))
 
 prior_intercept_scales <- c(prior_intercept_scales_mb16S,
                             prior_intercept_scales_mb18S,
@@ -969,7 +975,9 @@ prior_intercept_scales <- c(prior_intercept_scales_mb16S,
                             apply(in_data$ephoto,2,sd,na.rm=TRUE),
                             apply(in_data$species,2,sd,na.rm=TRUE),
                             apply(in_data$svd,2,sd,na.rm=TRUE),
-                            apply(in_data$sites,2,sd,na.rm=TRUE))
+                            apply(in_data$sites,2,sd,na.rm=TRUE),
+                            prior_binary_count_intercept_scales,
+                            prior_binary_count_dataset_intercept_scales)
 
 inv_log_max_contam <- 1 / log(sapply(names(in_data)[1:D], function(d) max(apply(diag(1/rowSums(in_data[[d]])) %*% in_data[[d]], 2, function(x) max(x[x>0]) / min(x[x>0])))))
 
@@ -998,7 +1006,6 @@ names(inits_counts) <- names(inits_abundance)
 scales_observed <- sapply(names(inits_counts), function(d) apply(inits_counts[[d]], 2, sd))
 
 prior_intercept_centers <- intercepts_inits
-binary_count_intercept_centers <- binary_count_intercepts_inits
 
 M_higher <- c(ncol(mm_h$mb16S), ncol(mm_h$mb18S), 0, ncol(mm_h$its2), ncol(mm_h$biomarkers), ncol(mm_h$t2), ncol(mm_h$t3), ncol(mm_h$fab_T1_agg), 0, 0, ncol(mm_h$hphoto), ncol(mm_h$ephoto), 0, ncol(mm_h$svd), ncol(mm_h$sites))
 M_all <- M + M_higher
@@ -1059,9 +1066,7 @@ data <- list(N            = N,
              G_higher = sum(G_higher),
              scales_observed                = unlist(scales_observed) * mass_slow,
              prior_scales                   = prior_scales,
-             prior_intercept_scales         = prior_intercept_scales,
              prior_intercept_centers        = prior_intercept_centers,
-             binary_count_intercept_centers = binary_count_intercept_centers,
              size_mm = size_mm,
              mm     = mm,
              global_scale_prior = global_scale_prior,
@@ -1078,9 +1083,7 @@ data <- list(N            = N,
              nu_residuals        = nu_residuals,
              inv_log_max_contam  = inv_log_max_contam,
              shape_gnorm         = shape_gnorm,
-             mass_slow     = mass_slow,
-             mass_Z_linear = mass_Z_linear,
-             mass_Z_gp     = mass_Z_gp)
+             mass_slow           = mass_slow)
 
 #### create initializations
 inits_counts_norm <- lapply(names(inits_counts), function(d) {
@@ -1113,44 +1116,55 @@ prevalence_higher_vector_inits <- unlist(c(sapply(1:N, function(x) if(I[1,x]) in
                                            sapply(1:N, function(x) if(I[3,x]) inits_prevalence_solved_norm$rna[I_cs[3,x],-(1:M[[3]])]),
                                            sapply(1:N, function(x) if(I[4,x]) inits_prevalence_solved_norm$its2[I_cs[4,x],-(1:M[[4]])])))
 
+inits_P_higher <- list(biomarkers = {temp <- inits_biomarkers %*% t(MASS:::ginv(cbind(1,diag(ncol(inits_biomarkers)),mm_h$biomarkers)))[,-(1:(M['biomarkers']+1))]; for(j in 1:ncol(temp)) temp[is.na(temp[,j]),j] <- mean(temp[,j],na.rm=TRUE); temp},
+                       t2 = in_data$t2 %*% t(MASS:::ginv(cbind(1,diag(ncol(in_data$t2)),mm_h$t2)))[,-(1:(M['t2']+1))],
+                       t3 = in_data$t3 %*% t(MASS:::ginv(cbind(1,diag(ncol(in_data$t3)),mm_h$t3)))[,-(1:(M['t3']+1))],
+                       fab_T1_agg = {temp <- in_data$fab_T1_agg %*% t(MASS:::ginv(cbind(1,diag(ncol(in_data$fab_T1_agg)),mm_h$fab_T1_agg)))[,-(1:(M['fab_T1_agg']+1))]; for(j in 1:ncol(temp)) temp[is.na(temp[,j]),j] <- mean(temp[,j],na.rm=TRUE); temp})
+
+inits_P_higher <- unlist(sapply(1:length(inits_P_higher), function(r) {
+    sapply(1:N_all, function(n) {
+        sapply(1:M_higher[D+r], function(m) {
+            if(IR_higher[sum(M_higher[1:(D+r-1)]) - sum(M_higher[1:D]) + m, n]) mean(inits_P_higher[[r]][,m])
+        })
+    })
+}))
+
+inits_Y_higher <- list(matrix(as.numeric(in_data$hphoto > 0),ncol=ncol(in_data$hphoto)) %*% t(MASS:::ginv(cbind(1,diag(ncol(in_data$hphoto)),mm_h$hphoto))[-(1:(M['hphoto']+1)),]),
+                       matrix(as.numeric(in_data$ephoto > 0),ncol=ncol(in_data$ephoto)) %*% t(MASS:::ginv(cbind(1,diag(ncol(in_data$ephoto)),mm_h$ephoto))[-(1:(M['ephoto']+1)),]))
+
 Z_init <- matrix(rnorm((K_linear+KG*K_gp)*N), nrow=K_linear+KG*K_gp) * 1e-5
 
-latent_scales_init <- global_scale_prior * rev(2^((1:K_linear)) / 2^K_linear)
-latent_scales_raw_init <- c(log(latent_scales_init[1]), rep(0, K_linear))
+latent_scales_raw_init <- c(log(global_scale_prior), rep(0, K_linear))
 if(KG > 0) {
-    latent_scales_init <- c(latent_scales_init, rev(2^((1:K_gp)) / 2^K_gp * 0.5 * latent_scales_init[[1]]))
     latent_scales_raw_init <- c(latent_scales_raw_init, rep(0, K_gp))
 }
 if(KG > 1) {
     for(g in 2:KG) {
-        latent_scales_init <- c(latent_scales_init, rev(2^((1:K_gp)) / 2^K_gp * 0.5 * latent_scales_init[[K_linear + (g-2) * K_gp + 1]]))
         latent_scales_raw_init <- c(latent_scales_raw_init, rep(0, K_gp))
     }
 }
 
 init <- list(abundance_observed_vector       = abundance_observed_vector_inits / mass_slow,
-             intercepts                      = intercepts_inits,
-             binary_count_intercepts         = binary_count_intercepts_inits,
-             binary_count_dataset_intercepts = rep(0,D),
+             intercepts                      = prior_intercept_centers,
              multinomial_nuisance            = multinomial_nuisance_inits,
              latent_scales_raw  = latent_scales_raw_init,
-             weight_scales_raw  = t(matrix(rep(log(latent_scales_init) / (mass_slow / 10), 2*D+R+C), ncol=2*D+R+C)),
+             weight_scales_raw  = matrix(1 / mass_slow, nrow=2*D+R+C, ncol=K),
              sds_raw            = rep(0, VOBplus+sum(M_all[1:D])+D),
              dataset_scales_raw = rep(0, 2*D+R+C),
              rho_sites          = as.array(rep(mean(dist_sites[lower.tri(dist_sites)]), K)),
              site_prop          = as.array(rep(0.5, K)),
              abundance_higher_vector  = abundance_higher_vector_inits,
              prevalence_higher_vector = prevalence_higher_vector_inits,
-             P_higher        = rep(0,H_higher),
+             P_higher        = inits_P_higher,
              Y_higher_vector = rep(0,sum(G_higher)),
              Z_linear_raw    = Z_init[1:K_linear,],
              Z_gp_raw        = {if(K > K_linear) Z_init[(K_linear+1):K,] else 1},
-             W_norm    = matrix(0, nrow=VOBplus+sum(M_all[1:D])+D, ncol=K),
-             rho_Z     = matrix(1e-6, nrow = K_linear, ncol = KG),
+             W_raw     = matrix(0, nrow=VOBplus+sum(M_all[1:D])+D, ncol=K),
+             rho_Z     = matrix(2 / K_gp, nrow = K_linear, ncol = KG),
              inv_log_less_contamination  = -inv_log_max_contam,
              contaminant_overdisp_raw    = rep(0,D),
              alpha_Z_raw                 = rep(0,K),
-             beta_Z_prop_raw             = rep(-2,K))
+             beta_Z_prop_raw             = rep(-1 / mass_slow,K))
 
 save.image(file.path(output_prefix, 'setup.RData'))
 
@@ -1165,9 +1179,11 @@ print(sampling_commands[[engine]])
 print(date())
 system(sampling_commands[[engine]])
 
-importparams <- c('W_norm','Z','sds','latent_scales','dataset_scales','var_scales','weight_scales','rho_sites', 'site_prop', 'corr_sites', 'binary_count_dataset_intercepts', 'log_less_contamination', 'contaminant_overdisp', 'rho_Z'[if(KG > 0) TRUE else NULL],'alpha_Z','beta_Z_prop')
+importparams <- c('W_norm','Z','sds','latent_scales','dataset_scales','var_scales','weight_scales','rho_sites', 'site_prop', 'corr_sites', 'intercepts', 'log_less_contamination', 'contaminant_overdisp', 'rho_Z'[if(KG > 0) TRUE else NULL],'alpha_Z','beta_Z_prop')
 
-stan.fit <- read_cmdstan_csv(file.path(output_prefix, paste0('samples_',engine,'.csv')),
+filter_large_stan_csv(file.path(output_prefix, paste0('samples_',engine,'.csv')), file.path(output_prefix, paste0('samples_',engine,'_filtered.csv')), importparams)
+
+stan.fit <- read_cmdstan_csv(file.path(output_prefix, paste0('samples_',engine,'_filtered.csv')),
                              variables = importparams,
                              format = 'draws_array')
 

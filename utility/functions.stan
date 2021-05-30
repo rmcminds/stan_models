@@ -2,6 +2,9 @@ functions {
     real generalized_normal_lpdf(vector y, real mu, vector alpha, real beta) {
         return sum(log(beta) - log(2) - log(alpha) - lgamma(inv(beta)) - exp(beta * log(fabs(y-mu)./alpha)));
     }
+    real generalized_std_normal_lpdf(vector y, real beta) {
+        return sum(log(beta) - log(2) - lgamma(inv(beta)) - fabs(y)^beta);
+    }
     real multi_student_t_cholesky_lpdf(matrix y, real nu, matrix mu, matrix L) {
         int N = cols(y);
         int K = cols(L);

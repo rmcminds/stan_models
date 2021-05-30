@@ -63,9 +63,11 @@ if('contaminant_overdisp' %in% importparams) {
     contaminant_overdisp <- apply(contaminant_overdisp, 3, sumfunc)
 }
 
-binary_count_dataset_intercepts <- stan.fit.draws[,,grep('binary_count_dataset_intercepts\\[.*',dimnames(stan.fit.draws)[[3]])]
-binary_count_dataset_intercepts <- apply(binary_count_dataset_intercepts, 3, sumfunc)
-names(binary_count_dataset_intercepts) <- dataset_names[1:D]
+if('binary_count_dataset_intercepts' %in% importparams) {
+    binary_count_dataset_intercepts <- stan.fit.draws[,,grep('binary_count_dataset_intercepts\\[.*',dimnames(stan.fit.draws)[[3]])]
+    binary_count_dataset_intercepts <- apply(binary_count_dataset_intercepts, 3, sumfunc)
+    names(binary_count_dataset_intercepts) <- dataset_names[1:D]
+}
 
 DRC <- D+R+C
 

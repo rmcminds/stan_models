@@ -76,6 +76,26 @@ statusUpdate <- function(iter, N) {
     }
 }
 
+bridge_sampler_diag <- function(sf, df, warmup=0, repetitions = 1, method = "normal", cores = 1, use_neff = TRUE, maxiter = 1000, silent = FALSE, verbose = FALSE, ...) {
+    #concepts largely copied from bridge_sampler.stanreg
+    samples <- coda::as.mcmc.list(lapply(df, FUN = function(f) {
+        cat('Loading data\n')
+        nupars <- rstan::get_num_upars(sf)
+        #skip first cols ("lp__", "accept_stat__", "stepsize__", "treedepth__", "n_leapfrog__", "divergent__", "energy__") and all cols after the number of unconstrained params
+        coda::as.mcmc(as.matrix(data.table::fread(sep=',', cmd=paste0('grep -v "^#" "', f, '" | tail -n +', warmup+1), select = 8:(nupars+7))))
+    }))
+    lb <- rep(-Inf, ncol(samples[[1]]))
+    ub <- rep(Inf, ncol(samples[[1]]))
+    names(lb) <- names(ub) <- colnames(samples[[1]])
+    cat('Bridge sampling\n')
+    bridge_output <- bridge_sampler(samples = samples, log_posterior = bridgesampling:::.stan_log_posterior,
+                                    data = list(stanfit = sf), lb = lb, ub = ub, repetitions = repetitions,
+                                    method = method, cores = cores, use_neff = use_neff,
+                                    packages = "rstan", maxiter = maxiter, silent = silent,
+                                    verbose = verbose)
+    return(bridge_output)
+}
+
 summarizeLcGLM <- function(combineTrees    = T,
                            separateTrees   = T,
                            whichTrees      = NULL,
@@ -128,6 +148,8 @@ summarizeLcGLM <- function(combineTrees    = T,
             dir.create(currtabledir, recursive = T)
             dir.create(currdatadir, recursive = T)
 
+            csvfiles <- file.path(subdir, paste0('samples_chain', (1:NTrees)[fitModes == 0], '.csv'))
+
             cat('\nSummarizing effects of all trees combined:\n')
             cat(paste0(as.character(Sys.time()), '\n'))
 
@@ -157,6 +179,8 @@ summarizeLcGLM <- function(combineTrees    = T,
             dir.create(currplotdir, recursive = T)
             dir.create(currtabledir, recursive = T)
             dir.create(currdatadir, recursive = T)
+
+            csvfiles <- file.path(subdir, paste0('samples_chain', i, '.csv'))
 
             cat(paste0('\nSummarizing Tree ', i, ':\n'))
             cat(paste0(as.character(Sys.time()), '\n'))
@@ -191,11 +215,11 @@ summarizeLcGLM <- function(combineTrees    = T,
 
             ## summarize the mean branch lengths of the microbes
             newEdges <- apply(array(extract(fit[[i]],
-                                            pars     = 'microbeScales',
+                                            pars     = 'microbeNewEdges',
                                             permuted = F),
                                     dim = c(NMCSamples - warmup,
                                             NChains,
-                                            NMicrobeNodes))^2,
+                                            NMicrobeNodes)),
                               3,
                               mean)
             finalMicrobeTree.newEdges <- finalMicrobeTree
@@ -211,11 +235,11 @@ summarizeLcGLM <- function(combineTrees    = T,
 
             ## summarize the mean branch lengths of the hosts
             newEdges <- apply(array(extract(fit[[i]],
-                                            pars     = 'hostScales',
+                                            pars     = 'hostNewEdges',
                                             permuted = F),
                                     dim = c(NMCSamples - warmup,
                                             NChains,
-                                            NHostNodes))^2,
+                                            NHostNodes)),
                               3,
                               mean)
             hostTreesSampled.newEdges <- hostTreesSampled[[i]]
@@ -456,12 +480,14 @@ summarizeLcGLM <- function(combineTrees    = T,
                                               inc_warmup = T),
                                       dim = c(NMCSamples,
                                               NChains,
-                                              3),
+                                              NFactors + 3),
                                       dimnames = list(sample  = NULL,
                                                       chain   = NULL,
-                                                      effect  = c('Prevalence',
+                                                      effect  = c(paste0('Specificity.',
+                                                                         names(groupedFactors)),
+                                                                  'Prevalence',
                                                                   'ADiv',
-                                                                  'Specificty')))
+                                                                  'host.specificty')))
                 metaVarPropsPlot <- NULL
                 for(j in 1:NChains) {
                     metaVarPropsPlot <- rbind(metaVarPropsPlot, metaVarProps[(warmup + 1):NMCSamples, j,])
@@ -484,10 +510,12 @@ summarizeLcGLM <- function(combineTrees    = T,
                                             inc_warmup = T),
                                     dim = c(NMCSamples,
                                             NChains,
-                                            3),
+                                            NSubfactors + 3),
                                     dimnames = list(sample  = NULL,
                                                     chain   = NULL,
-                                                    effect  = c('Prevalence',
+                                                    effect  = c(paste0('Specificity.',
+                                                                       unlist(groupedFactors)),
+                                                                'Prevalence',
                                                                 'ADiv',
                                                                 'Specificty')))
                 metaScalesPlot <- NULL
@@ -505,36 +533,13 @@ summarizeLcGLM <- function(combineTrees    = T,
                 save(metaScales, file = file.path(currdatadir, 'metaScales.RData'))
                 ##
 
-                ## ornstein-uhlenbeck parameters
-                OUAlphas <- array(extract(fit[[i]],
-                                          pars       = c('hostOUAlpha', 'microbeOUAlpha'),
-                                          permuted   = F,
-                                          inc_warmup = T),
-                                  dim = c(NMCSamples,
-                                          NChains,
-                                          2),
-                                  dimnames = list(sample = NULL,
-                                                  chain  = NULL,
-                                                  alpha  = c('host', 'microbe')))
-                OUAlphaPlot <- NULL
-                for(j in 1:NChains) {
-                    OUAlphaPlot <- rbind(OUAlphaPlot, OUAlphas[(warmup + 1):NMCSamples, j,])
-                }
-                pdf(file   = file.path(currplotdir, 'OUAlphas.pdf'),
-                    width  = 7,
-                    height = 7)
-                boxplot(OUAlphaPlot,
-                        xlab = 'Host or microbe',
-                        ylab = 'alpha')
-                graphics.off()
-
-                save(OUAlphas, file = file.path(currdatadir, 'OUAlphas.RData'))
-                ##
-
             }, error = function(e) print(e))
         }
 
         if(sumVarMods) {
+
+            cat('\n\tLoading raw meta-variance\n\t')
+            cat(paste0(as.character(Sys.time()), '\n'))
 
             if(!exists('metaScales')) {
                 metaScales <- array(extract(fit[[i]],
@@ -543,16 +548,21 @@ summarizeLcGLM <- function(combineTrees    = T,
                             inc_warmup = T),
                     dim = c(NMCSamples,
                             NChains,
-                            3),
+                            NSubfactors + 3),
                     dimnames = list(sample  = NULL,
                                     chain   = NULL,
-                                    effect  = c('Prevalence',
+                                    effect  = c(paste0('Specificity.',
+                                                       unlist(groupedFactors)),
+                                                'Prevalence',
                                                 'ADiv',
                                                 'Specificty')))
             }
 
             ## extract variance modifier terms from the fit model
-            phyloLogVarMultPrev <- array(extract(fit[[i]],
+            csvBuffer <- read_stan_csv_subset(csvfiles,
+                                              params = c('phyloLogVarMultPrev','phyloLogVarMultADiv','phyloLogVarMultRaw','phyloLogVarMultFacts'))
+
+            phyloLogVarMultPrev <- array(extract(csvBuffer,
                                                  pars       = 'phyloLogVarMultPrev',
                                                  permuted   = F,
                                                  inc_warmup = T),
@@ -563,7 +573,7 @@ summarizeLcGLM <- function(combineTrees    = T,
                                                          chain   = NULL,
                                                          taxnode = colnames(microbeAncestors)))
 
-            phyloLogVarMultADiv <- array(extract(fit[[i]],
+            phyloLogVarMultADiv <- array(extract(csvBuffer,
                                                  pars       = 'phyloLogVarMultADiv',
                                                  permuted   = F,
                                                  inc_warmup = T),
@@ -574,7 +584,7 @@ summarizeLcGLM <- function(combineTrees    = T,
                                                          chain   = NULL,
                                                          taxnode = colnames(hostAncestors[[i]])))
 
-            phyloLogVarMultRaw <- array(extract(fit[[i]],
+            phyloLogVarMultRaw <- array(extract(csvBuffer,
                                                 pars       = 'phyloLogVarMultRaw',
                                                 permuted   = F,
                                                 inc_warmup = T),
@@ -586,93 +596,51 @@ summarizeLcGLM <- function(combineTrees    = T,
                                                         chain       = NULL,
                                                         hostnode    = colnames(hostAncestors[[i]]),
                                                         microbenode = colnames(microbeAncestors)))
+
+            phyloLogVarMultFacts <- array(extract(csvBuffer,
+                                                  pars       = 'phyloLogVarMultFacts',
+                                                  permuted   = F,
+                                                  inc_warmup = T),
+                                          dim = c(NMCSamples,
+                                                  NChains,
+                                                  NSubfactors,
+                                                  NMicrobeNodes),
+                                          dimnames = list(sample      = NULL,
+                                                          chain       = NULL,
+                                                          factor      = unlist(groupedFactors),
+                                                          microbenode = colnames(microbeAncestors)))
+
+            rm('csvBuffer')
+            gc()
             ##
 
             phyloLogVarMultScaled <- array(NA,
                                            dim = c(NMCSamples,
                                                    NChains,
-                                                   NHostNodes + 1,
+                                                   NSubfactors + NHostNodes + 1,
                                                    NMicrobeNodes + 1))
+
             for(j in 1:NMCSamples) {
                 for(k in 1:NChains) {
-                    phyloLogVarMultScaled[j,k,,] <- rbind(c(0,
-                                                            phyloLogVarMultPrev[j,k,] * metaScales[j,k,1]),
-                                                         cbind(phyloLogVarMultADiv[j,k,] * metaScales[j,k,2],
-                                                               phyloLogVarMultRaw[j,k,,] * metaScales[j,k,3]))
+                    outerFactors <- outer(metaScales[j,k, 1:NSubfactors], sqrt(microbeTreeDetails$edgeLengths))
+                    sqrtMicrobeEdges <- sqrt(microbeTreeDetails$edgeLengths) * metaScales[j,k, NSubfactors + 1]
+                    sqrtHostEdges <- sqrt(hostTreeDetails[[i]]$edgeLengths) * metaScales[j,k, NSubfactors + 2]
+                    outerEdges <- sqrt(outer(hostTreeDetails[[i]]$edgeLengths, microbeTreeDetails$edgeLengths)) * metaScales[j,k, NSubfactors + 3]
+
+                    phyloLogVarMultScaled[j,k, 1:(NSubfactors + 1), 1] <- 0
+                    phyloLogVarMultScaled[j,k, (NSubfactors + 2):(NSubfactors + NHostNodes + 1), 1] <- sqrtHostEdges * phyloLogVarMultADiv[j,k,]
+                    phyloLogVarMultScaled[j,k, 1, 2:(NMicrobeNodes + 1)] <- sqrtMicrobeEdges * phyloLogVarMultPrev[j,k,]
+                    phyloLogVarMultScaled[j,k, 2:(NSubfactors + 1), 2:(NMicrobeNodes + 1)] <- outerFactors * phyloLogVarMultFacts[j,k,,]
+                    phyloLogVarMultScaled[j,k, (NSubfactors + 2):(NSubfactors + NHostNodes + 1), 2:(NMicrobeNodes + 1)] <- outerEdges * phyloLogVarMultRaw[j,k,,]
                 }
             }
 
-            newMicrobeNHs <- array(extract(fit[[i]],
-                                    pars       = 'newMicrobeNHs',
-                                    permuted   = F,
-                                    inc_warmup = T),
-                            dim = c(NMCSamples,
-                                    NChains,
-                                    NMicrobeNodes,
-                                    2),
-                            dimnames = list(sample      = NULL,
-                                            chain       = NULL,
-                                            microbenode = substr(colnames(microbeAncestors),
-                                                                 2,
-                                                                 nchar(colnames(microbeAncestors))),
-                                            node        = NULL))
+            rm('phyloLogVarMultPrev', 'phyloLogVarMultADiv', 'phyloLogVarMultRaw', 'phyloLogVarMultFacts')
+            gc()
+
             ##
 
-            newEdgeDraws <- array(NA,
-                                  dim = c(NMCSamples,
-                                          NChains,
-                                          NMicrobeNodes),
-                                  dimnames = list(sample      = NULL,
-                                                  chain       = NULL,
-                                                  microbenode = substr(colnames(microbeAncestors),
-                                                                       2,
-                                                                       nchar(colnames(microbeAncestors)))))
-            for(j in 1:NMCSamples) {
-                for(k in 1:NChains) {
-                    newEdgeDraws[j,k,] <- apply(newMicrobeNHs[j,k,,], 1, function(x) abs(x[[1]] - x[[2]]))
-                }
-            }
-
-            newEdges <- apply(newEdgeDraws, 3, mean)
-
-            finalMicrobeTree.newEdges <- finalMicrobeTree
-            finalMicrobeTree.newEdges$edge.length <- newEdges[order(microbeTreeDetails$edgeOrder)]
-            ##
-
-            newHostNHs <- array(extract(fit[[i]],
-                                        pars       = 'newHostNHs',
-                                        permuted   = F,
-                                        inc_warmup = T),
-                                dim = c(NMCSamples,
-                                        NChains,
-                                        NHostNodes,
-                                        2),
-                                dimnames = list(sample      = NULL,
-                                                chain       = NULL,
-                                                hostnode    = colnames(hostAncestors[[i]]),
-                                                node        = NULL))
-            ##
-
-            newEdgeDraws <- array(NA,
-                                  dim = c(NMCSamples,
-                                          NChains,
-                                          NHostNodes),
-                                  dimnames = list(sample      = NULL,
-                                                  chain       = NULL,
-                                                  hostnode    = colnames(hostAncestors[[i]])))
-            for(j in 1:NMCSamples) {
-                for(k in 1:NChains) {
-                    newEdgeDraws[j,k,] <- apply(newHostNHs[j,k,,], 1, function(x) abs(x[[1]] - x[[2]]))
-                }
-            }
-
-            newEdges <- apply(newEdgeDraws, 3, mean)
-
-            hostTreesSampled.newEdges <- hostTreesSampled[[i]]
-            hostTreesSampled.newEdges$edge.length <- newEdges[order(hostTreeDetails[[i]]$edgeOrder)]
-            ##
-
-            plotmicrobetree <- ladderize(multi2di(force.ultrametric(finalMicrobeTree.newEdges), random = F))
+            plotmicrobetree <- ladderize(multi2di(force.ultrametric(finalMicrobeTree), random = F))
             if(tipNamesAreSeqs) {
                 plotmicrobetree2 <- plotmicrobetree
                 newMicrobeNames <- plotmicrobetree$tip.label
@@ -687,7 +655,7 @@ summarizeLcGLM <- function(combineTrees    = T,
             } else {
                 hclmicrobetree <- as.hclust(plotmicrobetree)
             }
-            plothosttree <- ladderize(multi2di(force.ultrametric(hostTreesSampled.newEdges), random = F), right = F)
+            plothosttree <- ladderize(multi2di(force.ultrametric(hostTreesSampled[[i]]), random = F), right = F)
             hclhosttree <- as.hclust(plothosttree)
 
             dir.create(file.path(currtabledir, 'phyloVarianceEffects'), recursive = T)
@@ -699,11 +667,15 @@ summarizeLcGLM <- function(combineTrees    = T,
                     cat(paste0(as.character(Sys.time()), '\n'))
 
                     ##
-                    hostMat <- Matrix(makeContrastMat(NHostNodes,
-                                                      hostTreesSampled[[i]],
-                                                      NHostTips,
-                                                      hostTreesSampled[[i]]$tip.label,
-                                                      contrastLevels[[contrast]][['host']]))
+                    hostMat <- diag(NHostNodes + NSubfactors + 1)
+                    hostMat[(NSubfactors + 2):(NSubfactors + NHostNodes + 1),
+                            (NSubfactors + 2):(NSubfactors + NHostNodes + 1)] <- makeContrastMat(NHostNodes,
+                                                                                                 hostTreesSampled[[i]],
+                                                                                                 NHostTips,
+                                                                                                 hostTreesSampled[[i]]$tip.label,
+                                                                                                 contrastLevels[[contrast]][['host']])[-1, -1]
+                    hostMat <- Matrix(hostMat)
+
                     microbeMat <- Matrix(t(makeContrastMat(NMicrobeNodes,
                                                            finalMicrobeTree,
                                                            NMicrobeTips,
@@ -715,11 +687,12 @@ summarizeLcGLM <- function(combineTrees    = T,
                     matMult <- array(NA,
                                      dim = c(NMCSamples,
                                              NChains,
-                                             NHostNodes + 1,
+                                             NSubfactors + NHostNodes + 1,
                                              NMicrobeNodes + 1),
                                      dimnames = list(sample      = NULL,
                                                      chain       = NULL,
                                                      hostnode    = c('microbePrevalence',
+                                                                     unlist(groupedFactors),
                                                                      colnames(hostAncestors[[i]])),
                                                      microbenode = c('alphaDiversity',
                                                                      colnames(microbeAncestors))))
@@ -733,7 +706,7 @@ summarizeLcGLM <- function(combineTrees    = T,
                     }
 
                     allRes <- NULL
-                    for(j in 1:(NHostNodes + 1)) {
+                    for(j in 1:(NSubfactors + NHostNodes + 1)) {
                         temp <- monitor(array(matMult[,,j,],
                                               dim = c(NMCSamples,
                                                       NChains,
@@ -742,22 +715,25 @@ summarizeLcGLM <- function(combineTrees    = T,
                                         probs  = c(0.05, 0.95),
                                         print  = F)
                         temp <- cbind(hostNode = c('microbePrevalence',
+                                                   unlist(groupedFactors),
                                                    paste0('host_', colnames(hostAncestors[[i]])))[[j]], temp)
-                        rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
+                        temp <- cbind(microbeNode = c('alphaDiversity',
+                                                      rownames(microbeAncestors)),
+                                      temp)
                         allRes <- rbind(allRes, temp)
                         statusUpdate(j, NHostNodes)
                     }
 
-                    cat('microbeNode\t', file = file.path(currtabledir, 'phyloVarianceEffects', paste0(contrast, '.txt')))
                     write.table(allRes,
                                 file   = file.path(currtabledir, 'phyloVarianceEffects', paste0(contrast, '.txt')),
                                 sep    = '\t',
                                 quote  = F,
+                                row.names = F,
                                 append = T)
                     ##
 
-                    allRes <- matrix(NA, nrow = NMicrobeNodes + 1, ncol = NHostNodes + 1)
-                    for(j in 1:(NHostNodes + 1)) {
+                    allRes <- matrix(NA, nrow = NMicrobeNodes + 1, ncol = NSubfactors + NHostNodes + 1)
+                    for(j in 1:(NSubfactors + NHostNodes + 1)) {
                         for(k in 1:(NMicrobeNodes + 1)) {
                             allRes[k,j] <- median(matMult[,,j,k])
                         }
@@ -766,7 +742,7 @@ summarizeLcGLM <- function(combineTrees    = T,
                                           substr(colnames(microbeAncestors),
                                                  2,
                                                  nchar(colnames(microbeAncestors))))
-                    colnames(allRes) <- c('microbePrevalence', colnames(hostAncestors[[i]]))
+                    colnames(allRes) <- c('microbePrevalence', unlist(groupedFactors), colnames(hostAncestors[[i]]))
                     ##
 
                     save(allRes, file = file.path(currdatadir, paste0('variance_heatmap_', contrast, '.RData')))
@@ -793,12 +769,16 @@ summarizeLcGLM <- function(combineTrees    = T,
 
                 }, error = function(e) print(e))
             }
+
+            rm('phyloLogVarMultScaled', 'matMult', 'allRes')
+            gc()
         }
 
         if(sumEffects) {
 
             ## extract effects from model
-            scaledMicrobeNodeEffects <- array(extract(fit[[i]],
+            scaledMicrobeNodeEffects <- array(extract(read_stan_csv_subset(csvfiles,
+                                                                           params = 'scaledMicrobeNodeEffects'),
                                                       pars       = 'scaledMicrobeNodeEffects',
                                                       permuted   = F,
                                                       inc_warmup = T),
@@ -817,7 +797,8 @@ summarizeLcGLM <- function(combineTrees    = T,
             ##
 
             ## calculate base-level effects (negative sum of all others in category)
-            baseLevelEffects <- array(extract(fit[[i]],
+            baseLevelEffects <- array(extract(read_stan_csv_subset(csvfiles,
+                                                                   params = 'baseLevelEffects'),
                                               pars       = 'baseLevelEffects',
                                               permuted   = F,
                                               inc_warmup = T),
@@ -894,17 +875,17 @@ summarizeLcGLM <- function(combineTrees    = T,
                                         probs  = c(0.05, 0.95),
                                         print  = F)
                         temp <- cbind(hostEffect = effectNames[[j]], temp)
-                        rownames(temp) <- c('alphaDiversity', rownames(microbeAncestors))
+                        temp <- cbind(microbeNode = c('alphaDiversity', rownames(microbeAncestors)), temp)
                         allRes <- rbind(allRes, temp)
                         statusUpdate(j, NHostNodes + NEffects + NSumTo0 + 1)
                     }
 
-                    cat('microbeNode\t', file = file.path(currtabledir, 'nodeEffects', paste0(contrast, '.txt')))
                     write.table(allRes,
-                                file   = file.path(currtabledir, 'nodeEffects', paste0(contrast, '.txt')),
-                                sep    = '\t',
-                                quote  = F,
-                                append = T)
+                                file      = file.path(currtabledir, 'nodeEffects', paste0(contrast, '.txt')),
+                                sep       = '\t',
+                                quote     = F,
+                                row.names = F,
+                                append    = T)
                     ##
                 }, error = function(e) print(e))
             }
@@ -950,7 +931,7 @@ runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, variat
     }
 
     if(variational) {
-        NMCSamples <- 1000
+        NIterations <- NMCSamples <- round(1000 / NTrees)
         warmup <- 0
     }
 
@@ -1011,29 +992,34 @@ runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, variat
             setTimeLimit(timeLimit)
             tryCatch({
                 if(!variational) {
-                stan(file            = modelPath,
-                     data            = standat[[i]],
-                     control         = list(adapt_delta   = adapt_delta,
-                                            max_treedepth = max_treedepth),
-                     iter            = NIterations,
-                     thin            = thin,
-                     chains          = NChains,
-                     seed            = seed,
-                     chain_id        = (NChains * (i - 1) + (1:NChains)),
-                     pars            = c('rawerMicrobeNodeEffects', 'rawMicrobeNodeEffects', 'sampleTipEffects'),
-                     include         = FALSE,
-                     init_r          = init_r,
-                     sample_file     = file.path(subdir, paste0('samples_chain', i, '.csv')),
-                     diagnostic_file = file.path(subdir, paste0('diagnostics_chain', i, '.csv')))
+                sampling(object          = sm,
+                         data            = standat[[i]],
+                         control         = list(adapt_delta   = adapt_delta,
+                                                adapt_t0      = adapt_t0,
+                                                adapt_kappa   = adapt_kappa,
+                                                adapt_gamma   = adapt_gamma,
+                                                max_treedepth = max_treedepth),
+                         iter            = NIterations,
+                         thin            = thin,
+                         chains          = NChains,
+                         seed            = seed,
+                         chain_id        = (NChains * (i - 1) + (1:NChains)),
+                         pars            = c('aveStD', 'stDProps', 'aveStDMeta', 'metaScales', 'metaVarProps', 'subfactProps', 'subfactMetaProps', 'microbeNewEdges', 'hostNewEdges'),
+                         include         = TRUE,
+                         init_r          = init_r,
+                         sample_file     = file.path(subdir, paste0('samples_chain', i, '.csv')),
+                         diagnostic_file = file.path(subdir, paste0('diagnostics_chain', i, '.csv')))
                 } else {
+                    Sys.sleep((i - 1) * 3 * 60)
                     vb(stan_model(file = modelPath),
-                       data     = standat[[i]],
-                       iter     = 25000,
-                       seed     = seed,
-                       pars     = c('rawerMicrobeNodeEffects', 'rawMicrobeNodeEffects', 'sampleTipEffects'),
-                       include  = FALSE,
-                       init_r   = init_r,
-                       sample_file = file.path(subdir, 'samples.csv'))
+                       data           = standat[[i]],
+                       iter           = 25000,
+                       seed           = seed,
+                       pars           = c('rawMicrobeNodeEffects'),
+                       include        = FALSE,
+                       init_r         = init_r,
+                       output_samples = NIterations,
+                       sample_file    = file.path(subdir, paste0('samples_chain', i, '.csv')))
                 }
             }, error = function(e) {
                    print(e)
@@ -1052,4 +1038,174 @@ runStanModel <- function(noData = F, shuffleData = F, shuffleSamples = F, variat
     environment(summarizeLcGLM) <- environment()
     tryCatch(summarizeLcGLM(), error = function(e) print(e))
 }
+
+read_stan_csv_subset <- function (csvfiles, col_major = TRUE, params = NULL, keep = TRUE) {
+    ##mostly copied from rstan's read_stan_csv, but with additional code to enable the loading of just a subset of parameters
+    if (length(csvfiles) < 1)
+        stop("csvfiles does not contain any CSV file name")
+    g_skip <- 10
+    ss_lst <- vector("list", length(csvfiles))
+    cs_lst2 <- vector("list", length(csvfiles))
+    for (i in seq_along(csvfiles)) {
+        header <- rstan:::read_csv_header(csvfiles[i])
+        lineno <- attr(header, "lineno")
+        vnames <- strsplit(header, ",")[[1]]
+        ##
+        if(!is.null(params)) {
+            oldnames <- vnames
+            alwayskeep <- 'lp__|accept_stat__|stepsize__|treedepth__|n_leapfrog__|divergent__|energy__'
+            if(keep)
+                vnames <- grep(paste(c(params,alwayskeep),collapse='|'), vnames, value=T)
+            else
+                vnames <- grep(paste(c(params,alwayskeep),collapse='|'), vnames, value=T, invert=T)
+            inds <- which(oldnames %in% vnames)
+        }
+        ##
+        iter.count <- attr(header, "iter.count")
+        variable.count <- length(vnames)
+        df <- structure(replicate(variable.count, list(numeric(iter.count))),
+            names = vnames, row.names = c(NA, -iter.count), class = "data.frame")
+        comments = character()
+        con <- file(csvfiles[[i]], "rb")
+        buffer.size <- min(ceiling(1e+06/variable.count), iter.count)
+        row.buffer <- matrix(ncol = variable.count, nrow = buffer.size)
+        row <- 1
+        buffer.pointer <- 1
+        while (length(char <- readBin(con, "int", size = 1L)) > 0) {
+            seek(con, origin = "current", -1)
+            if (char == 35) {
+                line <- readLines(con, n = 1)
+                comments <- c(comments, line)
+                next
+            }
+            if (char == 108) {
+                readLines(con, n = 1)
+                next
+            }
+            if (char == 10) {
+                readLines(con, n = 1)
+                next
+            }
+            row.buffer[buffer.pointer, ] <- scan(con, nlines = 1,
+                sep = ",", quiet = TRUE)[inds]
+            if (buffer.pointer == buffer.size) {
+                df[row:(row + buffer.size - 1), ] <- row.buffer
+                row <- row + buffer.size
+                buffer.pointer <- 0
+            }
+            buffer.pointer <- buffer.pointer + 1
+        }
+        if (buffer.pointer > 1) {
+            df[row:(row + buffer.pointer - 2), ] <- row.buffer[1:(buffer.pointer -
+                1), ]
+            df <- df[1:(row + buffer.pointer - 2),]
+        } else {
+            df <- df[1:(row - 1),]
+        }
+        close(con)
+        cs_lst2[[i]] <- rstan:::parse_stancsv_comments(comments)
+        if ("output_samples" %in% names(cs_lst2[[i]]))
+            df <- df[-1, ]
+        ss_lst[[i]] <- df
+    }
+    m_name <- sub("(_\\d+)*$", "", rstan:::filename_rm_ext(basename(csvfiles[1])))
+    sdate <- do.call(max, lapply(csvfiles, function(csv) file.info(csv)$mtime))
+    sdate <- format(sdate, "%a %b %d %X %Y")
+    chains <- length(ss_lst)
+    fnames <- names(ss_lst[[1]])
+    n_save <- nrow(ss_lst[[1]])
+    paridx <- rstan:::paridx_fun(fnames)
+    lp__idx <- attr(paridx, "meta")["lp__"]
+    par_fnames <- c(fnames[paridx], "lp__")
+    pars_oi <- rstan:::unique_par(par_fnames)
+    dims_oi <- lapply(pars_oi, function(i) {
+        pat <- paste("^", i, "(\\.\\d+)*$", sep = "")
+        i_fnames <- par_fnames[grepl(pat, par_fnames)]
+        rstan:::get_dims_from_fnames(i_fnames, i)
+    })
+    names(dims_oi) <- pars_oi
+    midx <- if (!col_major)
+        rstan:::multi_idx_row2colm(dims_oi)
+    else 1:length(par_fnames)
+    if (chains > 1) {
+        if (!all(sapply(ss_lst[-1], function(i) identical(names(i),
+            fnames))))
+            stop("the CSV files do not have same parameters")
+        if (!all(sapply(ss_lst[-1], function(i) identical(length(i[[1]]),
+            n_save))))
+            stop("the number of iterations are not the same in all CSV files")
+    }
+    mode <- 0L
+    samples <- lapply(ss_lst, function(df) {
+        ss <- df[c(paridx, lp__idx)[midx]]
+        attr(ss, "sampler_params") <- df[setdiff(attr(paridx,
+            "meta"), lp__idx)]
+        ss
+    })
+    par_fnames <- par_fnames[midx]
+    for (i in seq_along(samples)) {
+        attr(samples[[i]], "adaptation_info") <- cs_lst2[[i]]$adaptation_info
+        attr(samples[[i]], "args") <- list(sampler_t = cs_lst2[[i]]$sampler_t,
+            chain_id = cs_lst2[[i]]$chain_id)
+        if (cs_lst2[[i]]$has_time)
+            attr(samples[[i]], "elapsed_time") <- rstan:::get_time_from_csv(cs_lst2[[i]]$time_info)
+    }
+    save_warmup <- sapply(cs_lst2, function(i) i$save_warmup)
+    warmup <- sapply(cs_lst2, function(i) i$warmup)
+    thin <- sapply(cs_lst2, function(i) i$thin)
+    iter <- sapply(cs_lst2, function(i) i$iter)
+    if (!rstan:::all_int_eq(warmup) || !rstan:::all_int_eq(thin) || !rstan:::all_int_eq(iter))
+        stop("not all iter/warmups/thin are the same in all CSV files")
+    n_kept0 <- 1 + (iter - warmup - 1)%/%thin
+    warmup2 <- 0
+    if (max(save_warmup) == 0L) {
+        n_kept <- n_save
+    }
+    else if (min(save_warmup) == 1L) {
+        warmup2 <- 1 + (warmup[1] - 1)%/%thin[1]
+        n_kept <- n_save - warmup2
+    }
+    if (n_kept0[1] != n_kept) {
+        warning("the number of iterations after warmup found (",
+            n_kept, ") does not match iter/warmup/thin from CSV comments (",
+            paste(n_kept0, collapse = ","), ")")
+        if (n_kept < 0) {
+            warmup <- warmup + n_kept
+            n_kept <- 0
+            mode <- 2L
+        }
+        n_kept0 <- n_save
+        iter <- n_save
+        for (i in 1:length(cs_lst2)) {
+            cs_lst2[[i]]$warmup <- warmup
+            cs_lst2[[i]]$iter <- iter
+        }
+    }
+    idx_kept <- if (warmup2 == 0)
+        1:n_kept
+    else -(1:warmup2)
+    for (i in seq_along(samples)) {
+        m <- vapply(samples[[i]], function(x) mean(x[idx_kept]),
+            numeric(1))
+        attr(samples[[i]], "mean_pars") <- m[-length(m)]
+        attr(samples[[i]], "mean_lp__") <- m["lp__"]
+    }
+    perm_lst <- lapply(1:chains, function(id) sample.int(n_kept))
+    sim = list(samples = samples, iter = iter[1], thin = thin[1],
+        warmup = warmup[1], chains = chains, n_save = rep(n_save,
+            chains), warmup2 = rep(warmup2, chains), permutation = perm_lst,
+        pars_oi = pars_oi, dims_oi = dims_oi, fnames_oi = rstan:::dotfnames_to_sqrfnames(par_fnames),
+        n_flatnames = length(par_fnames))
+    null_dso <- new("cxxdso", sig = list(character(0)), dso_saved = FALSE,
+        dso_filename = character(0), modulename = character(0),
+        system = R.version$system, cxxflags = character(0), .CXXDSOMISC = new.env(parent = emptyenv()))
+    null_sm <- new("stanmodel", model_name = m_name, model_code = character(0),
+        model_cpp = list(), dso = null_dso)
+    nfit <- new("stanfit", model_name = m_name, model_pars = pars_oi,
+        par_dims = dims_oi, mode = mode, sim = sim, inits = list(),
+        stan_args = cs_lst2, stanmodel = null_sm, date = sdate,
+        .MISC = new.env(parent = emptyenv()))
+    return(nfit)
+}
+
 ## fin

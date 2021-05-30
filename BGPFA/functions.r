@@ -225,3 +225,19 @@ mytriplot <- function(object1, object2, object3, a1 = 1, a2 = 2, fact, labs = re
     text(ob3, labels = newnames, cex=cex1, col = 'orange')
     return(res)
 }
+
+findIntRuns <- function(run){
+    rundiff <- c(1, diff(run))
+    difflist <- split(run, cumsum(rundiff!=1))
+    unlist(lapply(difflist, function(x){
+        if(length(x) %in% 1:2) as.character(x) else paste0(x[1], "-", x[length(x)])
+    }), use.names=FALSE)
+} ## https://stackoverflow.com/questions/16911773/collapse-runs-of-consecutive-numbers-to-ranges
+
+filter_large_stan_csv <- function(infile, outfile, params) {
+    hi <- data.table:::fread(infile,nrows=1,skip='lp__',sep=',')
+    s <- paste(c('lp__',params), collapse='|')
+    cols <- findIntRuns(grep(s,colnames(hi)))
+    cols <- paste(cols, collapse=',')
+    system(paste0('cut -f ',cols,' -d \',\' ',infile,' > ',outfile))
+}
