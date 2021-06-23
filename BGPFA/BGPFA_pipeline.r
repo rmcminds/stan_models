@@ -34,7 +34,7 @@ include_path <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utility/')
 model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/BGPFA/')
 source(file.path(model_dir, 'functions.r'))
 model_name <- 'BGPFA'
-engine <- c('sampling','advi')[2]
+engine <- c('sampling','advi')[1]
 mass_slow <- 1 / 100 # multiplied by select raw parameters so that they initially are explored slower during sampling
 opencl <- FALSE
 output_prefix <- paste0(Sys.getenv('HOME'), '/outputs/tara/BGPFA_', nMicrobeKeep)
@@ -54,11 +54,11 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                           'adapt t0=10',
                                           'delta=0.8',
                                           'kappa=0.75',
-                                          'init_buffer=0',
-                                          'window=2',
+                                          #'init_buffer=10',
+                                          #'window=2',
                                           'term_buffer=50',
-                                          'num_warmup=200',
-                                          'num_samples=200',
+                                          'num_warmup=1000',
+                                          'num_samples=1000',
                                           ('opencl platform=0 device=0')[opencl],
                                           sep=' '),
                           advi = paste(paste0('./', model_name),
@@ -1134,20 +1134,20 @@ inits_Y_higher <- list(matrix(as.numeric(in_data$hphoto > 0),ncol=ncol(in_data$h
 
 Z_init <- matrix(rnorm((K_linear+KG*K_gp)*N), nrow=K_linear+KG*K_gp) * 1e-5
 
-latent_scales_raw_init <- c(log(global_scale_prior), rep(0, K_linear))
+latent_var_raw_init <- c(2*log(global_scale_prior), rep(0, K_linear))
 if(KG > 0) {
-    latent_scales_raw_init <- c(latent_scales_raw_init, rep(0, K_gp))
+    latent_var_raw_init <- c(latent_var_raw_init, rep(0, K_gp))
 }
 if(KG > 1) {
     for(g in 2:KG) {
-        latent_scales_raw_init <- c(latent_scales_raw_init, rep(0, K_gp))
+        latent_var_raw_init <- c(latent_var_raw_init, rep(0, K_gp))
     }
 }
 
 init <- list(abundance_observed_vector       = abundance_observed_vector_inits / mass_slow,
              intercepts                      = prior_intercept_centers,
              multinomial_nuisance            = multinomial_nuisance_inits,
-             latent_scales_raw  = latent_scales_raw_init,
+             latent_var_raw      = latent_var_raw_init,
              weight_scales_raw  = matrix(1 / mass_slow, nrow=2*D+R+C, ncol=K),
              sds_raw            = rep(0, VOBplus+sum(M_all[1:D])+D),
              dataset_scales_raw = rep(0, 2*D+R+C),

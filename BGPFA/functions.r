@@ -236,7 +236,7 @@ findIntRuns <- function(run){
 
 filter_large_stan_csv <- function(infile, outfile, params) {
     hi <- data.table:::fread(infile,nrows=1,skip='lp__',sep=',')
-    s <- paste(c('lp__',params), collapse='|')
+    s <- paste(c('lp__',"accept_stat__", "stepsize__", "treedepth__", "n_leapfrog__", "divergent__", "energy__",params), collapse='|')
     cols <- findIntRuns(grep(s,colnames(hi)))
     cols <- paste(cols, collapse=',')
     system(paste0('cut -f ',cols,' -d \',\' ',infile,' > ',outfile))

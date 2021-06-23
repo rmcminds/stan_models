@@ -12,17 +12,46 @@ sink(outfile, type = 'output', split = TRUE)
 #outfileerr <- file(file.path(output_prefix, 'runlogerr.log'), open = 'wt')
 #sink(outfileerr, type = 'message')
 
+library(ape)
+library(phytools)
+library(phangorn)
+library(parallel)
+library(rstan)
+library(RColorBrewer)
+library(paleotree)
+library(ggplot2)
+library(cmdstanr)
+
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/cophylogeny/')
+source(file.path(model_dir, 'gcmp_symportal_2021', 'statistics', 'lcGLM_functions.r'))
+
 input_prefix <- file.path(Sys.getenv('HOME'), 'data/gcmp_symportal_2021/')
 preprocess_prefix <- file.path(Sys.getenv('HOME'), 'outputs/gcmp_symportal_2021/intermediate/')
 include_path <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/utility/')
-model_dir <- file.path(Sys.getenv('HOME'), 'scripts/stan_models/cophylogeny/')
-model_name <- 'cophou'
+model_name <- 'cophou_mix2'
 engine <- c('sampling','advi')[2]
 opencl <- FALSE
+
+## Stan options
+init_r <- 30
+NCores <- 2 #NTrees
+NChains <- 1 ## this is per tree; since I'm doing a large number of trees in parallel i'll just do one chain for each
+NIterations <- 400 #2^(12 - 1) ## will probably need >10,000? maybe start with 2, check convergence, double it, check, double, check, double, etc.?
+max_treedepth <- 15 ## a warning will tell you if this needs to be increased
+adapt_delta <- 0.8 ## increase this if you get 'divergences' - even one means your model fit sucks!
+adapt_kappa <- 0.75
+adapt_t0 <- 10
+adapt_gamma <- 0.05
+thin <- 1 ## NIterations / thin number of Monte Carlo samples from the fit
+##
 
 sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                            paste0('data file=', file.path(output_prefix, 'data.json')),
                                            #paste0('init=', file.path(output_prefix, 'inits.json')),
+                                           'init=0.01',
                                            'output',
                                            paste0('file=', file.path(output_prefix, 'samples_sampling.csv')),
                                            paste0('refresh=', 1),
@@ -43,14 +72,14 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                           advi = paste(paste0('./', model_name),
                                        paste0('data file=', file.path(output_prefix, 'data.json')),
                                        #paste0('init=', file.path(output_prefix, 'inits.json')),
-                                       'init=0.1',
+                                       'init=0.01',
                                        'output',
                                        paste0('file=', file.path(output_prefix, 'samples_advi.csv')),
                                        paste0('refresh=', 100),
                                        'method=variational algorithm=meanfield',
                                        'grad_samples=1',
                                        'elbo_samples=1',
-                                       'iter=10000',
+                                       'iter=3000',
                                        'eta=0.1',
                                        'adapt engaged=0',
                                        'tol_rel_obj=0.001',
@@ -59,28 +88,11 @@ sampling_commands <- list(sampling = paste(paste0('./', model_name),
                                        ('opencl platform=0 device=0')[opencl],
                                        sep=' '))
 
-library(ape)
-library(phytools)
-library(phangorn)
-library(parallel)
-library(rstan)
-library(RColorBrewer)
-library(paleotree)
-library(ggplot2)
-library(cmdstanr)
-
-rstan_options(auto_write = TRUE)
-options(mc.cores = parallel::detectCores())
-
-source(file.path(model_dir, 'gcmp_symportal_2021', 'statistics', 'lcGLM_functions.r'))
-
 microbeTreePath <- file.path(preprocess_prefix, 'symbio_phylo/profile_WU_fastmeBal_correlated_chronos.tree') #symportal profile tree
 hostTreePath <- file.path(preprocess_prefix, 'host_phylo/combined_trees.newick') #set of Bayesian draws of host species phylogeny
 mapfilePath <- file.path(input_prefix, 'occurence/GCMP_symbiodinium_map_r29.txt') #mapping file
 fulltablePath <- file.path(input_prefix, 'occurence/species_table.txt') #symporal species table
 modelPath <- file.path(model_dir, paste0(model_name, '.stan')) #stan model
-seed <- 123
-timeLimit <- 30 * 24 * 60 * 60
 
 ## filtration options
 minCountSamp <- 5 # minimum sequencing depth for a sample to be included
@@ -89,23 +101,14 @@ minSamps <- 1 # minimum number of samples that a sequence variant is present in 
 
 ## model options
 NTrees <- 2 ## number of random trees to sample and to fit the model to
-groupedFactors <- list(location           = 'reef_name', #c('ocean', 'ocean_area', 'reef_name'),
-                       date               = 'concatenated_date',
-                       tissue_compartment = 'tissue_compartment',
-                       sequencing_depth   = 'log_sequencing_depth_scaled')
-##
+sampleFactors <- list(location           = 'reef_name', #c('ocean', 'ocean_area', 'reef_name'),
+                      date               = 'concatenated_date',
+                      tissue_compartment = 'tissue_compartment',
+                      sequencing_depth   = 'log_sequencing_depth_scaled')
 
-## Stan options
-init_r <- 30
-NCores <- 2 #NTrees
-NChains <- 1 ## this is per tree; since I'm doing a large number of trees in parallel i'll just do one chain for each
-NIterations <- 400 #2^(12 - 1) ## will probably need >10,000? maybe start with 2, check convergence, double it, check, double, check, double, etc.?
-max_treedepth <- 15 ## a warning will tell you if this needs to be increased
-adapt_delta <- 0.8 ## increase this if you get 'divergences' - even one means your model fit sucks!
-adapt_kappa <- 0.75
-adapt_t0 <- 10
-adapt_gamma <- 0.05
-thin <- 1 ## NIterations / thin number of Monte Carlo samples from the fit
+hostFactors <- list(functional_group     = 'functional_group_sensu_darling',
+                    zoox_in_propagules   = 'Symbiodinium.sp..in.propagules',
+                    oz_disease_mean      = 'oz_disease_mean')
 ##
 
 ## define the set of genera that we think our unidentified fungid samples could belong to
@@ -131,6 +134,9 @@ filterfunction <- function(dfin) {
 
 contrastfunction <- function(dfin) {
     df2 <- dfin
+    df2$functional_group_sensu_darling <- as.factor(df2$functional_group_sensu_darling)
+    df2$Symbiodinium.sp..in.propagules <- as.factor(df2$Symbiodinium.sp..in.propagules)
+    df2$oz_disease_mean <- as.numeric(df2$oz_disease_mean)
     df2$ocean <- as.factor(df2$ocean)
     contrasts(df2$ocean) <- 'contr.sum'
     df2$ocean_area <- as.factor(df2$ocean_area)
@@ -226,7 +232,9 @@ mode(ybinary) <- 'numeric'
 
 ## filter microbes that aren't in the minimum number of samples
 present <- ybinary[, colSums(ybinary) >= minSamps]
-finalMicrobeTree <- reorder(drop.tip(microbeTree, microbeTree$tip.label[!microbeTree$tip.label %in% colnames(present)]), 'pruningwise')
+microbeTol <- exp(mean(log(microbeTree$edge.length)))
+multiTree <- force.ultrametric(di2multi(microbeTree, tol=microbeTol))
+finalMicrobeTree <- reorder(drop.tip(multiTree, multiTree$tip.label[!multiTree$tip.label %in% colnames(present)]), 'pruningwise')
 finalMicrobeTree$edge.length <- finalMicrobeTree$edge.length / exp(mean(log(finalMicrobeTree$edge.length)))
 present <- present[, finalMicrobeTree$tip.label]
 NS <- nrow(present)
@@ -238,7 +246,8 @@ NT_m <- length(microbeTips)
 NI_m <- finalMicrobeTree$Nnode
 NN_m <- NI_m + NT_m
 sa_m <- rbind(finalMicrobeTree$edge,c(0,NT_m+1))[NN_m:1,]
-time_m <- c(finalMicrobeTree$edge.length,1)[order(sa_m[,2])]
+time_m <- c(finalMicrobeTree$edge.length[1:length(finalMicrobeTree$tip.label)],1,finalMicrobeTree$edge.length[(length(finalMicrobeTree$tip.label)+1):length(finalMicrobeTree$edge.length)])
+NDesc_m <- sapply((NT_m+1):NN_m, function(x) sum(x == sa_m[,1]))
 microbeTreeDetails <- getTreeDetails(finalMicrobeTree)
 ##
 
@@ -275,6 +284,7 @@ hostTreesSampled <- list()
 hostTreeDetails <- list()
 time_h <- list()
 sa_h <- list()
+NDesc_h <- list()
 idx_host <- list()
 for(i in 1:NTrees) {
     sampleMap[[i]] <- newermap
@@ -320,7 +330,8 @@ for(i in 1:NTrees) {
     hostTreeDetails[[i]] <- getTreeDetails(hostTreesSampled[[i]])
 
     sa_h[[i]] <- rbind(hostTreesSampled[[i]]$edge,c(0,length(hostTreesSampled[[i]]$tip.label)+1))[(nrow(hostTreesSampled[[i]]$edge)+1):1,]
-    time_h[[i]] <- c(hostTreesSampled[[i]]$edge.length,1)[order(sa_h[[i]][,2])]
+    time_h[[i]] <- c(hostTreesSampled[[i]]$edge.length[1:length(hostTreesSampled[[i]]$tip.label)],1,hostTreesSampled[[i]]$edge.length[(length(hostTreesSampled[[i]]$tip.label)+1):length(hostTreesSampled[[i]]$edge.length)])
+    NDesc_h[[i]] <- sapply((length(hostTreesSampled[[i]]$tip.label)+1):(length(hostTreesSampled[[i]]$edge.length)+1), function(x) sum(x == sa_h[[i]][,1]))
     idx_host[[i]] <- sapply(sampleMap[[i]][,'colony_name'], function(x) which(x == hostTreesSampled[[i]]$tip.label))
 }
 ##
@@ -334,7 +345,7 @@ NN_h <- NT_h + NI_h
 ## prepare data for the model matrix
 idx_s <- 0
 modelMat <- matrix(NA,nrow=NS,ncol=0)
-for(fact in unlist(groupedFactors)) {
+for(fact in unlist(sampleFactors)) {
     if(is.factor(newermap[,fact])) {
         n <- length(levels(newermap[,fact]))
     } else {
@@ -348,7 +359,27 @@ idx_s <- idx_s[-1]
 ##
 
 ##
-NSB_s <- length(groupedFactors)
+map_tips <- data.frame(newermap[which(newermap$colony_name==hostTreesSampled[[1]]$tip.label[[1]])[[1]],])
+for(tip in hostTreesSampled[[1]]$tip.label[-1]) {
+    map_tips <- rbind(map_tips, data.frame(newermap[which(newermap$colony_name==tip)[[1]],]))
+}
+levels(map_tips$functional_group_sensu_darling)[levels(map_tips$functional_group_sensu_darling) %in% c('Missing: Not collected','Unknown')] <- NA
+levels(map_tips$Symbiodinium.sp..in.propagules)[levels(map_tips$Symbiodinium.sp..in.propagules) %in% c('Missing: Not collected','Unknown')] <- NA
+idx_theta <- 0
+thetaModel <- matrix(NA,nrow=NT_h,ncol=0)
+for(fact in unlist(hostFactors)) {
+    if(is.factor(map_tips[,fact])) {
+        n <- length(levels(map_tips[,fact]))
+    } else {
+        n <- 1
+    }
+    idx_theta <- c(idx_theta, rep(max(idx_theta) + 1, n))
+    thetaModel <- cbind(thetaModel, model.matrix(as.formula(paste0('~0+',fact)), model.frame(map_tips, na.action = 'na.pass')))
+}
+##
+
+##
+NSB_s <- length(sampleFactors)
 NB_s <- ncol(modelMat)
 ##
 
@@ -356,28 +387,37 @@ NB_s <- ncol(modelMat)
 ## collect data to feed to stan
 standat <- list()
 for (i in 1:NTrees) {
-    standat[[i]] <- list(NS         = NS,
-                         NI_m       = NI_m,
-                         NT_m       = NT_m,
-                         NB_s       = NB_s,
-                         NSB_s      = NSB_s,
-                         idx_s      = idx_s,
-                         present    = present,
-                         modelMat   = modelMat,
-                         time_h     = time_h[[i]],
-                         time_m     = time_m,
-                         NI_h       = NI_h,
-                         NT_h       = NT_h,
-                         self_h     = sa_h[[i]][,2],
-                         ancestor_h = sa_h[[i]][,1],
-                         self_m     = sa_m[,2],
-                         ancestor_m = sa_m[,1],
-                         idx_host   = idx_host[[i]],
-                         X_s        = modelMat,
-                         NB_m       = 0,
-                         NB_h       = 0,
-                         X_m_t      = matrix(0, nrow=0, ncol=NT_m),
-                         X_h_t      = matrix(0, nrow=0, ncol=NT_h))
+    standat[[i]] <- list(NS           = NS,
+                         NI_m         = NI_m,
+                         NT_m         = NT_m,
+                         NB_s         = NB_s,
+                         NSB_s        = NSB_s,
+                         idx_s        = idx_s,
+                         present      = present,
+                         modelMat     = modelMat,
+                         global_scale = 0.1 * sd(present),
+                         time_h       = time_h[[i]],
+                         time_m       = time_m,
+                         NI_h         = NI_h,
+                         NT_h         = NT_h,
+                         self_h       = sa_h[[i]][,2],
+                         ancestor_h   = sa_h[[i]][,1],
+                         self_m       = sa_m[,2],
+                         ancestor_m   = sa_m[,1],
+                         idx_host     = idx_host[[i]],
+                         NDesc_h      = NDesc_h[[i]],
+                         NDesc_m      = NDesc_m,
+                         X_s          = modelMat,
+                         NB_m         = 0,
+                         NB_h         = 0,
+                         X_m_raw      = matrix(0, nrow=0, ncol=NT_m),
+                         X_h_raw      = matrix(0, nrow=0, ncol=NT_h),
+                         NM_X_m       = 0,
+                         NM_X_h       = 0,
+                         idx_X_m_m_x  = vector(),
+                         idx_X_m_m_y  = vector(),
+                         idx_X_h_m_x  = vector(),
+                         idx_X_h_m_y  = vector())
 }
 
 save.image(file.path(output_prefix, 'setup.RData'))
@@ -410,27 +450,31 @@ colorpal <- colorRampPalette(brewer.pal(9, 'Blues'))
 plotcolors <- c('white', colorpal(100), 'black')
 
 mycols <- rev(brewer.pal(11, 'RdYlBu'))
-mycols[[6]] < 'white'
+mycols[[6]] <- 'white'
 colorpal <- colorRampPalette(mycols)
 plotcolorsVar <- c(colorpal(101))
 
-delta_alpha_hm_raw <- stan.fit.draws[,,grep('delta_alpha_hm_raw\\[.*',dimnames(stan.fit.draws)[[3]])]
-delta_alpha_hm_raw <- apply(delta_alpha_hm_raw,3,sumfunc)
-delta_alpha_hm_raw <- array(delta_alpha_hm_raw,dim=c(NN_h,NN_m))
+plotM <- force.ultrametric(multi2di(ladderize(finalMicrobeTree)), 'extend')
+plotH <- multi2di(ladderize(hostTreesSampled[[1]],right=FALSE))
 
-delta_alpha_hm_raw_filt <- delta_alpha_hm_raw[1:NT_h,1:NT_m]
-rownames(delta_alpha_hm_raw_filt) <- hostTreesSampled[[1]]$tip.label
-colnames(delta_alpha_hm_raw_filt) <- finalMicrobeTree$tip.label
+inheritance <- stan.fit.draws[,,grep('^inheritance\\[.*',dimnames(stan.fit.draws)[[3]]), drop=FALSE]
+inheritance <- apply(inheritance,3,sumfunc)
+inheritance <- array(inheritance,dim=c(NI_h,NI_m))
 
-heatmap(delta_alpha_hm_raw_filt,
-        Rowv   = as.dendrogram(as.hclust(multi2di(hostTreesSampled[[1]]))),
-        Colv   = as.dendrogram(as.hclust(finalMicrobeTree)),
+inheritance_ia <- inheritance[sa_h[[1]][sapply(1:NT_h, \(x) sa_h[[1]][x == sa_h[[1]][,2],1]),1] - NT_h, sa_m[sapply(1:NT_m, \(x) sa_m[x == sa_m[,2],1]),1] - NT_m]
+rownames(inheritance_ia) <- hostTreesSampled[[1]]$tip.label
+colnames(inheritance_ia) <- finalMicrobeTree$tip.label
+
+heatmap(t(logit(inheritance_ia)),
+        Rowv   = as.dendrogram(as.hclust(plotM)),
+        Colv   = as.dendrogram(as.hclust(plotH)),
         col    = plotcolorsVar,
         cexCol = 0.2,
         cexRow = 0.1,
         scale  = 'none')
 
-alpha_h <- stan.fit.draws[,,grep('alpha_h\\[.*',dimnames(stan.fit.draws)[[3]])]
+
+alpha_h <- stan.fit.draws[,,grep('alpha_h\\[.*',dimnames(stan.fit.draws)[[3]]), drop=FALSE]
 alpha_h <- apply(alpha_h,3,sumfunc)
 alpha_h <- array(alpha_h,dim=c(NN_h,NN_m))
 
@@ -438,15 +482,15 @@ alpha_h_filt <- alpha_h[1:NT_h,1:NT_m]
 rownames(alpha_h_filt) <- hostTreesSampled[[1]]$tip.label
 colnames(alpha_h_filt) <- finalMicrobeTree$tip.label
 
-heatmap(log(alpha_h_filt),
-        Rowv   = as.dendrogram(as.hclust(multi2di(hostTreesSampled[[1]]))),
-        Colv   = as.dendrogram(as.hclust(finalMicrobeTree)),
+heatmap(t(log(alpha_h_filt)),
+        Rowv   = as.dendrogram(as.hclust(ladderize(force.ultrametric(multi2di(finalMicrobeTree))))),
+        Colv   = as.dendrogram(as.hclust(multi2di(ladderize(hostTreesSampled[[1]],right=FALSE)))),
         col    = plotcolorsVar,
         cexCol = 0.2,
         cexRow = 0.1,
         scale  = 'none')
 
-alpha_m <- stan.fit.draws[,,grep('alpha_m\\[.*',dimnames(stan.fit.draws)[[3]])]
+alpha_m <- stan.fit.draws[,,grep('alpha_m\\[.*',dimnames(stan.fit.draws)[[3]]), drop=FALSE]
 alpha_m <- apply(alpha_m,3,sumfunc)
 alpha_m <- array(alpha_m,dim=c(NN_h,NN_m))
 
@@ -454,52 +498,103 @@ alpha_m_filt <- alpha_m[1:NT_h,1:NT_m]
 rownames(alpha_m_filt) <- hostTreesSampled[[1]]$tip.label
 colnames(alpha_m_filt) <- finalMicrobeTree$tip.label
 
-heatmap(log(alpha_m_filt),
-        Rowv   = as.dendrogram(as.hclust(multi2di(hostTreesSampled[[1]]))),
-        Colv   = as.dendrogram(as.hclust(finalMicrobeTree)),
+heatmap(t(log(alpha_m_filt)),
+        Rowv   = as.dendrogram(as.hclust(ladderize(force.ultrametric(multi2di(finalMicrobeTree))))),
+        Colv   = as.dendrogram(as.hclust(multi2di(ladderize(hostTreesSampled[[1]],right=FALSE)))),
         col    = plotcolorsVar,
         cexCol = 0.2,
         cexRow = 0.1,
         scale  = 'none')
 
 
-p_evo_logit <- stan.fit.draws[,,grep('p_evo_logit\\[.*',dimnames(stan.fit.draws)[[3]])]
-p_evo_logit <- apply(p_evo_logit,3,sumfunc)
-p_evo_logit <- array(p_evo_logit,dim=c(NN_h,NN_m))
+present_anc_logit <- stan.fit.draws[,,grep('present_anc_logit\\[.*',dimnames(stan.fit.draws)[[3]]), drop=FALSE]
+present_anc_logit <- apply(present_anc_logit,3,sumfunc)
+present_anc_logit <- array(present_anc_logit,dim=c(NN_h,NN_m))
 
-p_evo_logit_filt <- p_evo_logit[1:NT_h,1:NT_m]
-rownames(p_evo_logit_filt) <- hostTreesSampled[[1]]$tip.label
-colnames(p_evo_logit_filt) <- finalMicrobeTree$tip.label
+present_anc_logit_filt <- present_anc_logit[1:NT_h,1:NT_m]
+rownames(present_anc_logit_filt) <- hostTreesSampled[[1]]$tip.label
+colnames(present_anc_logit_filt) <- finalMicrobeTree$tip.label
 
-heatmap(p_evo_logit_filt,
-        Rowv   = as.dendrogram(as.hclust(multi2di(hostTreesSampled[[1]]))),
-        Colv   = as.dendrogram(as.hclust(finalMicrobeTree)),
+heatmap(t(present_anc_logit_filt),
+        Rowv   = as.dendrogram(as.hclust(ladderize(force.ultrametric(multi2di(finalMicrobeTree))))),
+        Colv   = as.dendrogram(as.hclust(multi2di(ladderize(hostTreesSampled[[1]],right=FALSE)))),
         col    = plotcolorsVar,
         cexCol = 0.2,
         cexRow = 0.1,
         scale  = 'none')
 
+sigma_host <- stan.fit.draws[,,grep('sigma_host\\[.*',dimnames(stan.fit.draws)[[3]]), drop=FALSE]
+sigma_host <- apply(sigma_host,3,sumfunc)
+sigma_host <- array(sigma_host,dim=c(NN_h,NN_m))
 
-sigma_p <- stan.fit.draws[,,grep('sigma_p\\[.*',dimnames(stan.fit.draws)[[3]])]
-sigma_p <- apply(sigma_p,3,sumfunc)
-sigma_p <- array(sigma_p,dim=c(NN_h,NN_m))
+sigma_host_filt <- sigma_host[1:NT_h,1:NT_m]
+rownames(sigma_host_filt) <- hostTreesSampled[[1]]$tip.label
+colnames(sigma_host_filt) <- finalMicrobeTree$tip.label
 
-sigma_p_filt <- sigma_p[1:NT_h,1:NT_m]
-rownames(sigma_p_filt) <- hostTreesSampled[[1]]$tip.label
-colnames(sigma_p_filt) <- finalMicrobeTree$tip.label
-
-heatmap(log(sigma_p_filt),
-        Rowv   = as.dendrogram(as.hclust(multi2di(hostTreesSampled[[1]]))),
-        Colv   = as.dendrogram(as.hclust(finalMicrobeTree)),
+heatmap(t(log(sigma_host_filt)),
+        Rowv   = as.dendrogram(as.hclust(ladderize(force.ultrametric(multi2di(finalMicrobeTree))))),
+        Colv   = as.dendrogram(as.hclust(multi2di(ladderize(hostTreesSampled[[1]],right=FALSE)))),
         col    = plotcolorsVar,
         cexCol = 0.2,
         cexRow = 0.1,
         scale  = 'none')
 
-sigma_s <- stan.fit.draws[,,grep('sigma_s\\[.*',dimnames(stan.fit.draws)[[3]])]
+sigma_host[sa_h[[1]][1,2],sa_m[1,2]]
+
+
+sigma_drift_h <- stan.fit.draws[,,grep('sigma_drift_h\\[.*',dimnames(stan.fit.draws)[[3]]), drop=FALSE]
+sigma_drift_h <- apply(sigma_drift_h,3,sumfunc)
+sigma_drift_h <- array(sigma_drift_h,dim=c(NN_h,NN_m))
+
+sigma_drift_h_filt <- sigma_drift_h[1:NT_h,1:NT_m]
+rownames(sigma_drift_h_filt) <- hostTreesSampled[[1]]$tip.label
+colnames(sigma_drift_h_filt) <- finalMicrobeTree$tip.label
+
+heatmap(t(log(sigma_drift_h_filt)),
+        Rowv   = as.dendrogram(as.hclust(ladderize(force.ultrametric(multi2di(finalMicrobeTree))))),
+        Colv   = as.dendrogram(as.hclust(multi2di(ladderize(hostTreesSampled[[1]],right=FALSE)))),
+        col    = plotcolorsVar,
+        cexCol = 0.2,
+        cexRow = 0.1,
+        scale  = 'none')
+
+sigma_drift_m <- stan.fit.draws[,,grep('sigma_drift_m\\[.*',dimnames(stan.fit.draws)[[3]]), drop=FALSE]
+sigma_drift_m <- apply(sigma_drift_m,3,sumfunc)
+sigma_drift_m <- array(sigma_drift_m,dim=c(NN_h,NN_m))
+
+sigma_drift_m_filt <- sigma_drift_m[1:NT_h,1:NT_m]
+rownames(sigma_drift_m_filt) <- hostTreesSampled[[1]]$tip.label
+colnames(sigma_drift_m_filt) <- finalMicrobeTree$tip.label
+
+heatmap(t(log(sigma_drift_m_filt)),
+        Rowv   = as.dendrogram(as.hclust(ladderize(force.ultrametric(multi2di(finalMicrobeTree))))),
+        Colv   = as.dendrogram(as.hclust(multi2di(ladderize(hostTreesSampled[[1]],right=FALSE)))),
+        col    = plotcolorsVar,
+        cexCol = 0.2,
+        cexRow = 0.1,
+        scale  = 'none')
+
+present_s <- t(sapply(hostTreesSampled[[1]]$tip.label, function(colony) apply(present[rownames(newermap)[newermap$colony_name == colony],, drop=FALSE], 2, mean)))
+heatmap(t(present_s),
+        Rowv   = as.dendrogram(as.hclust(ladderize(force.ultrametric(multi2di(finalMicrobeTree))))),
+        Colv   = as.dendrogram(as.hclust(multi2di(ladderize(hostTreesSampled[[1]],right=FALSE)))),
+        col    = plotcolors,
+        cexCol = 0.2,
+        cexRow = 0.1,
+        scale  = 'none')
+
+
+sigma_s <- stan.fit.draws[,,grep('sigma_s\\[.*',dimnames(stan.fit.draws)[[3]]), drop=FALSE]
 sigma_s <- apply(sigma_s,3,sumfunc)
-names(sigma_s) <- names(groupedFactors)
+names(sigma_s) <- names(sampleFactors)
 
+sigma_sigma_host <- sumfunc(stan.fit.draws[,,'sigma_sigma_host' == dimnames(stan.fit.draws)[[3]], drop=FALSE])
+sigma_sigma_drift_h <- sumfunc(stan.fit.draws[,,'sigma_sigma_drift_h' == dimnames(stan.fit.draws)[[3]], drop=FALSE])
+sigma_sigma_drift_m <- sumfunc(stan.fit.draws[,,'sigma_sigma_drift_m' == dimnames(stan.fit.draws)[[3]], drop=FALSE])
+sigma_inheritance <- sumfunc(stan.fit.draws[,,'sigma_inheritance' == dimnames(stan.fit.draws)[[3]], drop=FALSE])
+uninherited <- sumfunc(stan.fit.draws[,,'uninherited' == dimnames(stan.fit.draws)[[3]], drop=FALSE])
+
+multiTree <- di2multi(finalMicrobeTree, tol=exp(mean(log(finalMicrobeTree$edge.length)) - sd(log(finalMicrobeTree$edge.length))))
 
 #NMCSamples <- NIterations / thin
 #warmup <- NMCSamples / 2

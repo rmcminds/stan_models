@@ -182,7 +182,7 @@ parameters {
     vector[K] beta_Z_prop_raw;                     // controls degree of skew for each axis
     matrix[VOB_all+V_all+D,K] W_raw;               // PCA variable loadings
     vector[VOB_all+V_all+D] sds_raw;               // variable scales
-    vector[K] latent_scales_raw;                   // overall scale of each axis. consider constraining to be positive? no change in priors needed except first entry
+    vector[K] latent_var_raw;                   // overall scale of each axis. consider constraining to be positive? no change in priors needed except first entry
     vector[DRC+D] dataset_scales_raw;              // overall scale of each dataset
     matrix[DRC+D,K] weight_scales_raw;             // per-dataset-and-axis scales
     vector[VOB+V+D] intercepts;
@@ -209,7 +209,7 @@ transformed parameters {
     vector[D] contaminant_overdisp_log = contaminant_overdisp_raw * mass_slow;
     vector<lower=0>[D] contaminant_overdisp = exp(contaminant_overdisp_log);
     matrix[VOB_all+V_all+D,K] W_norm;                                  // PCA variable loadings
-    vector[K] latent_scales_log = latent_scales_raw;                   // initialize with raw values
+    vector[K] latent_var_log = latent_var_raw;                   // initialize with raw values
     vector[K] latent_scales;                                           // overall scale of each axis
     matrix[DRC+D,K] weight_scales_log = weight_scales_raw * mass_slow; // per-dataset-and-axis scales
     matrix<lower=0>[DRC+D,K] weight_scales = exp(weight_scales_log);   // per-dataset-and-axis scales
@@ -221,8 +221,8 @@ transformed parameters {
     vector[VOB_all+V_all+D] var_scales_log = sds_log + log(prior_scales);
     corr_matrix[M[DRC]] corr_sites[K];
     vector[D] log_less_contamination = inv(inv_log_less_contamination);
-    latent_scales_log[idx_scales] = log_positive_ordered_transform(latent_scales_log[idx_scales]);
-    latent_scales_log[1:K_linear] = log_positive_ordered_transform(latent_scales_log[1:K_linear]);
+    latent_var_log[idx_scales] = log_positive_ordered_transform(latent_var_log[idx_scales]);
+    latent_var_log[1:K_linear] = log_positive_ordered_transform(latent_var_log[1:K_linear]);
     Z[1:K_linear,]
         = transform_MVN_kumaraswamy(Z_linear_raw,
                                     alpha_Z[1:K_linear],
@@ -235,9 +235,9 @@ transformed parameters {
             = transform_MVN_kumaraswamy(Z_gp_raw[s:f,] * L,
                                         alpha_Z[(K_linear + s):(K_linear + f)],
                                         alpha_Z[(K_linear + s):(K_linear + f)] .* beta_Z_prop[(K_linear + s):(K_linear + f)]);
-        latent_scales_log[(K_linear + s):(K_linear + f)] = log_positive_ordered_transform(latent_scales_log[(K_linear + s):(K_linear + f)]);
+        latent_var_log[(K_linear + s):(K_linear + f)] = log_positive_ordered_transform(latent_var_log[(K_linear + s):(K_linear + f)]);
     } // other axes are dependent on the first axes through gaussian processes
-    latent_scales = exp(latent_scales_log);
+    latent_scales = exp(0.5 * latent_var_log); // sqrt(exp(latent_var_log)) but more stable
     W_norm = diag_post_multiply(W_raw, latent_scales);
     Z_higher = Z * samp2group;
     for(k in 1:K) {
@@ -334,8 +334,8 @@ model {
     target += std_normal_lupdf(dataset_scales) + sum(dataset_scales_log);                                    // entire datasets may have uniformly biased difference in scale compared to priors
     target += normal_lupdf(sds_log | dsv, 1);                                                                // per-variable sigmas shrink toward dataset scales
     target += normal_lupdf(intercepts | prior_intercept_centers, 25 * intercept_scales);                     //
-    target += inv_gamma_lupdf(latent_scales[1] | 1, global_scale_prior) + latent_scales_log[1];              // first axis has minimum scale of global scale prior, shrunk toward that value, with jacobian correction for putting prior on transformed first scale
-    target += std_normal_lupdf(latent_scales_raw[2:]);                                                       // other axes have scale with logistic normal between zero and the previous axis
+    target += inv_gamma_lupdf(latent_scales[1] | 5, 5 * global_scale_prior) + 0.5 * latent_var_log[1];       // first axis has minimum scale of global scale prior, shrunk toward that value, with jacobian correction for putting prior on transformed first scale
+    target += generalized_normal_lpdf(latent_var_raw[2:] | 0, rep_vector(0.75, K-1), 10);                    // other axes have scale with logistic generalized normal between zero and the previous axis
     target += generalized_std_normal_lpdf(to_vector(weight_scales) | shape_gnorm) + sum(weight_scales_log);  // sparse selection of datasets per axis
     target += generalized_std_normal_lpdf(inv_log_less_contamination ./ inv_log_max_contam | shape_gnorm);   // shrink amount of contamination in 'true zeros' toward zero
     target += normal_lupdf(contaminant_overdisp_log | 0, 0.1);                                               // shrink overdispersion of contaminant counts in 'true zeros' toward zero
