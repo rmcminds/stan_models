@@ -2,6 +2,9 @@ functions {
     real generalized_normal_lpdf(vector y, real mu, vector alpha, real beta) {
         return sum(log(beta) - log(2) - log(alpha) - lgamma(inv(beta)) - exp(beta * log(fabs(y-mu)./alpha)));
     }
+    real generalized_std_normal_lpdf(vector y, real beta) {
+        return sum(log(beta) - log(2) - lgamma(inv(beta)) - fabs(y)^beta);
+    }
     real multi_student_t_cholesky_lpdf(matrix y, real nu, matrix mu, matrix L) {
         int N = cols(y);
         int K = cols(L);
@@ -83,42 +86,56 @@ functions {
         for(i in 1:rows(A)) if(lambda[i] < 0) lambda[i] = 0;
         return(qr_thin_R(diag_post_multiply(eigenvectors_sym(A), sqrt(lambda))')');
     } // https://math.stackexchange.com/questions/423138/cholesky-for-non-positive-definite-matrices
-    matrix mix_skew_normal(matrix Z1, matrix Z2, vector alpha) {
-        vector[rows(Z1)] delta = alpha ./ sqrt(1 + alpha^2);
-        matrix[rows(Z1),cols(Z1)] Z
-            = diag_pre_multiply(inv_sqrt(1 - square(delta) * 2 / pi()),
-                                diag_pre_multiply(delta ./ alpha,
-                                                  Z1 + diag_pre_multiply(alpha, Z2))
-                                - rep_matrix(delta * sqrt(2 / pi()), cols(Z1)));
-        return(Z);
-    } // skew-normal matrix with mean 0 and sd 1, assuming Z1 is normal, Z2 is half-normal, and each have location 0 and scale 1
-    vector transform_tMVN_vector_lp(matrix L, vector u) {
-        int N = rows(u);
-        vector[N] z;
-            for(n in 1:N) {
-                int nm1 = n - 1;
-                real u_star = Phi((n > 1) ? L[n,1:nm1] * head(z,nm1) / L[n,n] : 0);
-                target += log1m(u_star);
-                z[n] = inv_Phi(u_star + u[n] - u_star * u[n]);
-            }
-            return z;
-    } // simplified from https://discourse.mc-stan.org/t/multi-normal-lcdf/6652/6
-    matrix transform_tMVN_lp(matrix u, matrix L) {
-        int K = rows(u);
-        int N = cols(u);
-        matrix[K,N] z;
-            for(n in 1:N) {
-                int nm1 = n - 1;
-                vector[K] u_star;
-                if(n > 1) {
-                    u_star = Phi(z[,1:nm1] * L[1:nm1,n] / L[n,n]);
-                } else {
-                    u_star = rep_vector(0.5,K);
-                }
-                z[,n] = inv_Phi(u_star + u[,n] - u_star .* u[,n]);
-                target += log1m(u_star);
-            }
-        return z * L;
-    } // vectorized and transposed from above
+    matrix transform_MVN_kumaraswamy(matrix mvn, vector a, vector b) {
+        vector[size(b)] m1 = b .* beta(1 + inv(a), b);
+        vector[size(b)] m2n = b .* beta(1 + 2.0 * inv(a), b) - square(m1);
+        matrix[rows(mvn),cols(mvn)] k;
+        for(i in 1:rows(mvn)) {
+            k[i,] = ((1 - (1 - Phi(mvn[i,]))^inv(b[i]))^inv(a[i]) - m1[i]) / sqrt(m2n[i]);
+        }
+        return k;
+    }
+    vector positive_ordered_transform(vector y) {
+        vector[size(y)] x = y;
+        x[1] = exp(y[1]);
+        for(k in 2:size(y)) {
+            x[k] = x[k-1] * inv_logit(y[k]);
+        }
+        return(x);
+    }
+    vector positive_max_ordered_transform(vector y) {
+        vector[size(y)] x = y;
+        for(k in 2:size(y)) {
+            x[k] = x[k-1] * inv_logit(y[k]);
+        }
+        return(x);
+    }
+    vector log_positive_ordered_transform(vector y) {
+        vector[size(y)] x = y;
+        for(k in 2:size(y)) {
+            x[k] = x[k-1] + log_inv_logit(y[k]);
+        }
+        return(x);
+    }
+    real student_t_log_lpdf(real y, real nu, real mu, real sigma_log) {
+        return log_falling_factorial(0.5 * (nu - 1), 0.5)
+               - 0.5 * log(pi() * nu)
+               - sigma_log
+               - 0.5 * (nu + 1) * log1p_exp(2 * (log(fabs(y - mu)) - sigma_log) - log(nu));
+    }
+    real student_t_log_v_lpdf(vector y, real nu, vector mu, vector sigma_log) {
+        return size(y)
+               * (log_falling_factorial(0.5 * (nu - 1), 0.5)
+                  - 0.5 * log(pi() * nu))
+               - sum(sigma_log
+                     + 0.5 * (nu + 1) * log1p_exp(2 * (log(fabs(y - mu)) - sigma_log) - log(nu)));
+    }
+    real student_t_log_v0_lpdf(vector y, real nu, vector sigma_log) {
+        return size(y)
+               * (log_falling_factorial(0.5 * (nu - 1), 0.5)
+                  - 0.5 * log(pi() * nu))
+               - sum(sigma_log
+                     + 0.5 * (nu + 1) * log1p_exp(2 * (log(fabs(y)) - sigma_log) - log(nu)));
+    }
 }
 
